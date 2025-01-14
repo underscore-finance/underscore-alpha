@@ -15,7 +15,7 @@ def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
     yield getTokenAndWhale
 
 
-@pytest.base
+@pytest.always
 def test_aaveV3_deposit_already_in_wallet(
     getTokenAndWhale,
     bob_ai_wallet,
@@ -64,7 +64,7 @@ def test_aaveV3_deposit_already_in_wallet(
     assert token.balanceOf(lego_aave_v3.address) == 0
 
 
-@pytest.base
+@pytest.always
 def test_aaveV3_deposit_on_transfer(
     getTokenAndWhale,
     bob_ai_wallet,
