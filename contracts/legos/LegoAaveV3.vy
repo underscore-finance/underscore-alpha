@@ -41,6 +41,14 @@ event AaveV3Deposit:
     vaultTokenAmountReceived: uint256
     refundAmount: uint256
 
+event AaveV3Withdrawal:
+    user: indexed(address)
+    asset: indexed(address)
+    vaultToken: indexed(address)
+    assetAmountReceived: uint256
+    vaultTokenAmountBurned: uint256
+    refundVaultTokenAmount: uint256
+
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -82,7 +90,7 @@ def aaveV3Pool() -> address:
 
 
 @external
-def depositTokens(_asset: address, _vault: address, _amount: uint256) -> (uint256, address, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint256, address, uint256):
     assert self.isActivated # dev: not activated
     assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
 
@@ -118,9 +126,54 @@ def depositTokens(_asset: address, _vault: address, _amount: uint256) -> (uint25
         refundAmount = currentLegoBalance - preLegoBalance
         assert extcall IERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
 
-    trueDepositAmount: uint256 = depositAmount - refundAmount
-    log AaveV3Deposit(msg.sender, _asset, vaultToken, trueDepositAmount, vaultTokenAmountReceived, refundAmount)
-    return trueDepositAmount, vaultToken, vaultTokenAmountReceived
+    actualDepositAmount: uint256 = depositAmount - refundAmount
+    log AaveV3Deposit(msg.sender, _asset, vaultToken, actualDepositAmount, vaultTokenAmountReceived, refundAmount)
+    return actualDepositAmount, vaultToken, vaultTokenAmountReceived
+
+
+############
+# Withdraw #
+############
+
+
+@external
+def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vault: address) -> (uint256, uint256):
+    assert self.isActivated # dev: not activated
+    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
+
+    # validate withdraw asset
+    aaveV3: address = AAVE_V3_POOL
+    vaultToken: address = (staticcall AaveV3Interface(aaveV3).getReserveData(_asset)).aTokenAddress
+    assert vaultToken != empty(address) and vaultToken == _vaultToken # dev: invalid vault token
+
+    # pre balances
+    preLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)
+    preUserAssetBalance: uint256 = staticcall IERC20(_asset).balanceOf(msg.sender)
+
+    # transfer vaults tokens to this contract
+    transferVaultTokenAmount: uint256 = min(_amount, staticcall IERC20(vaultToken).balanceOf(msg.sender))
+    assert transferVaultTokenAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
+
+    # withdraw assets from lego partner
+    withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(vaultToken).balanceOf(self))
+    extcall AaveV3Interface(aaveV3).withdraw(_asset, withdrawVaultTokenAmount, msg.sender)
+
+    # validate asset transfer
+    newUserAssetBalance: uint256 = staticcall IERC20(_asset).balanceOf(msg.sender)
+    assetAmountReceived: uint256 = newUserAssetBalance - preUserAssetBalance
+    assert assetAmountReceived != 0 # dev: no asset amount received
+
+    # refund if full withdrawal didn't happen
+    currentLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)
+    refundVaultTokenAmount: uint256 = 0
+    if currentLegoVaultBalance > preLegoVaultBalance:
+        refundVaultTokenAmount = currentLegoVaultBalance - preLegoVaultBalance
+        assert extcall IERC20(vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
+
+    vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
+    log AaveV3Withdrawal(msg.sender, _asset, vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount)
+    return assetAmountReceived, vaultTokenAmountBurned
 
 
 #################

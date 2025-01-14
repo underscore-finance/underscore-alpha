@@ -6,7 +6,7 @@ import interfaces.LegoInterface as LegoPartner
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
 
-event AgenticLegoDeposit:
+event AgenticDeposit:
     user: indexed(address)
     asset: indexed(address)
     vault: indexed(address)
@@ -15,6 +15,18 @@ event AgenticLegoDeposit:
     vaultTokenAmountReceived: uint256
     legoId: uint256
     legoAddr: address
+    isAgent: bool
+
+event AgenticWithdrawal:
+    user: indexed(address)
+    asset: indexed(address)
+    vaultToken: indexed(address)
+    assetAmountReceived: uint256
+    vaultTokenAmountBurned: uint256
+    vault: address
+    legoId: uint256
+    legoAddr: address
+    isAgent: bool
 
 # admin
 owner: public(address)
@@ -61,50 +73,91 @@ def apiVersion() -> String[28]:
 def depositTokens(
     _legoId: uint256,
     _asset: address,
-    _vault: address = empty(address),
     _amount: uint256 = max_value(uint256),
+    _vault: address = empty(address),
 ) -> (uint256, address, uint256):
-    assert msg.sender in [self.owner, self.agent] # dev: no perms
-    return self._depositTokens(_legoId, _asset, _vault, _amount)
+    isAgent: bool = msg.sender == self.agent
+    assert isAgent or msg.sender == self.owner # dev: no perms
+    return self._depositTokens(_legoId, _asset, _amount, _vault, isAgent)
 
 
 @external
 def depositTokensWithTransfer(
     _legoId: uint256,
     _asset: address,
-    _vault: address = empty(address),
     _amount: uint256 = max_value(uint256),
+    _vault: address = empty(address),
     _shouldSweep: bool = True,
 ) -> (uint256, address, uint256):
-    assert msg.sender in [self.owner, self.agent] # dev: no perms
-    transferAmount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(msg.sender))
-    assert extcall IERC20(_asset).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
-    if _shouldSweep:
-        transferAmount = max_value(uint256)
-    return self._depositTokens(_legoId, _asset, _vault, transferAmount)
+    amount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(msg.sender))
+    assert extcall IERC20(_asset).transferFrom(msg.sender, self, amount, default_return_value=True) # dev: transfer failed
+
+    # can only sweep if have perms
+    isAgent: bool = msg.sender == self.agent
+    if _shouldSweep and (isAgent or msg.sender == self.owner):
+        amount = max_value(uint256)
+
+    return self._depositTokens(_legoId, _asset, amount, _vault, isAgent)
 
 
 @internal
 def _depositTokens(
     _legoId: uint256,
     _asset: address,
-    _vault: address,
     _amount: uint256,
+    _vault: address,
+    _isAgent: bool,
 ) -> (uint256, address, uint256):
     legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     # finalize amount
-    intendedDepositAmount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(self))
-    assert intendedDepositAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_asset).approve(legoAddr, intendedDepositAmount, default_return_value=True) # dev: approval failed
+    wantedAmount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(self))
+    assert wantedAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_asset).approve(legoAddr, wantedAmount, default_return_value=True) # dev: approval failed
 
     # deposit into lego partner
     assetAmountDeposited: uint256 = 0
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(legoAddr).depositTokens(_asset, _vault, intendedDepositAmount)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault)
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticLegoDeposit(msg.sender, _asset, _vault, assetAmountDeposited, vaultToken, vaultTokenAmountReceived, _legoId, legoAddr)
+    log AgenticDeposit(msg.sender, _asset, _vault, assetAmountDeposited, vaultToken, vaultTokenAmountReceived, _legoId, legoAddr, _isAgent)
     return assetAmountDeposited, vaultToken, vaultTokenAmountReceived
+
+
+############
+# Withdraw #
+############
+
+
+@external
+def withdrawTokens(
+    _legoId: uint256,
+    _asset: address,
+    _vaultToken: address,
+    _amount: uint256 = max_value(uint256),
+    _vault: address = empty(address),
+) -> (uint256, uint256):
+    isAgent: bool = msg.sender == self.agent
+    assert isAgent or msg.sender == self.owner # dev: no perms
+
+    # get lego addr
+    legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
+    assert legoAddr != empty(address) # dev: invalid lego
+
+    # finalize vault token amount
+    wantedVaultTokenAmount: uint256 = min(_amount, staticcall IERC20(_vaultToken).balanceOf(self))
+    assert wantedVaultTokenAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_vaultToken).approve(legoAddr, wantedVaultTokenAmount, default_return_value=True) # dev: approval failed
+
+    # withdraw from lego partner
+    assetAmountReceived: uint256 = 0
+    vaultTokenAmountBurned: uint256 = 0
+    assetAmountReceived, vaultTokenAmountBurned = extcall LegoPartner(legoAddr).withdrawTokens(_asset, _vaultToken, wantedVaultTokenAmount, _vault)
+    assert extcall IERC20(_vaultToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _vault, _legoId, legoAddr, isAgent)
+    return assetAmountReceived, vaultTokenAmountBurned
+

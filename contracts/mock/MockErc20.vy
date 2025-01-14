@@ -1,13 +1,13 @@
-# @version 0.3.10
+# @version 0.4.0
 # @dev Implementation of ERC-20 token standard.
 # @author Takayuki Jimba (@yudetamago)
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
 
-from vyper.interfaces import ERC20
-from vyper.interfaces import ERC20Detailed
+from ethereum.ercs import IERC20
+from ethereum.ercs import IERC20Detailed
 
-implements: ERC20
-implements: ERC20Detailed
+implements: IERC20
+implements: IERC20Detailed
 
 event Transfer:
     sender: indexed(address)
@@ -42,7 +42,7 @@ hq: public(address)
 isMinter: public(HashMap[address, bool])
 
 
-@external
+@deploy
 def __init__(_hq: address, _name: String[32], _symbol: String[32], _decimals: uint8, _supply: uint256):
     assert _hq != empty(address) # dev: cannot be 0x0
     self.hq = _hq
