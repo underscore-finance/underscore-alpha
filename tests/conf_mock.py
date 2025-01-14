@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS
 from contracts import WalletTemplate
 
 
@@ -44,7 +44,7 @@ def bob_ai_wallet(agent_factory, bob, bob_agent):
     return WalletTemplate.at(w)
 
 
-# assets
+# mock assets
 
 
 @pytest.fixture(scope="session")
@@ -52,7 +52,14 @@ def alpha_token(governor):
     return boa.load("contracts/mock/MockErc20.vy", governor, "Alpha Token", "ALPHA", 18, 1_000_000, name="alpha_token")
 
 
-# mock legos
+@pytest.fixture(scope="session")
+def alpha_token_whale(env, alpha_token, governor):
+    whale = env.generate_address("alpha_token_whale")
+    alpha_token.mint(whale, 100_000 * EIGHTEEN_DECIMALS, sender=governor)
+    return whale
+
+
+# mock lego integrations
 
 
 @pytest.fixture(scope="session")

@@ -3,6 +3,9 @@
 interface AgenticWallet:
     def initialize(_legoRegistry: address, _owner: address, _agent: address) -> bool: nonpayable
 
+interface LegoRegistry:
+    def governor() -> address: view
+
 struct TemplateInfo:
     addr: address
     version: uint256
@@ -17,29 +20,22 @@ event AgentTemplateSet:
     template: indexed(address)
     version: uint256
 
-event AgentFactoryGovernorSet:
-    governor: indexed(address)
-
 event AgentFactoryActivated:
     isActivated: bool
 
 # core
 agentTemplateInfo: public(TemplateInfo)
 isAgenticWallet: public(HashMap[address, bool])
-
-# config
-governor: public(address)
 isActivated: public(bool)
 
 LEGO_REGISTRY: immutable(address)
 
 
 @external
-def __init__(_legoRegistry: address, _governor: address, _walletTemplate: address):
-    assert empty(address) not in [_legoRegistry, _governor] # dev: invalid addrs
+def __init__(_legoRegistry: address, _walletTemplate: address):
+    assert _legoRegistry != empty(address) # dev: invalid addrs
     LEGO_REGISTRY = _legoRegistry
 
-    self.governor = _governor
     self.isActivated = True
 
     # set agent template
@@ -105,7 +101,7 @@ def _isValidWalletTemplate(_newAddr: address) -> bool:
 @external
 def setAgenticWalletTemplate(_addr: address) -> bool:
     assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     if not self._isValidWalletTemplate(_addr):
         return False
     return self._setAgenticWalletTemplate(_addr)
@@ -124,36 +120,6 @@ def _setAgenticWalletTemplate(_addr: address) -> bool:
     return True
 
 
-################
-# Set Governor #
-################
-
-
-@view
-@external 
-def isValidGovernor(_newGovernor: address) -> bool:
-    return self._isValidGovernor(_newGovernor)
-
-
-@view
-@internal 
-def _isValidGovernor(_newGovernor: address) -> bool:
-    if not _newGovernor.is_contract or _newGovernor == empty(address):
-        return False
-    return _newGovernor != self.governor
-
-
-@external
-def setGovernor(_newGovernor: address) -> bool:
-    assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
-    if not self._isValidGovernor(_newGovernor):
-        return False
-    self.governor = _newGovernor
-    log AgentFactoryGovernorSet(_newGovernor)
-    return True
-
-
 ############
 # Activate #
 ############
@@ -161,6 +127,6 @@ def setGovernor(_newGovernor: address) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(_shouldActivate)

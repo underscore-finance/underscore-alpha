@@ -13,6 +13,9 @@ interface AaveV3Interface:
 interface AgentFactory:
     def isAgenticWallet(_wallet: address) -> bool: view
 
+interface LegoRegistry:
+    def governor() -> address: view
+
 struct AaveReserveDataV3:
     configuration: uint256
     liquidityIndex: uint128
@@ -33,8 +36,9 @@ struct AaveReserveDataV3:
 event AaveV3Deposit:
     user: indexed(address)
     asset: indexed(address)
-    depositAmount: uint256
-    vaultTokens: uint256
+    vaultToken: indexed(address)
+    assetAmountDeposited: uint256
+    vaultTokenAmountReceived: uint256
     refundAmount: uint256
 
 event FundsRecovered:
@@ -45,30 +49,31 @@ event FundsRecovered:
 event AaveV3LegoIdSet:
     legoId: uint256
 
-event AaveV3LegoGovernorSet:
-    governor: indexed(address)
-
 event AaveV3LegoActivated:
     isActivated: bool
 
 # config
 legoId: public(uint256)
-governor: public(address)
 isActivated: public(bool)
 
-AAVE_V3: immutable(address)
+AAVE_V3_POOL: immutable(address)
 LEGO_REGISTRY: immutable(address)
 AGENT_FACTORY: immutable(address)
 
 
 @external
-def __init__(_aaveV3: address, _legoRegistry: address, _agentFactory: address, _governor: address):
-    assert empty(address) not in [_aaveV3, _legoRegistry, _agentFactory, _governor] # dev: invalid addrs
-    AAVE_V3 = _aaveV3
+def __init__(_aaveV3: address, _legoRegistry: address, _agentFactory: address):
+    assert empty(address) not in [_aaveV3, _legoRegistry, _agentFactory] # dev: invalid addrs
+    AAVE_V3_POOL = _aaveV3
     LEGO_REGISTRY = _legoRegistry
     AGENT_FACTORY = _agentFactory
-    self.governor = _governor
     self.isActivated = True
+
+
+@view
+@external
+def aaveV3Pool() -> address:
+    return AAVE_V3_POOL
 
 
 ###########
@@ -77,12 +82,12 @@ def __init__(_aaveV3: address, _legoRegistry: address, _agentFactory: address, _
 
 
 @external
-def depositTokens(_asset: address, _vault: address, _amount: uint256) -> (uint256, uint256):
+def depositTokens(_asset: address, _vault: address, _amount: uint256) -> (uint256, address, uint256):
     assert self.isActivated # dev: not activated
     assert AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
 
     # validate deposit asset
-    aaveV3: address = AAVE_V3
+    aaveV3: address = AAVE_V3_POOL
     vaultToken: address = AaveV3Interface(aaveV3).getReserveData(_asset).aTokenAddress
     assert vaultToken != empty(address) # dev: invalid vault token
 
@@ -114,8 +119,8 @@ def depositTokens(_asset: address, _vault: address, _amount: uint256) -> (uint25
         assert ERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
 
     trueDepositAmount: uint256 = depositAmount - refundAmount
-    log AaveV3Deposit(msg.sender, _asset, trueDepositAmount, vaultTokenAmountReceived, refundAmount)
-    return trueDepositAmount, vaultTokenAmountReceived
+    log AaveV3Deposit(msg.sender, _asset, vaultToken, trueDepositAmount, vaultTokenAmountReceived, refundAmount)
+    return trueDepositAmount, vaultToken, vaultTokenAmountReceived
 
 
 #################
@@ -123,26 +128,12 @@ def depositTokens(_asset: address, _vault: address, _amount: uint256) -> (uint25
 #################
 
 
-@view
-@external
-def isValidFundsRecovery(_asset: address, _recipient: address) -> bool:
-    return self._isValidFundsRecovery(_asset, _recipient, ERC20(_asset).balanceOf(self))
-
-
-@view
-@internal
-def _isValidFundsRecovery(_asset: address, _recipient: address, _balance: uint256) -> bool:
-    if empty(address) in [_recipient, _asset]:
-        return False
-    return _balance != 0
-
-
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = ERC20(_asset).balanceOf(self)
-    if not self._isValidFundsRecovery(_asset, _recipient, balance):
+    if empty(address) in [_recipient, _asset] or balance == 0:
         return False
 
     assert ERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
@@ -164,36 +155,6 @@ def setLegoId(_legoId: uint256) -> bool:
     return True
 
 
-################
-# Set Governor #
-################
-
-
-@view
-@external 
-def isValidGovernor(_newGovernor: address) -> bool:
-    return self._isValidGovernor(_newGovernor)
-
-
-@view
-@internal 
-def _isValidGovernor(_newGovernor: address) -> bool:
-    if not _newGovernor.is_contract or _newGovernor == empty(address):
-        return False
-    return _newGovernor != self.governor
-
-
-@external
-def setGovernor(_newGovernor: address) -> bool:
-    assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
-    if not self._isValidGovernor(_newGovernor):
-        return False
-    self.governor = _newGovernor
-    log AaveV3LegoGovernorSet(_newGovernor)
-    return True
-
-
 ############
 # Activate #
 ############
@@ -201,6 +162,6 @@ def setGovernor(_newGovernor: address) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
     log AaveV3LegoActivated(_shouldActivate)

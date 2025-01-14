@@ -10,19 +10,18 @@ event AgenticLegoDeposit:
     user: indexed(address)
     asset: indexed(address)
     vault: indexed(address)
+    assetAmountDeposited: uint256
+    vaultToken: address
+    vaultTokenAmountReceived: uint256
     legoId: uint256
     legoAddr: address
-    depositAmount: uint256
-    vaultTokensReceived: uint256
-
-# core
-legoRegistry: public(address)
 
 # admin
 owner: public(address)
 agent: public(address)
 
-# other
+# config
+legoRegistry: public(address)
 initialized: public(bool)
 
 API_VERSION: constant(String[28]) = "0.0.1"
@@ -64,7 +63,7 @@ def depositTokens(
     _asset: address,
     _vault: address = empty(address),
     _amount: uint256 = max_value(uint256),
-) -> (uint256, uint256):
+) -> (uint256, address, uint256):
     assert msg.sender in [self.owner, self.agent] # dev: no perms
     return self._depositTokens(_legoId, _asset, _vault, _amount)
 
@@ -76,7 +75,7 @@ def depositTokensWithTransfer(
     _vault: address = empty(address),
     _amount: uint256 = max_value(uint256),
     _shouldSweep: bool = True,
-) -> (uint256, uint256):
+) -> (uint256, address, uint256):
     assert msg.sender in [self.owner, self.agent] # dev: no perms
     transferAmount: uint256 = min(_amount, ERC20(_asset).balanceOf(msg.sender))
     assert ERC20(_asset).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
@@ -91,7 +90,7 @@ def _depositTokens(
     _asset: address,
     _vault: address,
     _amount: uint256,
-) -> (uint256, uint256):
+) -> (uint256, address, uint256):
     legoAddr: address = LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
@@ -101,10 +100,11 @@ def _depositTokens(
     assert ERC20(_asset).approve(legoAddr, intendedDepositAmount, default_return_value=True) # dev: approval failed
 
     # deposit into lego partner
-    actualDepositAmount: uint256 = 0
-    vaultTokensReceived: uint256 = 0
-    actualDepositAmount, vaultTokensReceived = LegoPartner(legoAddr).depositTokens(_asset, _vault, intendedDepositAmount)
+    assetAmountDeposited: uint256 = 0
+    vaultToken: address = empty(address)
+    vaultTokenAmountReceived: uint256 = 0
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = LegoPartner(legoAddr).depositTokens(_asset, _vault, intendedDepositAmount)
     assert ERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticLegoDeposit(msg.sender, _asset, _vault, _legoId, legoAddr, actualDepositAmount, vaultTokensReceived)
-    return actualDepositAmount, vaultTokensReceived
+    log AgenticLegoDeposit(msg.sender, _asset, _vault, assetAmountDeposited, vaultToken, vaultTokenAmountReceived, _legoId, legoAddr)
+    return assetAmountDeposited, vaultToken, vaultTokenAmountReceived

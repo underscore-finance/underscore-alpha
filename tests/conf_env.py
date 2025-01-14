@@ -8,8 +8,26 @@ import sys
 import socket
 
 from boa.environment import Env
-from constants import FORKS
 import os
+
+
+
+FORKS = {
+    "mainnet": {
+        "rpc_url": f"https://eth-mainnet.g.alchemy.com/v2/{os.environ.get('WEB3_ALCHEMY_API_KEY')}",
+        "etherscan_url": "https://api.etherscan.io/api",
+        "etherscan_api_key": os.environ.get("ETHERSCAN_API_KEY"),
+        "block": 21552600,
+        "anvil": True,
+    },
+    "base": {
+        "rpc_url": f"https://base-mainnet.g.alchemy.com/v2/{os.environ.get('WEB3_ALCHEMY_API_KEY')}",
+        "block": 24740075,
+        "etherscan_url": "https://api.basescan.org/api",
+        "etherscan_api_key": os.environ.get("BASESCAN_API_KEY"),
+        "anvil": True,
+    }
+}
 
 
 def pytest_configure(config):

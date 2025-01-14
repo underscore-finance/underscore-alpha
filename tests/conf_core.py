@@ -8,8 +8,8 @@ def lego_registry(governor):
 
 
 @pytest.fixture(scope="session")
-def agent_factory(lego_registry, governor, wallet_template):
-    return boa.load("contracts/AgentFactory.vy", lego_registry, governor, wallet_template, name="agent_factory")
+def agent_factory(lego_registry, wallet_template):
+    return boa.load("contracts/AgentFactory.vy", lego_registry, wallet_template, name="agent_factory")
 
 
 @pytest.fixture(scope="session")
