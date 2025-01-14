@@ -1,4 +1,4 @@
-# @version 0.3.10
+# @version 0.4.0
 
 interface AgenticWallet:
     def initialize(_legoRegistry: address, _owner: address, _agent: address) -> bool: nonpayable
@@ -31,7 +31,7 @@ isActivated: public(bool)
 LEGO_REGISTRY: immutable(address)
 
 
-@external
+@deploy
 def __init__(_legoRegistry: address, _walletTemplate: address):
     assert _legoRegistry != empty(address) # dev: invalid addrs
     LEGO_REGISTRY = _legoRegistry
@@ -72,7 +72,7 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = msg.send
 
     # create agentic wallet
     newAgentAddr: address = create_minimal_proxy_to(agentTemplate)
-    assert AgenticWallet(newAgentAddr).initialize(LEGO_REGISTRY, _owner, _agent)
+    assert extcall AgenticWallet(newAgentAddr).initialize(LEGO_REGISTRY, _owner, _agent)
     self.isAgenticWallet[newAgentAddr] = True
 
     log AgenticWalletCreated(newAgentAddr, _owner, _agent)
@@ -101,7 +101,7 @@ def _isValidWalletTemplate(_newAddr: address) -> bool:
 @external
 def setAgenticWalletTemplate(_addr: address) -> bool:
     assert self.isActivated # dev: not activated
-    assert msg.sender == LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     if not self._isValidWalletTemplate(_addr):
         return False
     return self._setAgenticWalletTemplate(_addr)
@@ -110,11 +110,11 @@ def setAgenticWalletTemplate(_addr: address) -> bool:
 @internal
 def _setAgenticWalletTemplate(_addr: address) -> bool:   
     prevData: TemplateInfo = self.agentTemplateInfo
-    newData: TemplateInfo = TemplateInfo({
-        addr: _addr,
-        version: prevData.version + 1,
-        lastModified: block.timestamp,
-    })
+    newData: TemplateInfo = TemplateInfo(
+        addr=_addr,
+        version=prevData.version + 1,
+        lastModified=block.timestamp,
+    )
     self.agentTemplateInfo = newData
     log AgentTemplateSet(_addr, newData.version)
     return True
@@ -127,6 +127,6 @@ def _setAgenticWalletTemplate(_addr: address) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert msg.sender == LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(_shouldActivate)

@@ -1,4 +1,4 @@
-# @version 0.3.10
+# @version 0.4.0
 
 interface LegoPartner:
     def setLegoId(_legoId: uint256) -> bool: nonpayable
@@ -43,7 +43,7 @@ governor: public(address)
 isActivated: public(bool)
 
 
-@external
+@deploy
 def __init__(_governor: address):
     assert _governor != empty(address) # dev: invalid governor
     self.governor = _governor
@@ -80,18 +80,18 @@ def registerNewLego(_addr: address, _description: String[64]) -> uint256:
     if not self._isValidNewLegoAddr(_addr):
         return 0
 
-    data: LegoInfo = LegoInfo({
-        addr: _addr,
-        version: 1,
-        lastModified: block.timestamp,
-        description: _description,
-    })
+    data: LegoInfo = LegoInfo(
+        addr=_addr,
+        version=1,
+        lastModified=block.timestamp,
+        description=_description,
+    )
 
     legoId: uint256 = self.numLegos
     self.legoAddrToId[_addr] = legoId
     self.numLegos = legoId + 1
     self.legoInfo[legoId] = data
-    assert LegoPartner(_addr).setLegoId(legoId) # dev: set id failed
+    assert extcall LegoPartner(_addr).setLegoId(legoId) # dev: set id failed
 
     log NewLegoRegistered(_addr, legoId, _description)
     return legoId
@@ -135,7 +135,7 @@ def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     data.version += 1
     self.legoInfo[_legoId] = data
     self.legoAddrToId[_newAddr] = _legoId
-    assert LegoPartner(_newAddr).setLegoId(_legoId) # dev: set id failed
+    assert extcall LegoPartner(_newAddr).setLegoId(_legoId) # dev: set id failed
 
     # handle previous addr
     if prevAddr != empty(address):
