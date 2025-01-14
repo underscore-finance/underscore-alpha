@@ -76,6 +76,7 @@ def apiVersion() -> String[28]:
 ###########
 
 
+@nonreentrant
 @external
 def depositTokens(
     _legoId: uint256,
@@ -88,6 +89,7 @@ def depositTokens(
     return self._depositTokens(_legoId, _asset, _amount, _vault, isAgent)
 
 
+@nonreentrant
 @external
 def depositTokensWithTransfer(
     _legoId: uint256,
@@ -139,6 +141,7 @@ def _depositTokens(
 ############
 
 
+@nonreentrant
 @external
 def withdrawTokens(
     _legoId: uint256,
@@ -149,8 +152,18 @@ def withdrawTokens(
 ) -> (uint256, uint256):
     isAgent: bool = msg.sender == self.agent
     assert isAgent or msg.sender == self.owner # dev: no perms
+    return self._withdrawTokens(_legoId, _asset, _vaultToken, _amount, _vault, isAgent)
 
-    # get lego addr
+
+@internal
+def _withdrawTokens(
+    _legoId: uint256,
+    _asset: address,
+    _vaultToken: address,
+    _amount: uint256,
+    _vault: address,
+    _isAgent: bool,
+) -> (uint256, uint256):
     legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
@@ -165,7 +178,7 @@ def withdrawTokens(
     assetAmountReceived, vaultTokenAmountBurned = extcall LegoPartner(legoAddr).withdrawTokens(_asset, _vaultToken, wantedVaultTokenAmount, _vault)
     assert extcall IERC20(_vaultToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _vault, _legoId, legoAddr, isAgent)
+    log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _vault, _legoId, legoAddr, _isAgent)
     return assetAmountReceived, vaultTokenAmountBurned
 
 

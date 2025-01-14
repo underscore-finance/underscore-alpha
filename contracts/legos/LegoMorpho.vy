@@ -5,35 +5,21 @@ implements: LegoPartner
 from ethereum.ercs import IERC20
 import interfaces.LegoInterface as LegoPartner
 
-interface AaveV3Interface:
-    def supply(_asset: address, _amount: uint256, _onBehalfOf: address, _referralCode: uint16): nonpayable
-    def withdraw(_asset: address, _amount: uint256, _to: address): nonpayable
-    def getReserveData(_asset: address) -> AaveReserveDataV3: view
+interface Erc4626Interface:
+    def redeem(_vaultTokenAmount: uint256, _recipient: address, _owner: address) -> uint256: nonpayable
+    def deposit(_assetAmount: uint256, _recipient: address) -> uint256: nonpayable
+    def asset() -> address: view
 
 interface AgentFactory:
     def isAgenticWallet(_wallet: address) -> bool: view
 
+interface MetaMorphoFactory:
+    def isMetaMorpho(_vault: address) -> bool: view
+
 interface LegoRegistry:
     def governor() -> address: view
 
-struct AaveReserveDataV3:
-    configuration: uint256
-    liquidityIndex: uint128
-    currentLiquidityRate: uint128
-    variableBorrowIndex: uint128
-    currentVariableBorrowRate: uint128
-    currentStableBorrowRate: uint128
-    lastUpdateTimestamp: uint40
-    id: uint16
-    aTokenAddress: address
-    stableDebtTokenAddress: address
-    variableDebtTokenAddress: address
-    interestRateStrategyAddress: address
-    accruedToTreasury: uint128
-    unbacked: uint128
-    isolationModeTotalDebt: uint128
-
-event AaveV3Deposit:
+event MorphoDeposit:
     user: indexed(address)
     asset: indexed(address)
     vaultToken: indexed(address)
@@ -41,7 +27,7 @@ event AaveV3Deposit:
     vaultTokenAmountReceived: uint256
     refundAmount: uint256
 
-event AaveV3Withdrawal:
+event MorphoWithdrawal:
     user: indexed(address)
     asset: indexed(address)
     vaultToken: indexed(address)
@@ -54,25 +40,27 @@ event FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
-event AaveV3LegoIdSet:
+event MorphoLegoIdSet:
     legoId: uint256
 
-event AaveV3LegoActivated:
+event MorphoLegoActivated:
     isActivated: bool
 
 # config
 legoId: public(uint256)
 isActivated: public(bool)
 
-AAVE_V3_POOL: immutable(address)
+META_MORPHO_FACTORY: immutable(address)
+META_MORPHO_FACTORY_LEGACY: immutable(address)
 LEGO_REGISTRY: immutable(address)
 AGENT_FACTORY: immutable(address)
 
 
 @deploy
-def __init__(_aaveV3: address, _legoRegistry: address, _agentFactory: address):
-    assert empty(address) not in [_aaveV3, _legoRegistry, _agentFactory] # dev: invalid addrs
-    AAVE_V3_POOL = _aaveV3
+def __init__(_morphoFactory: address, _morphoFactoryLegacy: address, _legoRegistry: address, _agentFactory: address):
+    assert empty(address) not in [_morphoFactory, _morphoFactoryLegacy, _legoRegistry, _agentFactory] # dev: invalid addrs
+    META_MORPHO_FACTORY = _morphoFactory
+    META_MORPHO_FACTORY_LEGACY = _morphoFactoryLegacy
     LEGO_REGISTRY = _legoRegistry
     AGENT_FACTORY = _agentFactory
     self.isActivated = True
@@ -88,14 +76,12 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
     assert self.isActivated # dev: not activated
     assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
 
-    # validate deposit asset
-    aaveV3: address = AAVE_V3_POOL
-    vaultToken: address = (staticcall AaveV3Interface(aaveV3).getReserveData(_asset)).aTokenAddress
-    assert vaultToken != empty(address) # dev: invalid vault token
+    # validate vault and deposit asset
+    assert staticcall MetaMorphoFactory(META_MORPHO_FACTORY).isMetaMorpho(_vault) or staticcall MetaMorphoFactory(META_MORPHO_FACTORY_LEGACY).isMetaMorpho(_vault) # dev: invalid vault
+    assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid vault
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
-    preUserVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(msg.sender)
 
     # transfer deposit asset to this contract
     transferAmount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(msg.sender))
@@ -104,13 +90,11 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
 
     # deposit assets into lego partner
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
-    assert extcall IERC20(_asset).approve(aaveV3, depositAmount, default_return_value=True) # dev: approval failed
-    extcall AaveV3Interface(aaveV3).supply(_asset, depositAmount, msg.sender, 0)
-    assert extcall IERC20(_asset).approve(aaveV3, 0, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_asset).approve(_vault, depositAmount, default_return_value=True) # dev: approval failed
+    vaultTokenAmountReceived: uint256 = extcall Erc4626Interface(_vault).deposit(depositAmount, msg.sender)
+    assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
 
     # validate vault token transfer
-    newUserVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(msg.sender)
-    vaultTokenAmountReceived: uint256 = newUserVaultBalance - preUserVaultBalance
     assert vaultTokenAmountReceived != 0 # dev: no vault tokens received
 
     # refund if full deposit didn't get through
@@ -121,8 +105,8 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
         assert extcall IERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAmount
-    log AaveV3Deposit(msg.sender, _asset, vaultToken, actualDepositAmount, vaultTokenAmountReceived, refundAmount)
-    return actualDepositAmount, vaultToken, vaultTokenAmountReceived
+    log MorphoDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived, refundAmount)
+    return actualDepositAmount, _vault, vaultTokenAmountReceived
 
 
 ############
@@ -135,38 +119,35 @@ def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vau
     assert self.isActivated # dev: not activated
     assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
 
-    # validate withdraw asset
-    aaveV3: address = AAVE_V3_POOL
-    vaultToken: address = (staticcall AaveV3Interface(aaveV3).getReserveData(_asset)).aTokenAddress
-    assert vaultToken != empty(address) and vaultToken == _vaultToken # dev: invalid vault token
+    # validate vault and withdraw asset
+    assert staticcall MetaMorphoFactory(META_MORPHO_FACTORY).isMetaMorpho(_vault) or staticcall MetaMorphoFactory(META_MORPHO_FACTORY_LEGACY).isMetaMorpho(_vault) # dev: invalid vault
+    assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid vault
+    assert _vaultToken == _vault # dev: invalid vault token
 
     # pre balances
-    preLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)
-    preUserAssetBalance: uint256 = staticcall IERC20(_asset).balanceOf(msg.sender)
+    preLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
 
     # transfer vaults tokens to this contract
-    transferVaultTokenAmount: uint256 = min(_amount, staticcall IERC20(vaultToken).balanceOf(msg.sender))
+    transferVaultTokenAmount: uint256 = min(_amount, staticcall IERC20(_vaultToken).balanceOf(msg.sender))
     assert transferVaultTokenAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
+    assert extcall IERC20(_vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     # withdraw assets from lego partner
-    withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(vaultToken).balanceOf(self))
-    extcall AaveV3Interface(aaveV3).withdraw(_asset, withdrawVaultTokenAmount, msg.sender)
+    withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self))
+    assetAmountReceived: uint256 = extcall Erc4626Interface(_vault).redeem(withdrawVaultTokenAmount, msg.sender, self)
 
     # validate asset transfer
-    newUserAssetBalance: uint256 = staticcall IERC20(_asset).balanceOf(msg.sender)
-    assetAmountReceived: uint256 = newUserAssetBalance - preUserAssetBalance
     assert assetAmountReceived != 0 # dev: no asset amount received
 
     # refund if full withdrawal didn't happen
-    currentLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)
+    currentLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
     refundVaultTokenAmount: uint256 = 0
     if currentLegoVaultBalance > preLegoVaultBalance:
         refundVaultTokenAmount = currentLegoVaultBalance - preLegoVaultBalance
-        assert extcall IERC20(vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
+        assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
-    log AaveV3Withdrawal(msg.sender, _asset, vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount)
+    log MorphoWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount)
     return assetAmountReceived, vaultTokenAmountBurned
 
 
@@ -198,7 +179,7 @@ def setLegoId(_legoId: uint256) -> bool:
     assert msg.sender == LEGO_REGISTRY # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
-    log AaveV3LegoIdSet(_legoId)
+    log MorphoLegoIdSet(_legoId)
     return True
 
 
@@ -211,4 +192,4 @@ def setLegoId(_legoId: uint256) -> bool:
 def activate(_shouldActivate: bool):
     assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
-    log AaveV3LegoActivated(_shouldActivate)
+    log MorphoLegoActivated(_shouldActivate)

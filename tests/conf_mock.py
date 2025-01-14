@@ -59,9 +59,24 @@ def alpha_token_whale(env, alpha_token, governor):
     return whale
 
 
+@pytest.fixture(scope="session")
+def alpha_token_erc4626_vault(alpha_token):
+    return boa.load("contracts/mock/MockErc4626Vault.vy", alpha_token, name="alpha_erc4626_vault")
+
+
 # mock lego integrations
 
 
 @pytest.fixture(scope="session")
 def mock_aave_v3_pool():
     return boa.load("contracts/mock/MockAaveV3Pool.vy", name="mock_aave_v3_pool")
+
+
+@pytest.fixture(scope="session")
+def mock_morpho_factory():
+    return boa.load("contracts/mock/MockMorphoFactory.vy", name="mock_morpho_factory")
+
+
+@pytest.fixture(scope="session")
+def mock_fluid_resolver(alpha_token_erc4626_vault):
+    return boa.load("contracts/mock/MockFluidResolver.vy", alpha_token_erc4626_vault, name="mock_fluid_resolver")
