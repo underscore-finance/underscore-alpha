@@ -28,9 +28,16 @@ event AgenticWithdrawal:
     legoAddr: address
     isAgent: bool
 
+event WhitelistAddrSet:
+    addr: indexed(address)
+    isAllowed: bool
+
 # admin
 owner: public(address)
 agent: public(address)
+
+# transfer whitelist
+isRecipientAllowed: public(HashMap[address, bool])
 
 # config
 legoRegistry: public(address)
@@ -161,3 +168,63 @@ def withdrawTokens(
     log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _vault, _legoId, legoAddr, isAgent)
     return assetAmountReceived, vaultTokenAmountBurned
 
+
+##################
+# Transfer Funds #
+##################
+
+
+@external
+def transferFunds(_recipient: address, _amount: uint256 = max_value(uint256), _asset: address = empty(address)) -> bool:
+    isAgent: bool = msg.sender == self.agent
+    assert isAgent or msg.sender == self.owner # dev: no perms
+
+    # validate recipient
+    if _recipient != self.owner:
+        assert self.isRecipientAllowed[_recipient] # dev: recipient not allowed
+
+    # finalize amount
+    amount: uint256 = 0
+    if _asset == empty(address):
+        amount = min(_amount, self.balance)
+    else:
+        amount = min(_amount, staticcall IERC20(_asset).balanceOf(self))
+    assert amount != 0 # dev: nothing to transfer
+
+    # transfer funds
+    if _asset == empty(address):
+        send(_recipient, amount)
+    else:
+        assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
+
+    return True
+
+
+# whitelist
+
+
+@view
+@external 
+def isValidWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
+    return self._isValidWhitelistAddr(_addr, _isAllowed, self.owner)
+
+
+@view
+@internal 
+def _isValidWhitelistAddr(_addr: address, _isAllowed: bool, _owner: address) -> bool:
+    # owner is always allowed to receive funds
+    # no checks here to disallow self.agent
+    if _addr == empty(address) or _addr == _owner:
+        return False
+    return _isAllowed != self.isRecipientAllowed[_addr]
+
+
+@external
+def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
+    owner: address = self.owner
+    assert msg.sender == owner # dev: no perms
+    if not self._isValidWhitelistAddr(_addr, _isAllowed, owner):
+        return False
+    self.isRecipientAllowed[_addr] = _isAllowed
+    log WhitelistAddrSet(_addr, _isAllowed)
+    return True
