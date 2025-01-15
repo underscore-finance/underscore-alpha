@@ -171,7 +171,7 @@ def _withdrawTokens(
     wantedVaultTokenAmount: uint256 = min(_amount, staticcall IERC20(_vaultToken).balanceOf(self))
     assert wantedVaultTokenAmount != 0 # dev: nothing to transfer
 
-    # Compound V3 requires approval of max value
+    # some vault tokens require max value approval (comp v3)
     assert extcall IERC20(_vaultToken).approve(legoAddr, max_value(uint256), default_return_value=True) # dev: approval failed
 
     # withdraw from lego partner

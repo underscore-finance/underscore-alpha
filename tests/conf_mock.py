@@ -100,3 +100,8 @@ def mock_compV2_comptroller(alpha_token_compV2_vault):
 @pytest.fixture(scope="session")
 def mock_compV3_configurator():
     return boa.load("contracts/mock/MockCompV3Configurator.vy", name="mock_compV3_configurator")
+
+
+@pytest.fixture(scope="session")
+def mock_euler_factory():
+    return boa.load("contracts/mock/MockEulerFactory.vy", name="mock_euler_factory")

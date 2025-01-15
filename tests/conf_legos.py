@@ -25,6 +25,10 @@ LEGO_PARTNERS = {
         "base": "0x45939657d1CA34A8FA39A924B71D28Fe8431e581",
         "local": ZERO_ADDRESS,
     },
+    "euler": {
+        "base": ["0x7F321498A801A191a93C840750ed637149dDf8D0", "0x72bbDB652F2AEC9056115644EfCcDd1986F51f15"],
+        "local": [],
+    },
 }
 
 # lego partners
@@ -97,5 +101,24 @@ def lego_compound_v3(fork, lego_registry, agent_factory, governor, mock_compV3_c
         configurator = boa.from_etherscan(configurator, name="compound_v3_configurator")
     addr = boa.load("contracts/legos/LegoCompoundV3.vy", configurator, lego_registry, agent_factory, name="lego_compound_v3")
     legoId = lego_registry.registerNewLego(addr, "Compound V3", sender=governor)
+    assert legoId != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_euler(fork, lego_registry, agent_factory, governor, mock_euler_factory):
+    factories = LEGO_PARTNERS["euler"][fork]
+
+    evault_factory = ZERO_ADDRESS
+    earn_factory = ZERO_ADDRESS
+    if len(factories) == 0:
+        evault_factory = mock_euler_factory 
+        earn_factory = mock_euler_factory
+    else:
+        evault_factory = boa.from_etherscan(factories[0], name="euler_evault_factory")
+        earn_factory = boa.from_etherscan(factories[1], name="euler_earn_factory")
+
+    addr = boa.load("contracts/legos/LegoEuler.vy", evault_factory, earn_factory, lego_registry, agent_factory, name="lego_euler")
+    legoId = lego_registry.registerNewLego(addr, "Euler", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
