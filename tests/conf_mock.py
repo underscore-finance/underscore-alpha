@@ -74,6 +74,17 @@ def alpha_token_compV3_vault(alpha_token):
     return boa.load("contracts/mock/MockCompV3Vault.vy", alpha_token, name="alpha_compV3_vault")
 
 
+# mock lego
+
+
+@pytest.fixture(scope="session")
+def mock_lego(alpha_token, alpha_token_erc4626_vault, lego_registry, agent_factory, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, lego_registry, agent_factory, name="mock_lego")
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego", sender=governor)
+    assert legoId != 0 # dev: invalid lego id
+    return addr
+
+
 # mock lego integrations
 
 

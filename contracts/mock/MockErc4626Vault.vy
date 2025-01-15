@@ -2,9 +2,20 @@
 
 from ethereum.ercs import IERC20
 
+event Transfer:
+    sender: indexed(address)
+    receiver: indexed(address)
+    value: uint256
+
+event Approval:
+    owner: indexed(address)
+    spender: indexed(address)
+    value: uint256
+
 asset: public(address)
 balanceOf: public(HashMap[address, uint256]) # user -> shares
 totalSupply: public(uint256)
+allowance: public(HashMap[address, HashMap[address, uint256]])
 
 # NOTE: this does not include ALL required erc20/4626 methods. 
 # This only includes what we use/need for our strats
@@ -33,20 +44,28 @@ def redeem(_shares: uint256, _receiver: address, _owner: address) -> uint256:
     return amount
 
 
+# erc20 methods
+
+
 @external
 def transfer(_to: address, _value: uint256) -> bool:
     self.balanceOf[msg.sender] -= _value
     self.balanceOf[_to] += _value
+    log Transfer(msg.sender, _to, _value)
     return True
 
 
 @external
-def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
+def transferFrom(_from: address, _to: address, _value: uint256) -> bool:
     self.balanceOf[_from] -= _value
     self.balanceOf[_to] += _value
+    self.allowance[_from][msg.sender] -= _value
+    log Transfer(_from, _to, _value)
     return True
 
 
 @external
 def approve(_spender: address, _value: uint256) -> bool:
+    self.allowance[msg.sender][_spender] = _value
+    log Approval(msg.sender, _spender, _value)
     return True
