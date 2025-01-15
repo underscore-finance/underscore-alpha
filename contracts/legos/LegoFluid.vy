@@ -25,7 +25,6 @@ event FluidDeposit:
     vaultToken: indexed(address)
     assetAmountDeposited: uint256
     vaultTokenAmountReceived: uint256
-    refundAmount: uint256
 
 event FluidWithdrawal:
     user: indexed(address)
@@ -33,7 +32,6 @@ event FluidWithdrawal:
     vaultToken: indexed(address)
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
-    refundVaultTokenAmount: uint256
 
 event FundsRecovered:
     asset: indexed(address)
@@ -66,6 +64,17 @@ def __init__(_fluidResolver: address, _legoRegistry: address, _agentFactory: add
     self.isActivated = True
 
 
+@view
+@internal
+def _validateAssetAndVault(_asset: address, _vault: address):
+    assert self.isActivated # dev: not activated
+    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
+
+    fTokens: DynArray[address, MAX_FTOKENS] = staticcall FluidLendingResolver(FLUID_RESOLVER).getAllFTokens()
+    assert _vault in fTokens # dev: invalid vault
+    assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid asset
+
+
 ###########
 # Deposit #
 ###########
@@ -73,13 +82,7 @@ def __init__(_fluidResolver: address, _legoRegistry: address, _agentFactory: add
 
 @external
 def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint256, address, uint256):
-    assert self.isActivated # dev: not activated
-    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
-
-    # validate vault and deposit asset
-    fTokens: DynArray[address, MAX_FTOKENS] = staticcall FluidLendingResolver(FLUID_RESOLVER).getAllFTokens()
-    assert _vault in fTokens # dev: invalid vault
-    assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid vault
+    self._validateAssetAndVault(_asset, _vault)
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -93,10 +96,8 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
     assert extcall IERC20(_asset).approve(_vault, depositAmount, default_return_value=True) # dev: approval failed
     vaultTokenAmountReceived: uint256 = extcall Erc4626Interface(_vault).deposit(depositAmount, msg.sender)
-    assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
-
-    # validate vault token transfer
     assert vaultTokenAmountReceived != 0 # dev: no vault tokens received
+    assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
 
     # refund if full deposit didn't get through
     currentLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -106,7 +107,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
         assert extcall IERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAmount
-    log FluidDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived, refundAmount)
+    log FluidDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived)
     return actualDepositAmount, _vault, vaultTokenAmountReceived
 
 
@@ -116,14 +117,8 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
 
 
 @external
-def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vault: address) -> (uint256, uint256):
-    assert self.isActivated # dev: not activated
-    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
-
-    # validate vault and withdraw asset
-    fTokens: DynArray[address, MAX_FTOKENS] = staticcall FluidLendingResolver(FLUID_RESOLVER).getAllFTokens()
-    assert _vault in fTokens # dev: invalid vault
-    assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid vault
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address) -> (uint256, uint256):
+    self._validateAssetAndVault(_asset, _vaultToken)
 
     # pre balances
     preLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
@@ -135,9 +130,7 @@ def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vau
 
     # withdraw assets from lego partner
     withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self))
-    assetAmountReceived: uint256 = extcall Erc4626Interface(_vault).redeem(withdrawVaultTokenAmount, msg.sender, self)
-
-    # validate asset transfer
+    assetAmountReceived: uint256 = extcall Erc4626Interface(_vaultToken).redeem(withdrawVaultTokenAmount, msg.sender, self)
     assert assetAmountReceived != 0 # dev: no asset amount received
 
     # refund if full withdrawal didn't happen
@@ -148,7 +141,7 @@ def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vau
         assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
-    log FluidWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount)
+    log FluidWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned)
     return assetAmountReceived, vaultTokenAmountBurned
 
 

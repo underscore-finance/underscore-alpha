@@ -23,7 +23,6 @@ event AgenticWithdrawal:
     vaultToken: indexed(address)
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
-    vault: address
     legoId: uint256
     legoAddr: address
     isAgent: bool
@@ -146,13 +145,12 @@ def _depositTokens(
 def withdrawTokens(
     _legoId: uint256,
     _asset: address,
-    _vaultToken: address,
+    _vaultToken: address = empty(address),
     _amount: uint256 = max_value(uint256),
-    _vault: address = empty(address),
 ) -> (uint256, uint256):
     isAgent: bool = msg.sender == self.agent
     assert isAgent or msg.sender == self.owner # dev: no perms
-    return self._withdrawTokens(_legoId, _asset, _vaultToken, _amount, _vault, isAgent)
+    return self._withdrawTokens(_legoId, _asset, _vaultToken, _amount, isAgent)
 
 
 @internal
@@ -161,26 +159,31 @@ def _withdrawTokens(
     _asset: address,
     _vaultToken: address,
     _amount: uint256,
-    _vault: address,
     _isAgent: bool,
 ) -> (uint256, uint256):
     legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
-    # finalize vault token amount
-    wantedVaultTokenAmount: uint256 = min(_amount, staticcall IERC20(_vaultToken).balanceOf(self))
-    assert wantedVaultTokenAmount != 0 # dev: nothing to transfer
+    # finalize amount, this will look at vault token balance (not always 1:1 with underlying asset)
+    withdrawAmount: uint256 = _amount
+    if _vaultToken != empty(address):
+        withdrawAmount = min(_amount, staticcall IERC20(_vaultToken).balanceOf(self))
 
-    # some vault tokens require max value approval (comp v3)
-    assert extcall IERC20(_vaultToken).approve(legoAddr, max_value(uint256), default_return_value=True) # dev: approval failed
+        # some vault tokens require max value approval (comp v3)
+        assert extcall IERC20(_vaultToken).approve(legoAddr, max_value(uint256), default_return_value=True) # dev: approval failed
+
+    assert withdrawAmount != 0 # dev: nothing to withdraw
 
     # withdraw from lego partner
     assetAmountReceived: uint256 = 0
     vaultTokenAmountBurned: uint256 = 0
-    assetAmountReceived, vaultTokenAmountBurned = extcall LegoPartner(legoAddr).withdrawTokens(_asset, _vaultToken, wantedVaultTokenAmount, _vault)
-    assert extcall IERC20(_vaultToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+    assetAmountReceived, vaultTokenAmountBurned = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken)
 
-    log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _vault, _legoId, legoAddr, _isAgent)
+    # zero out approvals
+    if _vaultToken != empty(address):
+        assert extcall IERC20(_vaultToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _legoId, legoAddr, _isAgent)
     return assetAmountReceived, vaultTokenAmountBurned
 
 

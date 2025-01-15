@@ -78,7 +78,7 @@ def test_compv3_withdrawal(
     assert vault_token == comp_vault.address
 
     # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, comp_vault.address, MAX_UINT256, comp_vault.address, sender=bob_agent)
+    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, comp_vault.address, MAX_UINT256, sender=bob_agent)
     _test(amount, withdraw_amount)
     _test(vault_tokens_received, vault_tokens_burned)
 

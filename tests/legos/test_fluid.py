@@ -74,9 +74,10 @@ def test_fluid_withdrawal(
     fluid_vault = getFluidVault()
     deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, fluid_vault, sender=bob_agent)
     _test(amount, deposit_amount)
+    assert vault_token == fluid_vault.address
 
     # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, vault_token, MAX_UINT256, fluid_vault, sender=bob_agent)
+    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, fluid_vault, MAX_UINT256, sender=bob_agent)
     _test(amount, withdraw_amount)
     assert vault_tokens_burned == vault_tokens_received
 

@@ -25,7 +25,6 @@ event MoonwellDeposit:
     vaultToken: indexed(address)
     assetAmountDeposited: uint256
     vaultTokenAmountReceived: uint256
-    refundAmount: uint256
 
 event MoonwellWithdrawal:
     user: indexed(address)
@@ -33,7 +32,6 @@ event MoonwellWithdrawal:
     vaultToken: indexed(address)
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
-    refundVaultTokenAmount: uint256
 
 event FundsRecovered:
     asset: indexed(address)
@@ -66,6 +64,17 @@ def __init__(_moonwellComptroller: address, _legoRegistry: address, _agentFactor
     self.isActivated = True
 
 
+@view
+@internal
+def _validateAssetAndVault(_asset: address, _vault: address):
+    assert self.isActivated # dev: not activated
+    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
+
+    compMarkets: DynArray[address, MAX_MARKETS] = staticcall CompoundV2Comptroller(MOONWELL_COMPTROLLER).getAllMarkets()
+    assert _vault in compMarkets # dev: invalid vault
+    assert staticcall CompoundV2(_vault).underlying() == _asset # dev: invalid asset
+
+
 ###########
 # Deposit #
 ###########
@@ -73,13 +82,7 @@ def __init__(_moonwellComptroller: address, _legoRegistry: address, _agentFactor
 
 @external
 def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint256, address, uint256):
-    assert self.isActivated # dev: not activated
-    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
-
-    # validate vault and deposit asset
-    compMarkets: DynArray[address, MAX_MARKETS] = staticcall CompoundV2Comptroller(MOONWELL_COMPTROLLER).getAllMarkets()
-    assert _vault in compMarkets # dev: invalid vault
-    assert staticcall CompoundV2(_vault).underlying() == _asset # dev: invalid vault
+    self._validateAssetAndVault(_asset, _vault)
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -93,7 +96,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
     # deposit assets into lego partner
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
     assert extcall IERC20(_asset).approve(_vault, depositAmount, default_return_value=True) # dev: approval failed
-    assert extcall CompoundV2(_vault).mint(depositAmount) == 0 # dev: could not deposit into compound v2
+    assert extcall CompoundV2(_vault).mint(depositAmount) == 0 # dev: could not deposit into moonwell
     assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
 
     # validate received vault tokens, transfer back to user
@@ -110,7 +113,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
         assert extcall IERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAmount
-    log MoonwellDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived, refundAmount)
+    log MoonwellDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived)
     return actualDepositAmount, _vault, vaultTokenAmountReceived
 
 
@@ -120,14 +123,8 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
 
 
 @external
-def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vault: address) -> (uint256, uint256):
-    assert self.isActivated # dev: not activated
-    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
-
-    # validate vault and withdraw asset
-    compMarkets: DynArray[address, MAX_MARKETS] = staticcall CompoundV2Comptroller(MOONWELL_COMPTROLLER).getAllMarkets()
-    assert _vault in compMarkets # dev: invalid vault
-    assert staticcall CompoundV2(_vault).underlying() == _asset # dev: invalid vault
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address) -> (uint256, uint256):
+    self._validateAssetAndVault(_asset, _vaultToken)
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -139,8 +136,7 @@ def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vau
     assert extcall IERC20(_vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     # withdraw assets from lego partner
-    withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self))
-    assert extcall CompoundV2(_vault).redeem(withdrawVaultTokenAmount) == 0 # dev: could not redeem in compound v2
+    assert extcall CompoundV2(_vaultToken).redeem(max_value(uint256)) == 0 # dev: could not withdraw from moonwell
 
     # validate received asset , transfer back to user
     newLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -155,8 +151,8 @@ def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vau
         refundVaultTokenAmount = currentLegoVaultBalance - preLegoVaultBalance
         assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
-    vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
-    log MoonwellWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount)
+    vaultTokenAmountBurned: uint256 = transferVaultTokenAmount - refundVaultTokenAmount
+    log MoonwellWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned)
     return assetAmountReceived, vaultTokenAmountBurned
 
 

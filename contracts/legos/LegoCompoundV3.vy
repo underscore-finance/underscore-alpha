@@ -25,7 +25,6 @@ event CompoundV3Deposit:
     vaultToken: indexed(address)
     assetAmountDeposited: uint256
     vaultTokenAmountReceived: uint256
-    refundAmount: uint256
 
 event CompoundV3Withdrawal:
     user: indexed(address)
@@ -33,7 +32,6 @@ event CompoundV3Withdrawal:
     vaultToken: indexed(address)
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
-    refundVaultTokenAmount: uint256
 
 event FundsRecovered:
     asset: indexed(address)
@@ -64,6 +62,16 @@ def __init__(_configurator: address, _legoRegistry: address, _agentFactory: addr
     self.isActivated = True
 
 
+@view
+@internal
+def _validateAssetAndVault(_asset: address, _vault: address):
+    assert self.isActivated # dev: not activated
+    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
+
+    assert staticcall CompoundV3Configurator(COMPOUND_V3_CONFIGURATOR).factory(_vault) != empty(address) # dev: invalid vault
+    assert staticcall CompoundV3(_vault).baseToken() == _asset # dev: invalid asset
+
+
 ###########
 # Deposit #
 ###########
@@ -71,12 +79,7 @@ def __init__(_configurator: address, _legoRegistry: address, _agentFactory: addr
 
 @external
 def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint256, address, uint256):
-    assert self.isActivated # dev: not activated
-    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
-
-    # validate vault and deposit asset
-    assert staticcall CompoundV3Configurator(COMPOUND_V3_CONFIGURATOR).factory(_vault) != empty(address) # dev: invalid vault
-    assert staticcall CompoundV3(_vault).baseToken() == _asset # dev: invalid vault
+    self._validateAssetAndVault(_asset, _vault)
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -93,7 +96,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
     extcall CompoundV3(_vault).supplyTo(msg.sender, _asset, depositAmount) # dev: could not deposit into compound v3
     assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
 
-    # validate received vault tokens, transfer back to user
+    # validate vault token transfer
     newUserVaultBalance: uint256 = staticcall IERC20(_vault).balanceOf(msg.sender)
     vaultTokenAmountReceived: uint256 = newUserVaultBalance - preUserVaultBalance
     assert vaultTokenAmountReceived != 0 # dev: no vault tokens received
@@ -106,7 +109,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
         assert extcall IERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAmount
-    log CompoundV3Deposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived, refundAmount)
+    log CompoundV3Deposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived)
     return actualDepositAmount, _vault, vaultTokenAmountReceived
 
 
@@ -116,13 +119,8 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
 
 
 @external
-def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vault: address) -> (uint256, uint256):
-    assert self.isActivated # dev: not activated
-    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
-
-    # validate vault and deposit asset
-    assert staticcall CompoundV3Configurator(COMPOUND_V3_CONFIGURATOR).factory(_vault) != empty(address) # dev: invalid vault
-    assert staticcall CompoundV3(_vault).baseToken() == _asset # dev: invalid vault
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address) -> (uint256, uint256):
+    self._validateAssetAndVault(_asset, _vaultToken)
 
     # pre balances
     preUserBalance: uint256 = staticcall IERC20(_asset).balanceOf(msg.sender)
@@ -134,13 +132,12 @@ def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vau
     assert extcall IERC20(_vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     # withdraw assets from lego partner
-    withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self))
-    extcall CompoundV3(_vault).withdrawTo(msg.sender, _asset, withdrawVaultTokenAmount) # dev: could not withdraw from compound v3
+    extcall CompoundV3(_vaultToken).withdrawTo(msg.sender, _asset, max_value(uint256)) # dev: could not withdraw from compound v3
 
     # validate received asset , transfer back to user
     newUserBalance: uint256 = staticcall IERC20(_asset).balanceOf(msg.sender)
     assetAmountReceived: uint256 = newUserBalance - preUserBalance
-    assert assetAmountReceived != 0 # dev: no asset amountreceived
+    assert assetAmountReceived != 0 # dev: no asset amount received
 
     # refund if full withdrawal didn't happen
     currentLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
@@ -149,8 +146,8 @@ def withdrawTokens(_asset: address, _vaultToken: address, _amount: uint256, _vau
         refundVaultTokenAmount = currentLegoVaultBalance - preLegoVaultBalance
         assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
-    vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
-    log CompoundV3Withdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount)
+    vaultTokenAmountBurned: uint256 = transferVaultTokenAmount - refundVaultTokenAmount
+    log CompoundV3Withdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned)
     return assetAmountReceived, vaultTokenAmountBurned
 
 
