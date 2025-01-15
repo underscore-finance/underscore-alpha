@@ -21,6 +21,10 @@ LEGO_PARTNERS = {
         "base": "0xfBb21d0380beE3312B33c4353c8936a0F13EF26C",
         "local": ZERO_ADDRESS,
     },
+    "compound_v3": {
+        "base": "0x45939657d1CA34A8FA39A924B71D28Fe8431e581",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 # lego partners
@@ -80,5 +84,18 @@ def lego_moonwell(fork, lego_registry, agent_factory, governor, mock_compV2_comp
         comptroller = boa.from_etherscan(comptroller, name="moonwell_comptroller")
     addr = boa.load("contracts/legos/LegoMoonwell.vy", comptroller, lego_registry, agent_factory, name="lego_moonwell")
     legoId = lego_registry.registerNewLego(addr, "Moonwell", sender=governor)
+    assert legoId != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_compound_v3(fork, lego_registry, agent_factory, governor, mock_compV3_configurator):
+    configurator = LEGO_PARTNERS["compound_v3"][fork]
+    if configurator == ZERO_ADDRESS:
+        configurator = mock_compV3_configurator
+    else:
+        configurator = boa.from_etherscan(configurator, name="compound_v3_configurator")
+    addr = boa.load("contracts/legos/LegoCompoundV3.vy", configurator, lego_registry, agent_factory, name="lego_compound_v3")
+    legoId = lego_registry.registerNewLego(addr, "Compound V3", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr

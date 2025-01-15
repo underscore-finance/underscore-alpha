@@ -69,6 +69,11 @@ def alpha_token_compV2_vault(alpha_token):
     return boa.load("contracts/mock/MockCompV2Vault.vy", alpha_token, name="alpha_compV2_vault")
 
 
+@pytest.fixture(scope="session")
+def alpha_token_compV3_vault(alpha_token):
+    return boa.load("contracts/mock/MockCompV3Vault.vy", alpha_token, name="alpha_compV3_vault")
+
+
 # mock lego integrations
 
 
@@ -90,3 +95,8 @@ def mock_fluid_resolver(alpha_token_erc4626_vault):
 @pytest.fixture(scope="session")
 def mock_compV2_comptroller(alpha_token_compV2_vault):
     return boa.load("contracts/mock/MockCompV2Comptroller.vy", alpha_token_compV2_vault, name="mock_compV2_comptroller")
+
+
+@pytest.fixture(scope="session")
+def mock_compV3_configurator():
+    return boa.load("contracts/mock/MockCompV3Configurator.vy", name="mock_compV3_configurator")
