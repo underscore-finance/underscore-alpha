@@ -87,32 +87,20 @@ def aliased(env, addr, alias):
     return addr
 
 
-def getFromEtherscan(addr, alias):
-    if addr != ZERO_ADDRESS:
-        return boa.from_etherscan(addr, name=alias)
-    return addr
-
-
 @pytest.fixture(scope="session")
-def getTokenAndWhaleProd(fork, env):
-    def getTokenAndWhaleProd(_token_str):
+def getTokenAndWhale(fork, env, alpha_token, alpha_token_whale):
+    def getTokenAndWhale(_token_str):
+        if _token_str == "alpha":
+            if fork == "local":
+                return alpha_token, alpha_token_whale
+            else:
+                pytest.skip("asset not relevant on this fork")
+
         token = TOKENS[_token_str][fork]
         whale = WHALES[_token_str][fork]
         if ZERO_ADDRESS in [token, whale]:
             pytest.skip("asset not relevant on this fork")
-        return getFromEtherscan(token, _token_str), aliased(env, whale, _token_str + "_whale")
 
-    yield getTokenAndWhaleProd
+        return boa.from_etherscan(token, name=_token_str), aliased(env, whale, _token_str + "_whale")
 
-
-# tokens
-
-
-@pytest.fixture(scope="session")
-def usdc(fork):
-    return getFromEtherscan(TOKENS["usdc"][fork], "usdc")
-
-
-@pytest.fixture(scope="session")
-def usdc_whale(env, fork):
-    return aliased(env, WHALES["usdc"][fork], "usdc_whale")
+    yield getTokenAndWhale

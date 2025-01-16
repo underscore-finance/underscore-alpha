@@ -1,37 +1,18 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import MAX_UINT256
 from conf_utils import filter_logs
 from conf_tokens import TEST_AMOUNTS
 
 
 @pytest.fixture(scope="package")
-def getAssetInfo(getTokenAndWhaleProd, alpha_token, alpha_token_whale, fork):
-    def getAssetInfo(_token_str, _vaultTokenMapping, _alphaVaultToken):
-        if _token_str == "alpha":
-            if fork == "local":
-                return alpha_token, alpha_token_whale, _alphaVaultToken
-            else:
-                pytest.skip("asset not relevant on this fork")
-
-        vault_token = _vaultTokenMapping[_token_str][fork]
-        if vault_token == ZERO_ADDRESS:
-            pytest.skip("asset not relevant on this fork")
-
-        token, whale = getTokenAndWhaleProd(_token_str)
-        return token, whale, boa.from_etherscan(vault_token, name=_token_str + "_vault_token")
-
-    yield getAssetInfo
-
-
-@pytest.fixture(scope="package")
-def setupWithdrawal(getAssetInfo, bob_ai_wallet, bob_agent):
-    def setupWithdrawal(_legoId, _token_str, _vaultTokenMapping, _alphaVaultToken):
-        asset, whale, vault_token = getAssetInfo(_token_str, _vaultTokenMapping, _alphaVaultToken)
+def setupWithdrawal(getTokenAndWhale, bob_ai_wallet, bob_agent):
+    def setupWithdrawal(_legoId, _token_str, _vaultToken):
+        asset, whale = getTokenAndWhale(_token_str)
         asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[_token_str] * (10 ** asset.decimals()), sender=whale)
-        _a, _b, vault_tokens_received = bob_ai_wallet.depositTokens(_legoId, asset.address, MAX_UINT256, vault_token, sender=bob_agent)
-        return asset, vault_token, vault_tokens_received
+        _a, _b, vault_tokens_received = bob_ai_wallet.depositTokens(_legoId, asset.address, MAX_UINT256, _vaultToken, sender=bob_agent)
+        return asset, vault_tokens_received
 
     yield setupWithdrawal
 
