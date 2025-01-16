@@ -42,9 +42,9 @@ event MorphoLegoIdSet:
 
 legoId: public(uint256)
 
-META_MORPHO_FACTORY: immutable(address)
-META_MORPHO_FACTORY_LEGACY: immutable(address)
-LEGO_REGISTRY: immutable(address)
+META_MORPHO_FACTORY: public(immutable(address))
+META_MORPHO_FACTORY_LEGACY: public(immutable(address))
+LEGO_REGISTRY: public(immutable(address))
 
 
 @deploy
@@ -53,6 +53,12 @@ def __init__(_morphoFactory: address, _morphoFactoryLegacy: address, _legoRegist
     META_MORPHO_FACTORY = _morphoFactory
     META_MORPHO_FACTORY_LEGACY = _morphoFactoryLegacy
     LEGO_REGISTRY = _legoRegistry
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [META_MORPHO_FACTORY, META_MORPHO_FACTORY_LEGACY]
 
 
 @view

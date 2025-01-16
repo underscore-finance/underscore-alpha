@@ -56,8 +56,8 @@ event AaveV3LegoIdSet:
 
 legoId: public(uint256)
 
-AAVE_V3_POOL: immutable(address)
-LEGO_REGISTRY: immutable(address)
+AAVE_V3_POOL: public(immutable(address))
+LEGO_REGISTRY: public(immutable(address))
 
 
 @deploy
@@ -65,6 +65,12 @@ def __init__(_aaveV3: address, _legoRegistry: address):
     assert empty(address) not in [_aaveV3, _legoRegistry] # dev: invalid addrs
     AAVE_V3_POOL = _aaveV3
     LEGO_REGISTRY = _legoRegistry
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [AAVE_V3_POOL]
 
 
 @view

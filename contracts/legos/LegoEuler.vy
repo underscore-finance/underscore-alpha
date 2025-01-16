@@ -45,9 +45,9 @@ event EulerLegoIdSet:
 
 legoId: public(uint256)
 
-EVAULT_FACTORY: immutable(address)
-EARN_FACTORY: immutable(address)
-LEGO_REGISTRY: immutable(address)
+EVAULT_FACTORY: public(immutable(address))
+EARN_FACTORY: public(immutable(address))
+LEGO_REGISTRY: public(immutable(address))
 
 
 @deploy
@@ -56,6 +56,12 @@ def __init__(_evaultFactory: address, _earnFactory: address, _legoRegistry: addr
     EVAULT_FACTORY = _evaultFactory
     EARN_FACTORY = _earnFactory
     LEGO_REGISTRY = _legoRegistry
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [EVAULT_FACTORY, EARN_FACTORY]
 
 
 @view

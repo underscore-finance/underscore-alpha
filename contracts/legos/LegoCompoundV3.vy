@@ -42,8 +42,8 @@ event CompoundV3LegoIdSet:
 
 legoId: public(uint256)
 
-COMPOUND_V3_CONFIGURATOR: immutable(address)
-LEGO_REGISTRY: immutable(address)
+COMPOUND_V3_CONFIGURATOR: public(immutable(address))
+LEGO_REGISTRY: public(immutable(address))
 
 
 @deploy
@@ -51,6 +51,12 @@ def __init__(_configurator: address, _legoRegistry: address):
     assert empty(address) not in [_configurator, _legoRegistry] # dev: invalid addrs
     COMPOUND_V3_CONFIGURATOR = _configurator
     LEGO_REGISTRY = _legoRegistry
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [COMPOUND_V3_CONFIGURATOR]
 
 
 @view

@@ -56,6 +56,12 @@ def __init__(_mockAsset: address, _mockVault: address, _legoRegistry: address):
 
 
 @view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return []
+
+
+@view
 @internal
 def _validateAssetAndVault(_asset: address, _vault: address):
     assert self.mockAsset == _asset and self.mockVault == _vault # dev: invalid asset or vault

@@ -42,8 +42,8 @@ event MoonwellLegoIdSet:
 
 legoId: public(uint256)
 
-MOONWELL_COMPTROLLER: immutable(address)
-LEGO_REGISTRY: immutable(address)
+MOONWELL_COMPTROLLER: public(immutable(address))
+LEGO_REGISTRY: public(immutable(address))
 
 MAX_MARKETS: constant(uint256) = 50
 
@@ -53,6 +53,12 @@ def __init__(_moonwellComptroller: address, _legoRegistry: address):
     assert empty(address) not in [_moonwellComptroller, _legoRegistry] # dev: invalid addrs
     MOONWELL_COMPTROLLER = _moonwellComptroller
     LEGO_REGISTRY = _legoRegistry
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [MOONWELL_COMPTROLLER]
 
 
 @view

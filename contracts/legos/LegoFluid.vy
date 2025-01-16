@@ -42,8 +42,8 @@ event FluidLegoIdSet:
 
 legoId: public(uint256)
 
-FLUID_RESOLVER: immutable(address)
-LEGO_REGISTRY: immutable(address)
+FLUID_RESOLVER: public(immutable(address))
+LEGO_REGISTRY: public(immutable(address))
 
 MAX_FTOKENS: constant(uint256) = 50
 
@@ -53,6 +53,12 @@ def __init__(_fluidResolver: address, _legoRegistry: address):
     assert empty(address) not in [_fluidResolver, _legoRegistry] # dev: invalid addrs
     FLUID_RESOLVER = _fluidResolver
     LEGO_REGISTRY = _legoRegistry
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [FLUID_RESOLVER]
 
 
 @view
