@@ -46,18 +46,18 @@ event WhitelistAddrSet:
 
 event AgentAdded:
     agent: indexed(address)
-    allowedAssets: indexed(DynArray[address, MAX_ASSETS])
-    allowedLegoIds: indexed(DynArray[uint256, MAX_LEGOS])
+    allowedAssets: uint256
+    allowedLegoIds: uint256
 
 event AgentModified:
     agent: indexed(address)
-    allowedAssets: indexed(DynArray[address, MAX_ASSETS])
-    allowedLegoIds: indexed(DynArray[uint256, MAX_LEGOS])
+    allowedAssets: uint256
+    allowedLegoIds: uint256
 
 event AgentDisabled:
     agent: indexed(address)
-    prevAllowedAssets: indexed(DynArray[address, MAX_ASSETS])
-    prevAllowedLegoIds: indexed(DynArray[uint256, MAX_LEGOS])
+    prevAllowedAssets: uint256
+    prevAllowedLegoIds: uint256
 
 event LegoIdAddedToAgent:
     agent: indexed(address)
@@ -336,9 +336,9 @@ def addOrModifyAgent(
 
     # log event
     if isNewAgent:
-        log AgentAdded(_agent, agentInfo.allowedAssets, agentInfo.allowedLegoIds)
+        log AgentAdded(_agent, len(agentInfo.allowedAssets), len(agentInfo.allowedLegoIds))
     else:
-        log AgentModified(_agent, agentInfo.allowedAssets, agentInfo.allowedLegoIds)
+        log AgentModified(_agent, len(agentInfo.allowedAssets), len(agentInfo.allowedLegoIds))
     return True
 
 
@@ -388,7 +388,7 @@ def disableAgent(_agent: address) -> bool:
     assert agentInfo.isActive # dev: agent not active
     self.agentSettings[_agent] = empty(AgentInfo)
 
-    log AgentDisabled(_agent, agentInfo.allowedAssets, agentInfo.allowedLegoIds)
+    log AgentDisabled(_agent, len(agentInfo.allowedAssets), len(agentInfo.allowedLegoIds))
     return True
 
 
