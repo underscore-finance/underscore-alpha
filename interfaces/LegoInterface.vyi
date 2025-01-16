@@ -1,11 +1,11 @@
 # @version 0.4.0
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint256, address, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256):
     ...
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address) -> (uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256):
     ...
 
 # config
@@ -22,13 +22,3 @@ def legoId() -> uint256:
 @external
 def setLegoId(_legoId: uint256) -> bool:
     ...
-
-@view
-@external
-def isActivated() -> bool:
-    ...
-
-@external
-def activate(_shouldActivate: bool):
-    ...
-

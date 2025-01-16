@@ -10,9 +10,6 @@ interface Erc4626Interface:
     def deposit(_assetAmount: uint256, _recipient: address) -> uint256: nonpayable
     def asset() -> address: view
 
-interface AgentFactory:
-    def isAgenticWallet(_wallet: address) -> bool: view
-
 interface EulerEarnFactory:
     def isValidDeployment(_vault: address) -> bool: view
 
@@ -23,18 +20,20 @@ interface LegoRegistry:
     def governor() -> address: view
 
 event EulerDeposit:
-    user: indexed(address)
+    sender: indexed(address)
     asset: indexed(address)
     vaultToken: indexed(address)
     assetAmountDeposited: uint256
     vaultTokenAmountReceived: uint256
+    recipient: address
 
 event EulerWithdrawal:
-    user: indexed(address)
+    sender: indexed(address)
     asset: indexed(address)
     vaultToken: indexed(address)
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
+    recipient: address
 
 event FundsRecovered:
     asset: indexed(address)
@@ -44,35 +43,24 @@ event FundsRecovered:
 event EulerLegoIdSet:
     legoId: uint256
 
-event EulerLegoActivated:
-    isActivated: bool
-
-# config
 legoId: public(uint256)
-isActivated: public(bool)
 
 EVAULT_FACTORY: immutable(address)
 EARN_FACTORY: immutable(address)
 LEGO_REGISTRY: immutable(address)
-AGENT_FACTORY: immutable(address)
 
 
 @deploy
-def __init__(_evaultFactory: address, _earnFactory: address, _legoRegistry: address, _agentFactory: address):
-    assert empty(address) not in [_evaultFactory, _earnFactory, _legoRegistry, _agentFactory] # dev: invalid addrs
+def __init__(_evaultFactory: address, _earnFactory: address, _legoRegistry: address):
+    assert empty(address) not in [_evaultFactory, _earnFactory, _legoRegistry] # dev: invalid addrs
     EVAULT_FACTORY = _evaultFactory
     EARN_FACTORY = _earnFactory
     LEGO_REGISTRY = _legoRegistry
-    AGENT_FACTORY = _agentFactory
-    self.isActivated = True
 
 
 @view
 @internal
 def _validateAssetAndVault(_asset: address, _vault: address):
-    assert self.isActivated # dev: not activated
-    assert staticcall AgentFactory(AGENT_FACTORY).isAgenticWallet(msg.sender) # dev: no perms
-
     assert staticcall EulerEvaultFactory(EVAULT_FACTORY).isProxy(_vault) or staticcall EulerEarnFactory(EARN_FACTORY).isValidDeployment(_vault) # dev: invalid vault
     assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid asset
 
@@ -83,7 +71,7 @@ def _validateAssetAndVault(_asset: address, _vault: address):
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint256, address, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256):
     self._validateAssetAndVault(_asset, _vault)
 
     # pre balances
@@ -97,7 +85,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
     # deposit assets into lego partner
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
     assert extcall IERC20(_asset).approve(_vault, depositAmount, default_return_value=True) # dev: approval failed
-    vaultTokenAmountReceived: uint256 = extcall Erc4626Interface(_vault).deposit(depositAmount, msg.sender)
+    vaultTokenAmountReceived: uint256 = extcall Erc4626Interface(_vault).deposit(depositAmount, _recipient)
     assert vaultTokenAmountReceived != 0 # dev: no vault tokens received
     assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
 
@@ -109,7 +97,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
         assert extcall IERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAmount
-    log EulerDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived)
+    log EulerDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived, _recipient)
     return actualDepositAmount, _vault, vaultTokenAmountReceived
 
 
@@ -119,7 +107,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address) -> (uint25
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address) -> (uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256):
     self._validateAssetAndVault(_asset, _vaultToken)
 
     # pre balances
@@ -132,7 +120,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address) -> (
 
     # withdraw assets from lego partner
     withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self))
-    assetAmountReceived: uint256 = extcall Erc4626Interface(_vaultToken).redeem(withdrawVaultTokenAmount, msg.sender, self)
+    assetAmountReceived: uint256 = extcall Erc4626Interface(_vaultToken).redeem(withdrawVaultTokenAmount, _recipient, self)
     assert assetAmountReceived != 0 # dev: no asset amount received
 
     # refund if full withdrawal didn't happen
@@ -143,7 +131,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address) -> (
         assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
-    log EulerWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned)
+    log EulerWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _recipient)
     return assetAmountReceived, vaultTokenAmountBurned
 
 
@@ -177,15 +165,3 @@ def setLegoId(_legoId: uint256) -> bool:
     self.legoId = _legoId
     log EulerLegoIdSet(_legoId)
     return True
-
-
-############
-# Activate #
-############
-
-
-@external
-def activate(_shouldActivate: bool):
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
-    self.isActivated = _shouldActivate
-    log EulerLegoActivated(_shouldActivate)

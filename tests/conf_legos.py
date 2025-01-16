@@ -51,39 +51,39 @@ def getRegistry(mock_registry):
 
 
 @pytest.fixture(scope="session")
-def lego_aave_v3(getRegistry, fork, mock_aave_v3_pool, lego_registry, agent_factory, governor):
+def lego_aave_v3(getRegistry, fork, mock_aave_v3_pool, lego_registry, governor):
     pool = getRegistry("aave_v3", fork, mock_aave_v3_pool)
-    addr = boa.load("contracts/legos/LegoAaveV3.vy", pool, lego_registry, agent_factory, name="lego_aave_v3")
+    addr = boa.load("contracts/legos/LegoAaveV3.vy", pool, lego_registry, name="lego_aave_v3")
     assert lego_registry.registerNewLego(addr, "Aave V3", sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_fluid(getRegistry, fork, lego_registry, agent_factory, governor):
+def lego_fluid(getRegistry, fork, lego_registry, governor):
     registry = getRegistry("fluid", fork)
-    addr = boa.load("contracts/legos/LegoFluid.vy", registry, lego_registry, agent_factory, name="lego_fluid")
+    addr = boa.load("contracts/legos/LegoFluid.vy", registry, lego_registry, name="lego_fluid")
     assert lego_registry.registerNewLego(addr, "Fluid", sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_moonwell(getRegistry, fork, lego_registry, agent_factory, governor):
+def lego_moonwell(getRegistry, fork, lego_registry, governor):
     registry = getRegistry("moonwell", fork)
-    addr = boa.load("contracts/legos/LegoMoonwell.vy", registry, lego_registry, agent_factory, name="lego_moonwell")
+    addr = boa.load("contracts/legos/LegoMoonwell.vy", registry, lego_registry, name="lego_moonwell")
     assert lego_registry.registerNewLego(addr, "Moonwell", sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_compound_v3(getRegistry, fork, lego_registry, agent_factory, governor):
+def lego_compound_v3(getRegistry, fork, lego_registry, governor):
     registry = getRegistry("compound_v3", fork)
-    addr = boa.load("contracts/legos/LegoCompoundV3.vy", registry, lego_registry, agent_factory, name="lego_compound_v3")
+    addr = boa.load("contracts/legos/LegoCompoundV3.vy", registry, lego_registry, name="lego_compound_v3")
     assert lego_registry.registerNewLego(addr, "Compound V3", sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_morpho(fork, lego_registry, agent_factory, governor, mock_registry):
+def lego_morpho(fork, lego_registry, governor, mock_registry):
     registries = LEGO_REGISTRIES["morpho"][fork]
 
     factory = mock_registry 
@@ -92,13 +92,13 @@ def lego_morpho(fork, lego_registry, agent_factory, governor, mock_registry):
         factory = boa.from_etherscan(registries[0], name="morpho_factory")
         factory_legacy = boa.from_etherscan(registries[1], name="morpho_factory_legacy")
 
-    addr = boa.load("contracts/legos/LegoMorpho.vy", factory, factory_legacy, lego_registry, agent_factory, name="lego_morpho")
+    addr = boa.load("contracts/legos/LegoMorpho.vy", factory, factory_legacy, lego_registry, name="lego_morpho")
     assert lego_registry.registerNewLego(addr, "Morpho", sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_euler(fork, lego_registry, agent_factory, governor, mock_registry):
+def lego_euler(fork, lego_registry, governor, mock_registry):
     registries = LEGO_REGISTRIES["euler"][fork]
 
     evault_factory = mock_registry 
@@ -107,6 +107,6 @@ def lego_euler(fork, lego_registry, agent_factory, governor, mock_registry):
         evault_factory = boa.from_etherscan(registries[0], name="euler_evault_factory")
         earn_factory = boa.from_etherscan(registries[1], name="euler_earn_factory")
 
-    addr = boa.load("contracts/legos/LegoEuler.vy", evault_factory, earn_factory, lego_registry, agent_factory, name="lego_euler")
+    addr = boa.load("contracts/legos/LegoEuler.vy", evault_factory, earn_factory, lego_registry, name="lego_euler")
     assert lego_registry.registerNewLego(addr, "Euler", sender=governor) != 0 # dev: invalid lego id
     return addr

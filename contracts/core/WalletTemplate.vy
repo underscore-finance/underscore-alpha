@@ -127,7 +127,7 @@ def _depositTokens(
     assetAmountDeposited: uint256 = 0
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault, self)
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     log AgenticDeposit(msg.sender, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, _legoId, legoAddr, _isAgent)
@@ -176,7 +176,7 @@ def _withdrawTokens(
     # withdraw from lego partner
     assetAmountReceived: uint256 = 0
     vaultTokenAmountBurned: uint256 = 0
-    assetAmountReceived, vaultTokenAmountBurned = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken)
+    assetAmountReceived, vaultTokenAmountBurned = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken, self)
 
     # zero out approvals
     if _vaultToken != empty(address):
