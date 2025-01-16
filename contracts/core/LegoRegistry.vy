@@ -27,6 +27,9 @@ event LegoAddrDisabled:
     version: uint256
     description: String[64]
 
+event LegoHelperSet:
+    helperAddr: indexed(address)
+
 event LegoRegistryGovernorSet:
     governor: indexed(address)
 
@@ -37,6 +40,8 @@ event LegoRegistryActivated:
 legoInfo: public(HashMap[uint256, LegoInfo])
 legoAddrToId: public(HashMap[address, uint256])
 numLegos: public(uint256)
+
+legoHelper: public(address)
 
 # config
 governor: public(address)
@@ -259,6 +264,36 @@ def getLastLegoAddr() -> address:
 @external
 def getLastLegoId() -> uint256:
     return self.numLegos - 1
+
+
+###############
+# Lego Helper #
+###############
+
+
+@view
+@external 
+def isValidLegoHelper(_helperAddr: address) -> bool:
+    return self._isValidLegoHelper(_helperAddr)
+
+
+@view
+@internal 
+def _isValidLegoHelper(_helperAddr: address) -> bool:
+    if not _helperAddr.is_contract or _helperAddr == empty(address):
+        return False
+    return _helperAddr != self.legoHelper
+
+
+@external
+def setLegoHelper(_helperAddr: address) -> bool:
+    assert self.isActivated # dev: not activated
+    assert msg.sender == self.governor # dev: no perms
+    if not self._isValidLegoHelper(_helperAddr):
+        return False
+    self.legoHelper = _helperAddr
+    log LegoHelperSet(_helperAddr)
+    return True
 
 
 ################

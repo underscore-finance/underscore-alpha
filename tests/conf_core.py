@@ -16,3 +16,20 @@ def agent_factory(lego_registry, wallet_template):
 def wallet_template():
     return boa.load("contracts/core/WalletTemplate.vy", name="wallet_template")
 
+
+@pytest.fixture(scope="session")
+def lego_helper(lego_registry, lego_aave_v3, lego_compound_v3, lego_euler, lego_fluid, lego_moonwell, lego_morpho, governor):
+    h = boa.load(
+        "contracts/core/LegoHelper.vy",
+        lego_registry,
+        lego_aave_v3.legoId(),
+        lego_compound_v3.legoId(),
+        lego_euler.legoId(),
+        lego_fluid.legoId(),
+        lego_moonwell.legoId(),
+        lego_morpho.legoId(),
+        name="lego_helper",
+    )
+    lego_registry.setLegoHelper(h, sender=governor)
+    return h
+
