@@ -1,8 +1,8 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS
-from contracts import WalletTemplate
+from constants import ZERO_ADDRESS
+from contracts.core import WalletTemplate
 
 
 # accounts
@@ -49,13 +49,13 @@ def bob_ai_wallet(agent_factory, bob, bob_agent):
 
 @pytest.fixture(scope="session")
 def alpha_token(governor):
-    return boa.load("contracts/mock/MockErc20.vy", governor, "Alpha Token", "ALPHA", 18, 1_000_000, name="alpha_token")
+    return boa.load("contracts/mock/MockErc20.vy", governor, "Alpha Token", "ALPHA", 18, 10_000_000, name="alpha_token")
 
 
 @pytest.fixture(scope="session")
 def alpha_token_whale(env, alpha_token, governor):
     whale = env.generate_address("alpha_token_whale")
-    alpha_token.mint(whale, 100_000 * EIGHTEEN_DECIMALS, sender=governor)
+    alpha_token.mint(whale, 1_000_000 * (10 ** alpha_token.decimals()), sender=governor)
     return whale
 
 
@@ -65,13 +65,8 @@ def alpha_token_erc4626_vault(alpha_token):
 
 
 @pytest.fixture(scope="session")
-def alpha_token_compV2_vault(alpha_token):
-    return boa.load("contracts/mock/MockCompV2Vault.vy", alpha_token, name="alpha_compV2_vault")
-
-
-@pytest.fixture(scope="session")
-def alpha_token_compV3_vault(alpha_token):
-    return boa.load("contracts/mock/MockCompV3Vault.vy", alpha_token, name="alpha_compV3_vault")
+def alpha_token_comp_vault(alpha_token):
+    return boa.load("contracts/mock/MockCompVault.vy", alpha_token, name="alpha_comp_vault")
 
 
 # mock lego
@@ -89,30 +84,10 @@ def mock_lego(alpha_token, alpha_token_erc4626_vault, lego_registry, agent_facto
 
 
 @pytest.fixture(scope="session")
+def mock_registry(alpha_token_erc4626_vault, alpha_token_comp_vault):
+    return boa.load("contracts/mock/MockRegistry.vy", [alpha_token_erc4626_vault, alpha_token_comp_vault], name="mock_registry")
+
+
+@pytest.fixture(scope="session")
 def mock_aave_v3_pool():
     return boa.load("contracts/mock/MockAaveV3Pool.vy", name="mock_aave_v3_pool")
-
-
-@pytest.fixture(scope="session")
-def mock_morpho_factory():
-    return boa.load("contracts/mock/MockMorphoFactory.vy", name="mock_morpho_factory")
-
-
-@pytest.fixture(scope="session")
-def mock_fluid_resolver(alpha_token_erc4626_vault):
-    return boa.load("contracts/mock/MockFluidResolver.vy", alpha_token_erc4626_vault, name="mock_fluid_resolver")
-
-
-@pytest.fixture(scope="session")
-def mock_compV2_comptroller(alpha_token_compV2_vault):
-    return boa.load("contracts/mock/MockCompV2Comptroller.vy", alpha_token_compV2_vault, name="mock_compV2_comptroller")
-
-
-@pytest.fixture(scope="session")
-def mock_compV3_configurator():
-    return boa.load("contracts/mock/MockCompV3Configurator.vy", name="mock_compV3_configurator")
-
-
-@pytest.fixture(scope="session")
-def mock_euler_factory():
-    return boa.load("contracts/mock/MockEulerFactory.vy", name="mock_euler_factory")

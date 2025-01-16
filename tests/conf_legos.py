@@ -4,7 +4,7 @@ import boa
 from constants import ZERO_ADDRESS
 
 
-LEGO_PARTNERS = {
+LEGO_REGISTRIES = {
     "aave_v3": {
         "base": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
         "local": ZERO_ADDRESS,
@@ -31,94 +31,82 @@ LEGO_PARTNERS = {
     },
 }
 
+@pytest.fixture(scope="session")
+def getRegistry(mock_registry):
+    def getRegistry(lego, fork, customRegistry=ZERO_ADDRESS):
+        registry = LEGO_REGISTRIES[lego][fork]
+        if registry == ZERO_ADDRESS:
+            if customRegistry == ZERO_ADDRESS:
+                registry = mock_registry
+            else:
+                registry = customRegistry
+        else:
+            registry = boa.from_etherscan(registry, name=f"{lego}_{fork}")
+        return registry
+
+    yield getRegistry
+
+
 # lego partners
 
 
 @pytest.fixture(scope="session")
-def lego_aave_v3(fork, mock_aave_v3_pool, lego_registry, agent_factory, governor):
-    pool = LEGO_PARTNERS["aave_v3"][fork]
-    if pool == ZERO_ADDRESS:
-        pool = mock_aave_v3_pool
-    else:
-        pool = boa.from_etherscan(pool, name="aave_v3_pool")
+def lego_aave_v3(getRegistry, fork, mock_aave_v3_pool, lego_registry, agent_factory, governor):
+    pool = getRegistry("aave_v3", fork, mock_aave_v3_pool)
     addr = boa.load("contracts/legos/LegoAaveV3.vy", pool, lego_registry, agent_factory, name="lego_aave_v3")
-    legoId = lego_registry.registerNewLego(addr, "Aave V3", sender=governor)
-    assert legoId != 0 # dev: invalid lego id
+    assert lego_registry.registerNewLego(addr, "Aave V3", sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_morpho(fork, lego_registry, agent_factory, governor, mock_morpho_factory):
-    factories = LEGO_PARTNERS["morpho"][fork]
+def lego_fluid(getRegistry, fork, lego_registry, agent_factory, governor):
+    registry = getRegistry("fluid", fork)
+    addr = boa.load("contracts/legos/LegoFluid.vy", registry, lego_registry, agent_factory, name="lego_fluid")
+    assert lego_registry.registerNewLego(addr, "Fluid", sender=governor) != 0 # dev: invalid lego id
+    return addr
 
-    factory = ZERO_ADDRESS
-    factory_legacy = ZERO_ADDRESS
-    if len(factories) == 0:
-        factory = mock_morpho_factory 
-        factory_legacy = mock_morpho_factory
-    else:
-        factory = boa.from_etherscan(factories[0], name="morpho_factory")
-        factory_legacy = boa.from_etherscan(factories[1], name="morpho_factory_legacy")
+
+@pytest.fixture(scope="session")
+def lego_moonwell(getRegistry, fork, lego_registry, agent_factory, governor):
+    registry = getRegistry("moonwell", fork)
+    addr = boa.load("contracts/legos/LegoMoonwell.vy", registry, lego_registry, agent_factory, name="lego_moonwell")
+    assert lego_registry.registerNewLego(addr, "Moonwell", sender=governor) != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_compound_v3(getRegistry, fork, lego_registry, agent_factory, governor):
+    registry = getRegistry("compound_v3", fork)
+    addr = boa.load("contracts/legos/LegoCompoundV3.vy", registry, lego_registry, agent_factory, name="lego_compound_v3")
+    assert lego_registry.registerNewLego(addr, "Compound V3", sender=governor) != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_morpho(fork, lego_registry, agent_factory, governor, mock_registry):
+    registries = LEGO_REGISTRIES["morpho"][fork]
+
+    factory = mock_registry 
+    factory_legacy = mock_registry
+    if len(registries) != 0:
+        factory = boa.from_etherscan(registries[0], name="morpho_factory")
+        factory_legacy = boa.from_etherscan(registries[1], name="morpho_factory_legacy")
 
     addr = boa.load("contracts/legos/LegoMorpho.vy", factory, factory_legacy, lego_registry, agent_factory, name="lego_morpho")
-    legoId = lego_registry.registerNewLego(addr, "Morpho", sender=governor)
-    assert legoId != 0 # dev: invalid lego id
+    assert lego_registry.registerNewLego(addr, "Morpho", sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_fluid(fork, lego_registry, agent_factory, governor, mock_fluid_resolver):
-    resolver = LEGO_PARTNERS["fluid"][fork]
-    if resolver == ZERO_ADDRESS:
-        resolver = mock_fluid_resolver
-    else:
-        resolver = boa.from_etherscan(resolver, name="fluid_resolver")
-    addr = boa.load("contracts/legos/LegoFluid.vy", resolver, lego_registry, agent_factory, name="lego_fluid")
-    legoId = lego_registry.registerNewLego(addr, "Fluid", sender=governor)
-    assert legoId != 0 # dev: invalid lego id
-    return addr
+def lego_euler(fork, lego_registry, agent_factory, governor, mock_registry):
+    registries = LEGO_REGISTRIES["euler"][fork]
 
-
-@pytest.fixture(scope="session")
-def lego_moonwell(fork, lego_registry, agent_factory, governor, mock_compV2_comptroller):
-    comptroller = LEGO_PARTNERS["moonwell"][fork]
-    if comptroller == ZERO_ADDRESS:
-        comptroller = mock_compV2_comptroller
-    else:
-        comptroller = boa.from_etherscan(comptroller, name="moonwell_comptroller")
-    addr = boa.load("contracts/legos/LegoMoonwell.vy", comptroller, lego_registry, agent_factory, name="lego_moonwell")
-    legoId = lego_registry.registerNewLego(addr, "Moonwell", sender=governor)
-    assert legoId != 0 # dev: invalid lego id
-    return addr
-
-
-@pytest.fixture(scope="session")
-def lego_compound_v3(fork, lego_registry, agent_factory, governor, mock_compV3_configurator):
-    configurator = LEGO_PARTNERS["compound_v3"][fork]
-    if configurator == ZERO_ADDRESS:
-        configurator = mock_compV3_configurator
-    else:
-        configurator = boa.from_etherscan(configurator, name="compound_v3_configurator")
-    addr = boa.load("contracts/legos/LegoCompoundV3.vy", configurator, lego_registry, agent_factory, name="lego_compound_v3")
-    legoId = lego_registry.registerNewLego(addr, "Compound V3", sender=governor)
-    assert legoId != 0 # dev: invalid lego id
-    return addr
-
-
-@pytest.fixture(scope="session")
-def lego_euler(fork, lego_registry, agent_factory, governor, mock_euler_factory):
-    factories = LEGO_PARTNERS["euler"][fork]
-
-    evault_factory = ZERO_ADDRESS
-    earn_factory = ZERO_ADDRESS
-    if len(factories) == 0:
-        evault_factory = mock_euler_factory 
-        earn_factory = mock_euler_factory
-    else:
-        evault_factory = boa.from_etherscan(factories[0], name="euler_evault_factory")
-        earn_factory = boa.from_etherscan(factories[1], name="euler_earn_factory")
+    evault_factory = mock_registry 
+    earn_factory = mock_registry
+    if len(registries) != 0:
+        evault_factory = boa.from_etherscan(registries[0], name="euler_evault_factory")
+        earn_factory = boa.from_etherscan(registries[1], name="euler_earn_factory")
 
     addr = boa.load("contracts/legos/LegoEuler.vy", evault_factory, earn_factory, lego_registry, agent_factory, name="lego_euler")
-    legoId = lego_registry.registerNewLego(addr, "Euler", sender=governor)
-    assert legoId != 0 # dev: invalid lego id
+    assert lego_registry.registerNewLego(addr, "Euler", sender=governor) != 0 # dev: invalid lego id
     return addr

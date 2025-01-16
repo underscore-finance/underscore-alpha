@@ -52,7 +52,7 @@ FLUID_RESOLVER: immutable(address)
 LEGO_REGISTRY: immutable(address)
 AGENT_FACTORY: immutable(address)
 
-MAX_FTOKENS: constant(uint256) = 25
+MAX_FTOKENS: constant(uint256) = 50
 
 
 @deploy

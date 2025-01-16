@@ -14,11 +14,11 @@ def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
 
 
 @pytest.fixture(scope="module")
-def getMoonwellVault(usdc, usdc_whale, alpha_token_compV2_vault):
+def getMoonwellVault(usdc, usdc_whale, alpha_token_comp_vault):
     def getMoonwellVault():
         if usdc != ZERO_ADDRESS and usdc_whale != ZERO_ADDRESS:
             return boa.from_etherscan("0xEdc817A28E8B93B03976FBd4a3dDBc9f7D176c22", name="usdc_moonwell_vault")
-        return alpha_token_compV2_vault
+        return alpha_token_comp_vault
     yield getMoonwellVault
 
 

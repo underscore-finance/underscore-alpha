@@ -2,154 +2,105 @@ import pytest
 import boa
 
 from constants import ZERO_ADDRESS
-from conf_utils import filter_logs
-from contracts.mock import MockErc20
+from conf_tokens import TEST_AMOUNTS
 
 
-@pytest.fixture(scope="module")
-def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
-    def getTokenAndWhale():
-        if usdc == ZERO_ADDRESS or usdc_whale == ZERO_ADDRESS:
-            return alpha_token, alpha_token_whale
-        return usdc, usdc_whale
-    yield getTokenAndWhale
+VAULT_TOKENS = {
+    "usdc": {
+        "base": "0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB",
+        "local": ZERO_ADDRESS,
+    },
+    "weth": {
+        "base": "0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7",
+        "local": ZERO_ADDRESS,
+    },
+    "cbbtc": {
+        "base": "0xBdb9300b7CDE636d9cD4AFF00f6F009fFBBc8EE6",
+        "local": ZERO_ADDRESS,
+    },
+    "wsteth": {
+        "base": "0x99CBC45ea5bb7eF3a5BC08FB1B7E56bB2442Ef0D",
+        "local": ZERO_ADDRESS,
+    },
+    "cbeth": {
+        "base": "0xcf3D55c10DB69f28fD1A75Bd73f3D8A2d9c595ad",
+        "local": ZERO_ADDRESS,
+    },
+}
 
 
+TEST_ASSETS = [
+    "alpha",
+    "usdc",
+    "weth",
+    "cbbtc",
+    "wsteth",
+    "cbeth",
+]
+
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_aaveV3_deposit_already_in_wallet(
-    getTokenAndWhale,
+def test_aaveV3_deposit_max(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_aave_v3,
-    bob_agent,
-    sally,
-    _test,
+    mock_aave_v3_pool,
+    transferAssets,
 ):
-    lego_id = lego_aave_v3.legoId()   
-
     # setup
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, mock_aave_v3_pool)
+    transferAssets(asset, TEST_AMOUNTS[token_str], bob_ai_wallet.address, whale)
 
-    # no perms
-    with boa.reverts():
-        bob_ai_wallet.depositTokens(lego_id, token.address, sender=sally)
-
-    # success
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, sender=bob_agent)
-    _test(amount, deposit_amount)
-    
-    # # wallet log
-    # log_wallet = filter_logs(bob_ai_wallet, "AgenticDeposit")[0]
-    # assert log_wallet.user == bob_agent
-    # assert log_wallet.asset == token.address
-    # assert log_wallet.vault == ZERO_ADDRESS
-    # assert log_wallet.assetAmountDeposited == deposit_amount
-    # assert log_wallet.vaultToken == vault_token
-    # assert log_wallet.vaultTokenAmountReceived == vault_tokens_received
-    # assert log_wallet.legoId == lego_id
-    # assert log_wallet.legoAddr == lego_aave_v3.address
-    # assert log_wallet.isAgent == True
-
-    # # aave v3 log
-    # log_pool = filter_logs(bob_ai_wallet, "AaveV3Deposit")[0]
-    # assert log_pool.user == bob_ai_wallet.address
-    # assert log_pool.asset == token.address
-    # assert log_pool.vaultToken == vault_token
-    # assert log_pool.assetAmountDeposited == deposit_amount
-    # assert log_pool.vaultTokenAmountReceived == vault_tokens_received
-    # assert log_pool.refundAmount == 0
-
-    # check balances
-    vault_token = MockErc20.at(vault_token)
-    assert vault_token.balanceOf(bob_ai_wallet.address) == vault_tokens_received
-
-    assert token.balanceOf(bob_ai_wallet.address) == 0
-    assert token.balanceOf(lego_aave_v3.address) == 0
+    testLegoDeposit(lego_aave_v3.legoId(), asset, vault_token)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_aaveV3_deposit_on_transfer(
-    getTokenAndWhale,
+def test_aaveV3_deposit_partial(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_aave_v3,
-    bob_agent,
-    sally,
-    _test,
+    mock_aave_v3_pool,
+    transferAssets,
+):
+    # setup
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, mock_aave_v3_pool)
+    amount = TEST_AMOUNTS[token_str]
+    transferAssets(asset, amount, bob_ai_wallet.address, whale)
+
+    testLegoDeposit(lego_aave_v3.legoId(), asset, vault_token, amount // 2)
+
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_aaveV3_withdraw_max(
+    token_str,
+    setupWithdrawal,
+    lego_aave_v3,
+    mock_aave_v3_pool,
+    testLegoWithdrawal,
 ):
     lego_id = lego_aave_v3.legoId()
+    asset, vault_token, _ = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, mock_aave_v3_pool)
 
-    # setup
-    token, whale = getTokenAndWhale()
-    amount = 100 * (10 ** token.decimals())
-    token.transfer(bob_agent, amount, sender=whale)
-
-    token.approve(bob_ai_wallet.address, amount, sender=bob_agent)
-
-    # no perms
-    with boa.reverts():
-        bob_ai_wallet.depositTokensWithTransfer(lego_id, token.address, sender=sally)
-
-    # success
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokensWithTransfer(lego_id, token.address, sender=bob_agent)
-    _test(amount, deposit_amount)
-
-    # check balances
-    vault_token = MockErc20.at(vault_token)
-    assert vault_token.balanceOf(bob_ai_wallet.address) == vault_tokens_received
-    assert vault_token.balanceOf(bob_agent) == 0
-
-    assert token.balanceOf(bob_ai_wallet.address) == 0
-    assert token.balanceOf(lego_aave_v3.address) == 0
-    assert token.balanceOf(bob_agent) == 0
+    testLegoWithdrawal(lego_id, asset, vault_token)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_aaveV3_withdrawal(
-    getTokenAndWhale,
-    bob_ai_wallet,
+def test_aaveV3_withdraw_partial(
+    token_str,
+    setupWithdrawal,
     lego_aave_v3,
-    bob_agent,
-    _test,
+    mock_aave_v3_pool,
+    testLegoWithdrawal,
 ):
-    lego_id = lego_aave_v3.legoId()   
+    lego_id = lego_aave_v3.legoId()
+    asset, vault_token, vault_tokens_received = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, mock_aave_v3_pool)
 
-    # setup (deposit)
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, sender=bob_agent)
-    _test(amount, deposit_amount)
-
-    # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, vault_token, sender=bob_agent)
-    _test(amount, withdraw_amount)
-    assert vault_tokens_burned == vault_tokens_received
-
-    # # wallet log
-    # log_wallet = filter_logs(bob_ai_wallet, "AgenticWithdrawal")[0]
-    # assert log_wallet.user == bob_agent
-    # assert log_wallet.asset == token.address
-    # assert log_wallet.vaultToken == vault_token
-    # assert log_wallet.assetAmountReceived == withdraw_amount
-    # assert log_wallet.vaultTokenAmountBurned == vault_tokens_burned
-    # assert log_wallet.vault == ZERO_ADDRESS
-    # assert log_wallet.legoId == lego_id
-    # assert log_wallet.legoAddr == lego_aave_v3.address
-    # assert log_wallet.isAgent == True
-
-    # # aave v3 log
-    # log_pool = filter_logs(bob_ai_wallet, "AaveV3Withdrawal")[0]
-    # assert log_pool.user == bob_ai_wallet.address
-    # assert log_pool.asset == token.address
-    # assert log_pool.vaultToken == vault_token
-    # assert log_pool.assetAmountReceived == withdraw_amount
-    # assert log_pool.vaultTokenAmountBurned == vault_tokens_burned
-    # assert log_pool.refundVaultTokenAmount == 0
-
-    # check balances
-    vault_token = MockErc20.at(vault_token)
-    assert vault_token.balanceOf(bob_ai_wallet.address) == 0
-
-    assert token.balanceOf(bob_ai_wallet.address) == withdraw_amount
-    assert token.balanceOf(lego_aave_v3.address) == 0
+    testLegoWithdrawal(lego_id, asset, vault_token, vault_tokens_received // 2)

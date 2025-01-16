@@ -14,11 +14,11 @@ def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
 
 
 @pytest.fixture(scope="module")
-def getCompoundV3Vault(usdc, usdc_whale, alpha_token_compV3_vault):
+def getCompoundV3Vault(usdc, usdc_whale, alpha_token_comp_vault):
     def getCompoundV3Vault():
         if usdc != ZERO_ADDRESS and usdc_whale != ZERO_ADDRESS:
             return boa.from_etherscan("0xb125E6687d4313864e53df431d5425969c15Eb2F", name="usdc_compound_v3_vault")
-        return alpha_token_compV3_vault
+        return alpha_token_comp_vault
     yield getCompoundV3Vault
 
 
