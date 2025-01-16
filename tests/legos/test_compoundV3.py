@@ -1,89 +1,96 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS
+from conf_tokens import TEST_AMOUNTS
 
 
-@pytest.fixture(scope="module")
-def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
-    def getTokenAndWhale():
-        if usdc == ZERO_ADDRESS or usdc_whale == ZERO_ADDRESS:
-            return alpha_token, alpha_token_whale
-        return usdc, usdc_whale
-    yield getTokenAndWhale
+VAULT_TOKENS = {
+    "usdc": {
+        "base": "0xb125E6687d4313864e53df431d5425969c15Eb2F",
+        "local": ZERO_ADDRESS,
+    },
+    "weth": {
+        "base": "0x46e6b214b524310239732D51387075E0e70970bf",
+        "local": ZERO_ADDRESS,
+    },
+    "aero": {
+        "base": "0x784efeB622244d2348d4F2522f8860B96fbEcE89",
+        "local": ZERO_ADDRESS,
+    },
+}
 
 
-@pytest.fixture(scope="module")
-def getCompoundV3Vault(usdc, usdc_whale, alpha_token_comp_vault):
-    def getCompoundV3Vault():
-        if usdc != ZERO_ADDRESS and usdc_whale != ZERO_ADDRESS:
-            return boa.from_etherscan("0xb125E6687d4313864e53df431d5425969c15Eb2F", name="usdc_compound_v3_vault")
-        return alpha_token_comp_vault
-    yield getCompoundV3Vault
+TEST_ASSETS = [
+    "alpha",
+    "usdc",
+    "weth",
+    "aero",
+]
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_compv3_deposit(
-    getTokenAndWhale,
-    getCompoundV3Vault,
+def test_compoundV3_deposit_max(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_compound_v3,
-    bob_agent,
-    sally,
-    _test,
+    alpha_token_comp_vault,
+    transferAssets,
 ):
-    lego_id = lego_compound_v3.legoId()   
-
     # setup
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_comp_vault)
+    transferAssets(asset, TEST_AMOUNTS[token_str], bob_ai_wallet.address, whale)
 
-    # no perms
-    with boa.reverts():
-        bob_ai_wallet.depositTokens(lego_id, token.address, sender=sally)
-
-    # success
-    comp_vault = getCompoundV3Vault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, comp_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == comp_vault.address
-    
-    # check balances
-    assert comp_vault.balanceOf(bob_ai_wallet.address) == vault_tokens_received
-
-    assert token.balanceOf(bob_ai_wallet.address) == 0
-    assert token.balanceOf(lego_compound_v3.address) == 0
+    testLegoDeposit(lego_compound_v3.legoId(), asset, vault_token)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_compv3_withdrawal(
-    getTokenAndWhale,
-    getCompoundV3Vault,
+def test_compoundV3_deposit_partial(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_compound_v3,
-    bob_agent,
-    _test,
+    alpha_token_comp_vault,
+    transferAssets,
 ):
-    lego_id = lego_compound_v3.legoId()   
+    # setup
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_comp_vault)
+    amount = TEST_AMOUNTS[token_str]
+    transferAssets(asset, amount, bob_ai_wallet.address, whale)
 
-    # setup (deposit)
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
-    comp_vault = getCompoundV3Vault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, comp_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
+    testLegoDeposit(lego_compound_v3.legoId(), asset, vault_token, amount // 2)
 
-    assert vault_token == comp_vault.address
 
-    # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, comp_vault.address, MAX_UINT256, sender=bob_agent)
-    _test(amount, withdraw_amount)
-    _test(vault_tokens_received, vault_tokens_burned)
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_compoundV3_withdraw_max(
+    token_str,
+    setupWithdrawal,
+    lego_compound_v3,
+    alpha_token_comp_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_compound_v3.legoId()
+    asset, vault_token, _ = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_comp_vault)
 
-    # check balances
-    assert comp_vault.balanceOf(bob_ai_wallet.address) == 0
+    testLegoWithdrawal(lego_id, asset, vault_token)
 
-    _test(withdraw_amount, token.balanceOf(bob_ai_wallet.address))
-    assert token.balanceOf(lego_compound_v3.address) == 0
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_compoundV3_withdraw_partial(
+    token_str,
+    setupWithdrawal,
+    lego_compound_v3,
+    alpha_token_comp_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_compound_v3.legoId()
+    asset, vault_token, vault_tokens_received = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_comp_vault)
+
+    testLegoWithdrawal(lego_id, asset, vault_token, vault_tokens_received // 2)

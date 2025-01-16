@@ -9,9 +9,8 @@ interface LegoRegistry:
 event AgenticDeposit:
     user: indexed(address)
     asset: indexed(address)
-    vault: indexed(address)
+    vaultToken: indexed(address)
     assetAmountDeposited: uint256
-    vaultToken: address
     vaultTokenAmountReceived: uint256
     legoId: uint256
     legoAddr: address
@@ -131,7 +130,7 @@ def _depositTokens(
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault)
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticDeposit(msg.sender, _asset, _vault, assetAmountDeposited, vaultToken, vaultTokenAmountReceived, _legoId, legoAddr, _isAgent)
+    log AgenticDeposit(msg.sender, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, _legoId, legoAddr, _isAgent)
     return assetAmountDeposited, vaultToken, vaultTokenAmountReceived
 
 

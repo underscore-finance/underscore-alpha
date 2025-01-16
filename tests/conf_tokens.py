@@ -25,6 +25,10 @@ TOKENS = {
         "base": "0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22",
         "local": ZERO_ADDRESS,
     },
+    "aero": {
+        "base": "0x940181a94a35a4569e4529a3cdfb74e38fd98631",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 WHALES = {
@@ -48,6 +52,10 @@ WHALES = {
         "base": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
         "local": ZERO_ADDRESS,
     },
+    "aero": {
+        "base": "0xeBf418Fe2512e7E6bd9b87a8F0f294aCDC67e6B4",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 
@@ -58,6 +66,7 @@ TEST_AMOUNTS = {
     "cbbtc": 2,
     "wsteth": 5,
     "cbeth": 5,
+    "aero": 25_000,
 }
 
 

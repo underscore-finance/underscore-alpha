@@ -59,9 +59,8 @@ def testLegoDeposit(bob_ai_wallet, bob_agent, lego_registry, _test):
         log_wallet = filter_logs(bob_ai_wallet, "AgenticDeposit")[0]
         assert log_wallet.user == bob_agent
         assert log_wallet.asset == _asset.address
-        assert log_wallet.vault == vault_token
-        assert log_wallet.assetAmountDeposited == deposit_amount
         assert log_wallet.vaultToken == vault_token
+        assert log_wallet.assetAmountDeposited == deposit_amount
         assert log_wallet.vaultTokenAmountReceived == vault_tokens_received
         assert log_wallet.legoId == _legoId
         assert log_wallet.legoAddr == lego_addr
