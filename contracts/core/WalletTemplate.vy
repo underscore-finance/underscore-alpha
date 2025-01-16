@@ -5,6 +5,12 @@ import interfaces.LegoInterface as LegoPartner
 
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
+    def isValidLegoId(_legoId: uint256) -> bool: view
+
+struct AgentInfo:
+    isActive: bool
+    allowedAssets: DynArray[address, MAX_ASSETS]
+    allowedLegoIds: DynArray[uint256, MAX_LEGOS]
 
 event AgenticDeposit:
     user: indexed(address)
@@ -28,15 +34,42 @@ event AgenticWithdrawal:
     legoAddr: address
     isAgent: bool
 
+event WalletFundsTransferred:
+    recipient: indexed(address)
+    asset: indexed(address)
+    amount: uint256
+    isAgent: bool
+
 event WhitelistAddrSet:
     addr: indexed(address)
     isAllowed: bool
 
-# admin
-owner: public(address)
-agent: public(address)
+event AgentAdded:
+    agent: indexed(address)
+    allowedAssets: indexed(DynArray[address, MAX_ASSETS])
+    allowedLegoIds: indexed(DynArray[uint256, MAX_LEGOS])
 
-# transfer whitelist
+event AgentModified:
+    agent: indexed(address)
+    allowedAssets: indexed(DynArray[address, MAX_ASSETS])
+    allowedLegoIds: indexed(DynArray[uint256, MAX_LEGOS])
+
+event AgentDisabled:
+    agent: indexed(address)
+    prevAllowedAssets: indexed(DynArray[address, MAX_ASSETS])
+    prevAllowedLegoIds: indexed(DynArray[uint256, MAX_LEGOS])
+
+event LegoIdAddedToAgent:
+    agent: indexed(address)
+    legoId: indexed(uint256)
+
+event AssetAddedToAgent:
+    agent: indexed(address)
+    asset: indexed(address)
+
+# settings
+owner: public(address)
+agentSettings: public(HashMap[address, AgentInfo])
 isRecipientAllowed: public(HashMap[address, bool])
 
 # config
@@ -44,6 +77,8 @@ legoRegistry: public(address)
 initialized: public(bool)
 
 API_VERSION: constant(String[28]) = "0.0.1"
+MAX_ASSETS: constant(uint256) = 25
+MAX_LEGOS: constant(uint256) = 10
 
 
 @deploy
@@ -53,14 +88,15 @@ def __init__():
 
 
 @external
-def initialize(_legoRegistry: address, _owner: address, _agent: address) -> bool:
+def initialize(_legoRegistry: address, _owner: address, _initialAgent: address) -> bool:
     assert not self.initialized # dev: can only initialize once
     self.initialized = True
 
-    assert empty(address) not in [_legoRegistry, _owner, _agent] # dev: invalid addrs
+    assert empty(address) not in [_legoRegistry, _owner, _initialAgent] # dev: invalid addrs
+    assert _initialAgent != _owner # dev: agent cannot be owner
     self.legoRegistry = _legoRegistry
     self.owner = _owner
-    self.agent = _agent
+    self.agentSettings[_initialAgent] = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[])
 
     return True
 
@@ -69,6 +105,42 @@ def initialize(_legoRegistry: address, _owner: address, _agent: address) -> bool
 @external
 def apiVersion() -> String[28]:
     return API_VERSION
+
+
+################
+# Agent Access #
+################
+
+
+@view
+@internal
+def _validateAgentAccess(_sender: address, _asset: address, _legoId: uint256) -> bool:
+    agentPerms: AgentInfo = self.agentSettings[_sender]
+    assert agentPerms.isActive # dev: agent not active
+
+    # check allowed assets
+    if _asset != empty(address) and len(agentPerms.allowedAssets) != 0:
+        assert _asset in agentPerms.allowedAssets # dev: asset not allowed
+
+    # check allowed lego ids
+    if _legoId != 0 and len(agentPerms.allowedLegoIds) != 0:
+        assert _legoId in agentPerms.allowedLegoIds # dev: lego id not allowed
+
+    return True
+
+
+@view
+@internal
+def _isAgentWithValidation(
+    _sender: address,
+    _owner: address,
+    _asset: address = empty(address),
+    _legoId: uint256 = 0,
+) -> bool:
+    isAgent: bool = False
+    if _sender != _owner:
+        isAgent = self._validateAgentAccess(_sender, _asset, _legoId)
+    return isAgent
 
 
 ###########
@@ -84,8 +156,7 @@ def depositTokens(
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
 ) -> (uint256, address, uint256):
-    isAgent: bool = msg.sender == self.agent
-    assert isAgent or msg.sender == self.owner # dev: no perms
+    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, _asset, _legoId)
     return self._depositTokens(_legoId, _asset, _amount, _vault, isAgent)
 
 
@@ -96,17 +167,10 @@ def depositTokensWithTransfer(
     _asset: address,
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
-    _shouldSweep: bool = True,
 ) -> (uint256, address, uint256):
     amount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(msg.sender))
     assert extcall IERC20(_asset).transferFrom(msg.sender, self, amount, default_return_value=True) # dev: transfer failed
-
-    # can only sweep if have perms
-    isAgent: bool = msg.sender == self.agent
-    if _shouldSweep and (isAgent or msg.sender == self.owner):
-        amount = max_value(uint256)
-
-    return self._depositTokens(_legoId, _asset, amount, _vault, isAgent)
+    return self._depositTokens(_legoId, _asset, amount, _vault, self.agentSettings[msg.sender].isActive)
 
 
 @internal
@@ -150,8 +214,7 @@ def withdrawTokens(
     _vaultToken: address = empty(address),
     _amount: uint256 = max_value(uint256),
 ) -> (uint256, uint256):
-    isAgent: bool = msg.sender == self.agent
-    assert isAgent or msg.sender == self.owner # dev: no perms
+    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, _asset, _legoId)
     return self._withdrawTokens(_legoId, _asset, _vaultToken, _amount, isAgent)
 
 
@@ -195,13 +258,14 @@ def _withdrawTokens(
 ##################
 
 
+@nonreentrant
 @external
 def transferFunds(_recipient: address, _amount: uint256 = max_value(uint256), _asset: address = empty(address)) -> bool:
-    isAgent: bool = msg.sender == self.agent
-    assert isAgent or msg.sender == self.owner # dev: no perms
+    owner: address = self.owner
+    isAgent: bool = self._isAgentWithValidation(msg.sender, owner, _asset)
 
     # validate recipient
-    if _recipient != self.owner:
+    if _recipient != owner:
         assert self.isRecipientAllowed[_recipient] # dev: recipient not allowed
 
     # finalize amount
@@ -218,34 +282,160 @@ def transferFunds(_recipient: address, _amount: uint256 = max_value(uint256), _a
     else:
         assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
 
+    log WalletFundsTransferred(_recipient, _asset, amount, isAgent)
     return True
 
 
-# whitelist
+# transfer whitelist
 
 
-@view
-@external 
-def isValidWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
-    return self._isValidWhitelistAddr(_addr, _isAllowed, self.owner)
-
-
-@view
-@internal 
-def _isValidWhitelistAddr(_addr: address, _isAllowed: bool, _owner: address) -> bool:
-    # owner is always allowed to receive funds
-    # no checks here to disallow self.agent
-    if _addr == empty(address) or _addr == _owner:
-        return False
-    return _isAllowed != self.isRecipientAllowed[_addr]
-
-
+@nonreentrant
 @external
 def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
     owner: address = self.owner
     assert msg.sender == owner # dev: no perms
-    if not self._isValidWhitelistAddr(_addr, _isAllowed, owner):
-        return False
+
+    assert _addr != empty(address) # dev: invalid addr
+    assert _addr != owner # dev: owner cannot be whitelisted
+    assert _isAllowed != self.isRecipientAllowed[_addr] # dev: already set
+
     self.isRecipientAllowed[_addr] = _isAllowed
     log WhitelistAddrSet(_addr, _isAllowed)
     return True
+
+
+##################
+# Agent Settings #
+##################
+
+
+# add or modify agent settings
+
+
+@nonreentrant
+@external
+def addOrModifyAgent(
+    _agent: address,
+    _allowedAssets: DynArray[address, MAX_ASSETS] = [],
+    _allowedLegoIds: DynArray[uint256, MAX_LEGOS] = [],
+) -> bool:
+    owner: address = self.owner
+    assert msg.sender == owner # dev: no perms
+    assert _agent != owner # dev: agent cannot be owner
+    assert _agent != empty(address) # dev: invalid agent
+
+    agentInfo: AgentInfo = self.agentSettings[_agent]
+    isNewAgent: bool = not agentInfo.isActive
+
+    # sanitize input data
+    agentInfo.allowedAssets, agentInfo.allowedLegoIds = self._sanitizeAgentInputData(_allowedAssets, _allowedLegoIds)
+
+    # save data
+    agentInfo.isActive = True
+    self.agentSettings[_agent] = agentInfo
+
+    # log event
+    if isNewAgent:
+        log AgentAdded(_agent, agentInfo.allowedAssets, agentInfo.allowedLegoIds)
+    else:
+        log AgentModified(_agent, agentInfo.allowedAssets, agentInfo.allowedLegoIds)
+    return True
+
+
+@view
+@internal
+def _sanitizeAgentInputData(
+    _allowedAssets: DynArray[address, MAX_ASSETS],
+    _allowedLegoIds: DynArray[uint256, MAX_LEGOS],
+) -> (DynArray[address, MAX_ASSETS], DynArray[uint256, MAX_LEGOS]):
+
+    # nothing to do here
+    if len(_allowedAssets) == 0 and len(_allowedLegoIds) == 0:
+        return _allowedAssets, _allowedLegoIds
+
+    # sanitize and dedupe assets
+    cleanAssets: DynArray[address, MAX_ASSETS] = []
+    for i: uint256 in range(len(_allowedAssets), bound=MAX_ASSETS):
+        asset: address = _allowedAssets[i]
+        if asset == empty(address):
+            continue
+        if asset not in cleanAssets:
+            cleanAssets.append(asset)
+
+    # validate and dedupe lego ids
+    cleanLegoIds: DynArray[uint256, MAX_LEGOS] = []
+    if len(_allowedLegoIds) != 0:
+        legoRegistry: address = self.legoRegistry
+        for i: uint256 in range(len(_allowedLegoIds), bound=MAX_LEGOS):
+            legoId: uint256 = _allowedLegoIds[i]
+            if not staticcall LegoRegistry(legoRegistry).isValidLegoId(legoId):
+                continue
+            if legoId not in cleanLegoIds:
+                cleanLegoIds.append(legoId)
+
+    return cleanAssets, cleanLegoIds
+
+
+# disable agent
+
+
+@nonreentrant
+@external
+def disableAgent(_agent: address) -> bool:
+    assert msg.sender == self.owner # dev: no perms
+
+    agentInfo: AgentInfo = self.agentSettings[_agent]
+    assert agentInfo.isActive # dev: agent not active
+    self.agentSettings[_agent] = empty(AgentInfo)
+
+    log AgentDisabled(_agent, agentInfo.allowedAssets, agentInfo.allowedLegoIds)
+    return True
+
+
+# add lego id for agent
+
+
+@nonreentrant
+@external
+def addLegoIdForAgent(_agent: address, _legoId: uint256) -> bool:
+    assert msg.sender == self.owner # dev: no perms
+
+    agentInfo: AgentInfo = self.agentSettings[_agent]
+    assert agentInfo.isActive # dev: agent not active
+
+    assert staticcall LegoRegistry(self.legoRegistry).isValidLegoId(_legoId)
+    assert _legoId not in agentInfo.allowedLegoIds # dev: lego id already saved
+
+    # save data
+    agentInfo.allowedLegoIds.append(_legoId)
+    self.agentSettings[_agent] = agentInfo
+
+    # log event
+    log LegoIdAddedToAgent(_agent, _legoId)
+    return True
+
+
+# add asset for agent
+
+
+@nonreentrant
+@external
+def addAssetForAgent(_agent: address, _asset: address) -> bool:
+    assert msg.sender == self.owner # dev: no perms
+
+    agentInfo: AgentInfo = self.agentSettings[_agent]
+    assert agentInfo.isActive # dev: agent not active
+
+    assert _asset != empty(address) # dev: invalid asset
+    assert _asset not in agentInfo.allowedAssets # dev: asset already saved
+
+    # save data
+    agentInfo.allowedAssets.append(_asset)
+    self.agentSettings[_agent] = agentInfo
+
+    # log event
+    log AssetAddedToAgent(_agent, _asset)
+    return True
+
+
+

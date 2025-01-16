@@ -43,6 +43,12 @@ def __init__(_legoRegistry: address, _walletTemplate: address):
         self._setAgenticWalletTemplate(_walletTemplate)
 
 
+@view
+@external
+def currentAgentTemplate() -> address:
+    return self.agentTemplateInfo.addr
+
+
 #########################
 # Create Agentic Wallet #
 #########################

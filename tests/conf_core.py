@@ -30,6 +30,6 @@ def lego_helper(lego_registry, lego_aave_v3, lego_compound_v3, lego_euler, lego_
         lego_morpho.legoId(),
         name="lego_helper",
     )
-    lego_registry.setLegoHelper(h, sender=governor)
+    assert lego_registry.setLegoHelper(h, sender=governor)
     return h
 
