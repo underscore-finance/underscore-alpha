@@ -12,6 +12,7 @@ event AgenticDeposit:
     vaultToken: indexed(address)
     assetAmountDeposited: uint256
     vaultTokenAmountReceived: uint256
+    refundAssetAmount: uint256
     legoId: uint256
     legoAddr: address
     isAgent: bool
@@ -22,6 +23,7 @@ event AgenticWithdrawal:
     vaultToken: indexed(address)
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
+    refundVaultTokenAmount: uint256
     legoId: uint256
     legoAddr: address
     isAgent: bool
@@ -127,10 +129,11 @@ def _depositTokens(
     assetAmountDeposited: uint256 = 0
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault, self)
+    refundAssetAmount: uint256 = 0
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, refundAssetAmount = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault, self)
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticDeposit(msg.sender, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, _legoId, legoAddr, _isAgent)
+    log AgenticDeposit(msg.sender, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, refundAssetAmount, _legoId, legoAddr, _isAgent)
     return assetAmountDeposited, vaultToken, vaultTokenAmountReceived
 
 
@@ -176,13 +179,14 @@ def _withdrawTokens(
     # withdraw from lego partner
     assetAmountReceived: uint256 = 0
     vaultTokenAmountBurned: uint256 = 0
-    assetAmountReceived, vaultTokenAmountBurned = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken, self)
+    refundVaultTokenAmount: uint256 = 0
+    assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken, self)
 
     # zero out approvals
     if _vaultToken != empty(address):
         assert extcall IERC20(_vaultToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _legoId, legoAddr, _isAgent)
+    log AgenticWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, _legoId, legoAddr, _isAgent)
     return assetAmountReceived, vaultTokenAmountBurned
 
 

@@ -69,7 +69,7 @@ def _validateAssetAndVault(_asset: address, _vault: address):
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256):
     self._validateAssetAndVault(_asset, _vault)
 
     # pre balances
@@ -95,14 +95,14 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
     # refund if full deposit didn't get through
     currentLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
-    refundAmount: uint256 = 0
+    refundAssetAmount: uint256 = 0
     if currentLegoBalance > preLegoBalance:
-        refundAmount = currentLegoBalance - preLegoBalance
-        assert extcall IERC20(_asset).transfer(msg.sender, refundAmount, default_return_value=True) # dev: transfer failed
+        refundAssetAmount = currentLegoBalance - preLegoBalance
+        assert extcall IERC20(_asset).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
 
-    actualDepositAmount: uint256 = depositAmount - refundAmount
+    actualDepositAmount: uint256 = depositAmount - refundAssetAmount
     log MoonwellDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived, _recipient)
-    return actualDepositAmount, _vault, vaultTokenAmountReceived
+    return actualDepositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount
 
 
 ############
@@ -111,7 +111,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256):
     self._validateAssetAndVault(_asset, _vaultToken)
 
     # pre balances
@@ -129,7 +129,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     # validate received asset , transfer back to user
     newLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     assetAmountReceived: uint256 = newLegoBalance - preLegoBalance
-    assert assetAmountReceived != 0 # dev: no asset amountreceived
+    assert assetAmountReceived != 0 # dev: no asset amount received
     assert extcall IERC20(_asset).transfer(_recipient, assetAmountReceived, default_return_value=True) # dev: transfer failed
 
     # refund if full withdrawal didn't happen
@@ -141,7 +141,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
     vaultTokenAmountBurned: uint256 = transferVaultTokenAmount - refundVaultTokenAmount
     log MoonwellWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _recipient)
-    return assetAmountReceived, vaultTokenAmountBurned
+    return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount
 
 
 #################

@@ -83,7 +83,7 @@ def _validateAssetAndVault(_asset: address, _vault: address, _registry: address)
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256):
     aaveV3: address = AAVE_V3_POOL
     vaultToken: address = self._validateAssetAndVault(_asset, _vault, aaveV3)
 
@@ -116,7 +116,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
     actualDepositAmount: uint256 = depositAmount - refundAssetAmount
     log AaveV3Deposit(msg.sender, _asset, vaultToken, actualDepositAmount, vaultTokenAmountReceived, _recipient)
-    return actualDepositAmount, vaultToken, vaultTokenAmountReceived
+    return actualDepositAmount, vaultToken, vaultTokenAmountReceived, refundAssetAmount
 
 
 ############
@@ -125,7 +125,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256):
     aaveV3: address = AAVE_V3_POOL
     vaultToken: address = self._validateAssetAndVault(_asset, _vaultToken, aaveV3)
 
@@ -155,7 +155,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
     vaultTokenAmountBurned: uint256 = transferVaultTokenAmount - refundVaultTokenAmount
     log AaveV3Withdrawal(msg.sender, _asset, vaultToken, assetAmountReceived, vaultTokenAmountBurned, _recipient)
-    return assetAmountReceived, vaultTokenAmountBurned
+    return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount
 
 
 #################
