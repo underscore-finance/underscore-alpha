@@ -1,88 +1,109 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS
+from conf_tokens import TEST_AMOUNTS
 
 
-@pytest.fixture(scope="module")
-def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
-    def getTokenAndWhale():
-        if usdc == ZERO_ADDRESS or usdc_whale == ZERO_ADDRESS:
-            return alpha_token, alpha_token_whale
-        return usdc, usdc_whale
-    yield getTokenAndWhale
+VAULT_TOKENS = {
+    "usdc": {
+        "base": "0xedc817a28e8b93b03976fbd4a3ddbc9f7d176c22",
+        "local": ZERO_ADDRESS,
+    },
+    "weth": {
+        "base": "0x628ff693426583D9a7FB391E54366292F509D457",
+        "local": ZERO_ADDRESS,
+    },
+    "cbbtc": {
+        "base": "0xF877ACaFA28c19b96727966690b2f44d35aD5976",
+        "local": ZERO_ADDRESS,
+    },
+    "wsteth": {
+        "base": "0x627fe393bc6edda28e99ae648fd6ff362514304b",
+        "local": ZERO_ADDRESS,
+    },
+    "cbeth": {
+        "base": "0x3bf93770f2d4a794c3d9EBEfBAeBAE2a8f09A5E5",
+        "local": ZERO_ADDRESS,
+    },
+    "aero": {
+        "base": "0x73902f619CEB9B31FD8EFecf435CbDf89E369Ba6",
+        "local": ZERO_ADDRESS,
+    },
+}
 
 
-@pytest.fixture(scope="module")
-def getMoonwellVault(usdc, usdc_whale, alpha_token_comp_vault):
-    def getMoonwellVault():
-        if usdc != ZERO_ADDRESS and usdc_whale != ZERO_ADDRESS:
-            return boa.from_etherscan("0xEdc817A28E8B93B03976FBd4a3dDBc9f7D176c22", name="usdc_moonwell_vault")
-        return alpha_token_comp_vault
-    yield getMoonwellVault
+TEST_ASSETS = [
+    "alpha",
+    "usdc",
+    "weth",
+    "cbbtc",
+    "wsteth",
+    "cbeth",
+    "aero",
+]
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_moonwell_deposit(
-    getTokenAndWhale,
-    getMoonwellVault,
+def test_moonwell_deposit_max(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_moonwell,
-    bob_agent,
-    sally,
-    _test,
+    alpha_token_comp_vault,
 ):
-    lego_id = lego_moonwell.legoId()   
-
     # setup
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_comp_vault)
+    asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** asset.decimals()), sender=whale)
 
-    # no perms
-    with boa.reverts():
-        bob_ai_wallet.depositTokens(lego_id, token.address, sender=sally)
-
-    # success
-    moonwell_vault = getMoonwellVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, moonwell_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == moonwell_vault.address
-    
-    # check balances
-    assert moonwell_vault.balanceOf(bob_ai_wallet.address) == vault_tokens_received
-
-    assert token.balanceOf(bob_ai_wallet.address) == 0
-    assert token.balanceOf(lego_moonwell.address) == 0
+    testLegoDeposit(lego_moonwell.legoId(), asset, vault_token)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_moonwell_withdrawal(
-    getTokenAndWhale,
-    getMoonwellVault,
+def test_moonwell_deposit_partial(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_moonwell,
-    bob_agent,
-    _test,
+    alpha_token_comp_vault,
 ):
-    lego_id = lego_moonwell.legoId()   
+    # setup
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_comp_vault)
+    amount = TEST_AMOUNTS[token_str] * (10 ** asset.decimals())
+    asset.transfer(bob_ai_wallet.address, amount, sender=whale)
 
-    # setup (deposit)
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
-    moonwell_vault = getMoonwellVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, moonwell_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == moonwell_vault.address
+    testLegoDeposit(lego_moonwell.legoId(), asset, vault_token, amount // 2)
 
-    # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, moonwell_vault, MAX_UINT256, sender=bob_agent)
-    _test(amount, withdraw_amount)
-    assert vault_tokens_burned == vault_tokens_received
 
-    # check balances
-    assert moonwell_vault.balanceOf(bob_ai_wallet.address) == 0
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_moonwell_withdraw_max(
+    token_str,
+    setupWithdrawal,
+    lego_moonwell,
+    alpha_token_comp_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_moonwell.legoId()
+    asset, vault_token, _ = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_comp_vault)
 
-    assert token.balanceOf(bob_ai_wallet.address) == withdraw_amount
-    assert token.balanceOf(lego_moonwell.address) == 0
+    testLegoWithdrawal(lego_id, asset, vault_token)
+
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_moonwell_withdraw_partial(
+    token_str,
+    setupWithdrawal,
+    lego_moonwell,
+    alpha_token_comp_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_moonwell.legoId()
+    asset, vault_token, vault_tokens_received = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_comp_vault)
+
+    testLegoWithdrawal(lego_id, asset, vault_token, vault_tokens_received // 2)

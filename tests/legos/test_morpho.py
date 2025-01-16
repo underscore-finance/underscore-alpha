@@ -1,88 +1,99 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS
+from conf_tokens import TEST_AMOUNTS
 
 
-@pytest.fixture(scope="module")
-def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
-    def getTokenAndWhale():
-        if usdc == ZERO_ADDRESS or usdc_whale == ZERO_ADDRESS:
-            return alpha_token, alpha_token_whale
-        return usdc, usdc_whale
-    yield getTokenAndWhale
+VAULT_TOKENS = {
+    "usdc": {
+        "base": "0xc1256ae5ff1cf2719d4937adb3bbccab2e00a2ca",
+        "local": ZERO_ADDRESS,
+    },
+    "weth": {
+        "base": "0xa0E430870c4604CcfC7B38Ca7845B1FF653D0ff1",
+        "local": ZERO_ADDRESS,
+    },
+    "eurc": {
+        "base": "0xf24608E0CCb972b0b0f4A6446a0BBf58c701a026",
+        "local": ZERO_ADDRESS,
+    },
+    "cbbtc": {
+        "base": "0x543257eF2161176D7C8cD90BA65C2d4CaEF5a796",
+        "local": ZERO_ADDRESS,
+    },
+}
 
 
-@pytest.fixture(scope="module")
-def getMorphoVault(usdc, usdc_whale, alpha_token_erc4626_vault):
-    def getMorphoVault():
-        if usdc != ZERO_ADDRESS and usdc_whale != ZERO_ADDRESS:
-            return boa.from_etherscan("0xc1256ae5ff1cf2719d4937adb3bbccab2e00a2ca", name="usdc_morpho_vault")
-        return alpha_token_erc4626_vault
-    yield getMorphoVault
+TEST_ASSETS = [
+    "alpha",
+    "usdc",
+    "weth",
+    "eurc",
+    "cbbtc",
+]
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_morpho_deposit(
-    getTokenAndWhale,
-    getMorphoVault,
+def test_morpho_deposit_max(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_morpho,
-    bob_agent,
-    sally,
-    _test,
+    alpha_token_erc4626_vault,
 ):
-    lego_id = lego_morpho.legoId()   
-
     # setup
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+    asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** asset.decimals()), sender=whale)
 
-    # no perms
-    with boa.reverts():
-        bob_ai_wallet.depositTokens(lego_id, token.address, sender=sally)
-
-    # success
-    morpho_vault = getMorphoVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, morpho_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == morpho_vault.address
-    
-    # check balances
-    assert morpho_vault.balanceOf(bob_ai_wallet.address) == vault_tokens_received
-
-    assert token.balanceOf(bob_ai_wallet.address) == 0
-    assert token.balanceOf(lego_morpho.address) == 0
+    testLegoDeposit(lego_morpho.legoId(), asset, vault_token)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_morpho_withdrawal(
-    getTokenAndWhale,
-    getMorphoVault,
+def test_morpho_deposit_partial(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_morpho,
-    bob_agent,
-    _test,
+    alpha_token_erc4626_vault,
 ):
-    lego_id = lego_morpho.legoId()   
+    # setup
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+    amount = TEST_AMOUNTS[token_str] * (10 ** asset.decimals())
+    asset.transfer(bob_ai_wallet.address, amount, sender=whale)
 
-    # setup (deposit)
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
-    morpho_vault = getMorphoVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, morpho_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == morpho_vault.address
+    testLegoDeposit(lego_morpho.legoId(), asset, vault_token, amount // 2)
 
-    # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, morpho_vault, MAX_UINT256, sender=bob_agent)
-    _test(amount, withdraw_amount)
-    assert vault_tokens_burned == vault_tokens_received
 
-    # check balances
-    assert morpho_vault.balanceOf(bob_ai_wallet.address) == 0
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_morpho_withdraw_max(
+    token_str,
+    setupWithdrawal,
+    lego_morpho,
+    alpha_token_erc4626_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_morpho.legoId()
+    asset, vault_token, _ = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
 
-    assert token.balanceOf(bob_ai_wallet.address) == withdraw_amount
-    assert token.balanceOf(lego_morpho.address) == 0
+    testLegoWithdrawal(lego_id, asset, vault_token)
+
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_morpho_withdraw_partial(
+    token_str,
+    setupWithdrawal,
+    lego_morpho,
+    alpha_token_erc4626_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_morpho.legoId()
+    asset, vault_token, vault_tokens_received = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+
+    testLegoWithdrawal(lego_id, asset, vault_token, vault_tokens_received // 2)

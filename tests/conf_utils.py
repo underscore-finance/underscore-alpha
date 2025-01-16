@@ -17,12 +17,3 @@ def _test():
             assert _expectedValue + buffer >= _actualValue >= _expectedValue - buffer
 
     yield _test
-
-
-@pytest.fixture(scope="session")
-def transferAssets():
-    def transferAssets(_asset, _amount, _recipient, _sender):
-        amount = _amount * (10 ** _asset.decimals())
-        _asset.transfer(_recipient, amount, sender=_sender)
-
-    yield transferAssets

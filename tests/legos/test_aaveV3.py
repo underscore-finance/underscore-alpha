@@ -48,11 +48,10 @@ def test_aaveV3_deposit_max(
     bob_ai_wallet,
     lego_aave_v3,
     mock_aave_v3_pool,
-    transferAssets,
 ):
     # setup
     asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, mock_aave_v3_pool)
-    transferAssets(asset, TEST_AMOUNTS[token_str], bob_ai_wallet.address, whale)
+    asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** asset.decimals()), sender=whale)
 
     testLegoDeposit(lego_aave_v3.legoId(), asset, vault_token)
 
@@ -66,12 +65,11 @@ def test_aaveV3_deposit_partial(
     bob_ai_wallet,
     lego_aave_v3,
     mock_aave_v3_pool,
-    transferAssets,
 ):
     # setup
     asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, mock_aave_v3_pool)
-    amount = TEST_AMOUNTS[token_str]
-    transferAssets(asset, amount, bob_ai_wallet.address, whale)
+    amount = TEST_AMOUNTS[token_str] * (10 ** asset.decimals())
+    asset.transfer(bob_ai_wallet.address, amount, sender=whale)
 
     testLegoDeposit(lego_aave_v3.legoId(), asset, vault_token, amount // 2)
 

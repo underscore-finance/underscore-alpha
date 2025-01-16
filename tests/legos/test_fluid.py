@@ -1,88 +1,99 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS
+from conf_tokens import TEST_AMOUNTS
 
 
-@pytest.fixture(scope="module")
-def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
-    def getTokenAndWhale():
-        if usdc == ZERO_ADDRESS or usdc_whale == ZERO_ADDRESS:
-            return alpha_token, alpha_token_whale
-        return usdc, usdc_whale
-    yield getTokenAndWhale
+VAULT_TOKENS = {
+    "usdc": {
+        "base": "0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169",
+        "local": ZERO_ADDRESS,
+    },
+    "weth": {
+        "base": "0x9272D6153133175175Bc276512B2336BE3931CE9",
+        "local": ZERO_ADDRESS,
+    },
+    "wsteth": {
+        "base": "0x896E39f0E9af61ECA9dD2938E14543506ef2c2b5",
+        "local": ZERO_ADDRESS,
+    },
+    "eurc": {
+        "base": "0x1943FA26360f038230442525Cf1B9125b5DCB401",
+        "local": ZERO_ADDRESS,
+    },
+}
 
 
-@pytest.fixture(scope="module")
-def getFluidVault(usdc, usdc_whale, alpha_token_erc4626_vault):
-    def getFluidVault():
-        if usdc != ZERO_ADDRESS and usdc_whale != ZERO_ADDRESS:
-            return boa.from_etherscan("0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169", name="usdc_fluid_vault")
-        return alpha_token_erc4626_vault
-    yield getFluidVault
+TEST_ASSETS = [
+    "alpha",
+    "usdc",
+    "weth",
+    "wsteth",
+    "eurc",
+]
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_fluid_deposit(
-    getTokenAndWhale,
-    getFluidVault,
+def test_fluid_deposit_max(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_fluid,
-    bob_agent,
-    sally,
-    _test,
+    alpha_token_erc4626_vault,
 ):
-    lego_id = lego_fluid.legoId()   
-
     # setup
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+    asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** asset.decimals()), sender=whale)
 
-    # no perms
-    with boa.reverts():
-        bob_ai_wallet.depositTokens(lego_id, token.address, sender=sally)
-
-    # success
-    fluid_vault = getFluidVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, fluid_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == fluid_vault.address
-    
-    # check balances
-    assert fluid_vault.balanceOf(bob_ai_wallet.address) == vault_tokens_received
-
-    assert token.balanceOf(bob_ai_wallet.address) == 0
-    assert token.balanceOf(lego_fluid.address) == 0
+    testLegoDeposit(lego_fluid.legoId(), asset, vault_token)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_fluid_withdrawal(
-    getTokenAndWhale,
-    getFluidVault,
+def test_fluid_deposit_partial(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_fluid,
-    bob_agent,
-    _test,
+    alpha_token_erc4626_vault,
 ):
-    lego_id = lego_fluid.legoId()   
+    # setup
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+    amount = TEST_AMOUNTS[token_str] * (10 ** asset.decimals())
+    asset.transfer(bob_ai_wallet.address, amount, sender=whale)
 
-    # setup (deposit)
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
-    fluid_vault = getFluidVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, fluid_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == fluid_vault.address
+    testLegoDeposit(lego_fluid.legoId(), asset, vault_token, amount // 2)
 
-    # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, fluid_vault, MAX_UINT256, sender=bob_agent)
-    _test(amount, withdraw_amount)
-    assert vault_tokens_burned == vault_tokens_received
 
-    # check balances
-    assert fluid_vault.balanceOf(bob_ai_wallet.address) == 0
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_fluid_withdraw_max(
+    token_str,
+    setupWithdrawal,
+    lego_fluid,
+    alpha_token_erc4626_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_fluid.legoId()
+    asset, vault_token, _ = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
 
-    assert token.balanceOf(bob_ai_wallet.address) == withdraw_amount
-    assert token.balanceOf(lego_fluid.address) == 0
+    testLegoWithdrawal(lego_id, asset, vault_token)
+
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_fluid_withdraw_partial(
+    token_str,
+    setupWithdrawal,
+    lego_fluid,
+    alpha_token_erc4626_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_fluid.legoId()
+    asset, vault_token, vault_tokens_received = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+
+    testLegoWithdrawal(lego_id, asset, vault_token, vault_tokens_received // 2)

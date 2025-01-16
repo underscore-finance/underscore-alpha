@@ -26,10 +26,10 @@ def getAssetInfo(getTokenAndWhaleProd, alpha_token, alpha_token_whale, fork):
 
 
 @pytest.fixture(scope="package")
-def setupWithdrawal(transferAssets, getAssetInfo, bob_ai_wallet, bob_agent):
+def setupWithdrawal(getAssetInfo, bob_ai_wallet, bob_agent):
     def setupWithdrawal(_legoId, _token_str, _vaultTokenMapping, _alphaVaultToken):
         asset, whale, vault_token = getAssetInfo(_token_str, _vaultTokenMapping, _alphaVaultToken)
-        transferAssets(asset, TEST_AMOUNTS[_token_str], bob_ai_wallet.address, whale)
+        asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[_token_str] * (10 ** asset.decimals()), sender=whale)
         _a, _b, vault_tokens_received = bob_ai_wallet.depositTokens(_legoId, asset.address, MAX_UINT256, vault_token, sender=bob_agent)
         return asset, vault_token, vault_tokens_received
 

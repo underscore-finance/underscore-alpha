@@ -1,88 +1,99 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS
+from conf_tokens import TEST_AMOUNTS
 
 
-@pytest.fixture(scope="module")
-def getTokenAndWhale(usdc, usdc_whale, alpha_token, alpha_token_whale):
-    def getTokenAndWhale():
-        if usdc == ZERO_ADDRESS or usdc_whale == ZERO_ADDRESS:
-            return alpha_token, alpha_token_whale
-        return usdc, usdc_whale
-    yield getTokenAndWhale
+VAULT_TOKENS = {
+    "usdc": {
+        "base": "0x0A1a3b5f2041F33522C4efc754a7D096f880eE16",
+        "local": ZERO_ADDRESS,
+    },
+    "weth": {
+        "base": "0x859160DB5841E5cfB8D3f144C6b3381A85A4b410",
+        "local": ZERO_ADDRESS,
+    },
+    "eurc": {
+        "base": "0x9ECD9fbbdA32b81dee51AdAed28c5C5039c87117",
+        "local": ZERO_ADDRESS,
+    },
+    "cbbtc": {
+        "base": "0x882018411Bc4A020A879CEE183441fC9fa5D7f8B",
+        "local": ZERO_ADDRESS,
+    },
+}
 
 
-@pytest.fixture(scope="module")
-def getEulerVault(usdc, usdc_whale, alpha_token_erc4626_vault):
-    def getEulerVault():
-        if usdc != ZERO_ADDRESS and usdc_whale != ZERO_ADDRESS:
-            return boa.from_etherscan("0x0A1a3b5f2041F33522C4efc754a7D096f880eE16", name="usdc_euler_vault")
-        return alpha_token_erc4626_vault
-    yield getEulerVault
+TEST_ASSETS = [
+    "alpha",
+    "usdc",
+    "weth",
+    "eurc",
+    "cbbtc",
+]
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_euler_deposit(
-    getTokenAndWhale,
-    getEulerVault,
+def test_euler_deposit_max(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_euler,
-    bob_agent,
-    sally,
-    _test,
+    alpha_token_erc4626_vault,
 ):
-    lego_id = lego_euler.legoId()   
-
     # setup
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+    asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** asset.decimals()), sender=whale)
 
-    # no perms
-    with boa.reverts():
-        bob_ai_wallet.depositTokens(lego_id, token.address, sender=sally)
-
-    # success
-    euler_vault = getEulerVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, euler_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == euler_vault.address
-    
-    # check balances
-    assert euler_vault.balanceOf(bob_ai_wallet.address) == vault_tokens_received
-
-    assert token.balanceOf(bob_ai_wallet.address) == 0
-    assert token.balanceOf(lego_euler.address) == 0
+    testLegoDeposit(lego_euler.legoId(), asset, vault_token)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_euler_withdrawal(
-    getTokenAndWhale,
-    getEulerVault,
+def test_euler_deposit_partial(
+    token_str,
+    testLegoDeposit,
+    getAssetInfo,
     bob_ai_wallet,
     lego_euler,
-    bob_agent,
-    _test,
+    alpha_token_erc4626_vault,
 ):
-    lego_id = lego_euler.legoId()   
+    # setup
+    asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+    amount = TEST_AMOUNTS[token_str] * (10 ** asset.decimals())
+    asset.transfer(bob_ai_wallet.address, amount, sender=whale)
 
-    # setup (deposit)
-    token, whale = getTokenAndWhale()
-    amount = 1_000 * (10 ** token.decimals())
-    token.transfer(bob_ai_wallet.address, amount, sender=whale)
-    euler_vault = getEulerVault()
-    deposit_amount, vault_token, vault_tokens_received = bob_ai_wallet.depositTokens(lego_id, token.address, MAX_UINT256, euler_vault, sender=bob_agent)
-    _test(amount, deposit_amount)
-    assert vault_token == euler_vault.address
+    testLegoDeposit(lego_euler.legoId(), asset, vault_token, amount // 2)
 
-    # withdraw
-    withdraw_amount, vault_tokens_burned = bob_ai_wallet.withdrawTokens(lego_id, token.address, euler_vault, MAX_UINT256, sender=bob_agent)
-    _test(amount, withdraw_amount)
-    assert vault_tokens_burned == vault_tokens_received
 
-    # check balances
-    assert euler_vault.balanceOf(bob_ai_wallet.address) == 0
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_euler_withdraw_max(
+    token_str,
+    setupWithdrawal,
+    lego_euler,
+    alpha_token_erc4626_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_euler.legoId()
+    asset, vault_token, _ = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
 
-    assert token.balanceOf(bob_ai_wallet.address) == withdraw_amount
-    assert token.balanceOf(lego_euler.address) == 0
+    testLegoWithdrawal(lego_id, asset, vault_token)
+
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_euler_withdraw_partial(
+    token_str,
+    setupWithdrawal,
+    lego_euler,
+    alpha_token_erc4626_vault,
+    testLegoWithdrawal,
+):
+    lego_id = lego_euler.legoId()
+    asset, vault_token, vault_tokens_received = setupWithdrawal(lego_id, token_str, VAULT_TOKENS, alpha_token_erc4626_vault)
+
+    testLegoWithdrawal(lego_id, asset, vault_token, vault_tokens_received // 2)

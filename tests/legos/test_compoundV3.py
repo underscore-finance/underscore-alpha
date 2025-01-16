@@ -38,11 +38,10 @@ def test_compoundV3_deposit_max(
     bob_ai_wallet,
     lego_compound_v3,
     alpha_token_comp_vault,
-    transferAssets,
 ):
     # setup
     asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_comp_vault)
-    transferAssets(asset, TEST_AMOUNTS[token_str], bob_ai_wallet.address, whale)
+    asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** asset.decimals()), sender=whale)
 
     testLegoDeposit(lego_compound_v3.legoId(), asset, vault_token)
 
@@ -56,12 +55,11 @@ def test_compoundV3_deposit_partial(
     bob_ai_wallet,
     lego_compound_v3,
     alpha_token_comp_vault,
-    transferAssets,
 ):
     # setup
     asset, whale, vault_token = getAssetInfo(token_str, VAULT_TOKENS, alpha_token_comp_vault)
-    amount = TEST_AMOUNTS[token_str]
-    transferAssets(asset, amount, bob_ai_wallet.address, whale)
+    amount = TEST_AMOUNTS[token_str] * (10 ** asset.decimals())
+    asset.transfer(bob_ai_wallet.address, amount, sender=whale)
 
     testLegoDeposit(lego_compound_v3.legoId(), asset, vault_token, amount // 2)
 
