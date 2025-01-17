@@ -87,7 +87,7 @@ def testLegoWithdrawal(bob_ai_wallet, bob_agent, lego_registry, _test):
         pre_lego_vault_bal = _vaultToken.balanceOf(lego_addr)
 
         # deposit
-        amount_received, vault_token_burned = bob_ai_wallet.withdrawTokens(_legoId, _asset.address, _vaultToken, _amount, sender=bob_agent)
+        amount_received, vault_token_burned = bob_ai_wallet.withdrawTokens(_legoId, _asset.address, _amount, _vaultToken, sender=bob_agent)
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticWithdrawal")[0]

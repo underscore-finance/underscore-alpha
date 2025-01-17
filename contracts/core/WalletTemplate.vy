@@ -7,10 +7,27 @@ interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
     def isValidLegoId(_legoId: uint256) -> bool: view
 
+flag ActionType:
+    DEPOSIT
+    WITHDRAWAL
+    REBALANCE
+    TRANSFER
+    SWAP
+
 struct AgentInfo:
     isActive: bool
     allowedAssets: DynArray[address, MAX_ASSETS]
     allowedLegoIds: DynArray[uint256, MAX_LEGOS]
+
+struct ActionInstruction:
+    action: ActionType
+    legoId: uint256
+    asset: address
+    vault: address
+    amount: uint256
+    recipient: address
+    altLegoId: uint256
+    altVault: address
 
 event AgenticDeposit:
     user: indexed(address)
@@ -79,6 +96,7 @@ initialized: public(bool)
 API_VERSION: constant(String[28]) = "0.0.1"
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 10
+MAX_INSTRUCTIONS: constant(uint256) = 20
 
 
 @deploy
@@ -114,17 +132,23 @@ def apiVersion() -> String[28]:
 
 @view
 @internal
-def _validateAgentAccess(_sender: address, _asset: address, _legoId: uint256) -> bool:
-    agentPerms: AgentInfo = self.agentSettings[_sender]
-    assert agentPerms.isActive # dev: agent not active
+def _canAgentAccess(_agent: AgentInfo, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
+    if not _agent.isActive:
+        return False
 
     # check allowed assets
-    if _asset != empty(address) and len(agentPerms.allowedAssets) != 0:
-        assert _asset in agentPerms.allowedAssets # dev: asset not allowed
+    if len(_agent.allowedAssets) != 0:
+        for i: uint256 in range(len(_assets), bound=MAX_ASSETS):
+            asset: address = _assets[i]
+            if asset != empty(address) and asset not in _agent.allowedAssets:
+                return False
 
     # check allowed lego ids
-    if _legoId != 0 and len(agentPerms.allowedLegoIds) != 0:
-        assert _legoId in agentPerms.allowedLegoIds # dev: lego id not allowed
+    if len(_agent.allowedLegoIds) != 0:
+        for i: uint256 in range(len(_legoIds), bound=MAX_LEGOS):
+            legoId: uint256 = _legoIds[i]
+            if legoId != 0 and legoId not in _agent.allowedLegoIds:
+                return False
 
     return True
 
@@ -134,13 +158,13 @@ def _validateAgentAccess(_sender: address, _asset: address, _legoId: uint256) ->
 def _isAgentWithValidation(
     _sender: address,
     _owner: address,
-    _asset: address = empty(address),
-    _legoId: uint256 = 0,
+    _assets: DynArray[address, MAX_ASSETS] = [],
+    _legoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> bool:
-    isAgent: bool = False
-    if _sender != _owner:
-        isAgent = self._validateAgentAccess(_sender, _asset, _legoId)
-    return isAgent
+    if _sender == _owner:
+        return False
+    assert self._canAgentAccess(self.agentSettings[_sender], _assets, _legoIds) # dev: agent not allowed
+    return True
 
 
 ###########
@@ -156,7 +180,7 @@ def depositTokens(
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
 ) -> (uint256, address, uint256):
-    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, _asset, _legoId)
+    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_asset], [_legoId])
     return self._depositTokens(_legoId, _asset, _amount, _vault, isAgent)
 
 
@@ -211,19 +235,19 @@ def _depositTokens(
 def withdrawTokens(
     _legoId: uint256,
     _asset: address,
-    _vaultToken: address = empty(address),
     _amount: uint256 = max_value(uint256),
+    _vaultToken: address = empty(address),
 ) -> (uint256, uint256):
-    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, _asset, _legoId)
-    return self._withdrawTokens(_legoId, _asset, _vaultToken, _amount, isAgent)
+    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_asset], [_legoId])
+    return self._withdrawTokens(_legoId, _asset, _amount, _vaultToken, isAgent)
 
 
 @internal
 def _withdrawTokens(
     _legoId: uint256,
     _asset: address,
-    _vaultToken: address,
     _amount: uint256,
+    _vaultToken: address,
     _isAgent: bool,
 ) -> (uint256, uint256):
     legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
@@ -253,6 +277,50 @@ def _withdrawTokens(
     return assetAmountReceived, vaultTokenAmountBurned
 
 
+#############
+# Rebalance #
+#############
+
+
+@nonreentrant
+@external
+def rebalance(
+    _fromLegoId: uint256,
+    _toLegoId: uint256,
+    _asset: address,
+    _amount: uint256 = max_value(uint256),
+    _fromVaultToken: address = empty(address),
+    _toVault: address = empty(address),
+) -> (uint256, address, uint256):
+    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_asset], [_fromLegoId, _toLegoId])
+    return self._rebalance(_fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, isAgent)
+
+
+@internal
+def _rebalance(
+    _fromLegoId: uint256,
+    _toLegoId: uint256,
+    _asset: address,
+    _amount: uint256,
+    _fromVaultToken: address,
+    _toVault: address,
+    _isAgent: bool,
+) -> (uint256, address, uint256):
+
+    # withdraw from the first lego
+    assetAmountReceived: uint256 = 0
+    vaultTokenAmountBurned: uint256 = 0
+    assetAmountReceived, vaultTokenAmountBurned = self._withdrawTokens(_fromLegoId, _asset, _amount, _fromVaultToken, _isAgent)
+
+    # deposit the received assets into the second lego
+    assetAmountDeposited: uint256 = 0
+    newVaultToken: address = empty(address)
+    vaultTokenAmountReceived: uint256 = 0
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived = self._depositTokens(_toLegoId, _asset, assetAmountReceived, _toVault, _isAgent)
+
+    return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived
+
+
 ##################
 # Transfer Funds #
 ##################
@@ -262,10 +330,14 @@ def _withdrawTokens(
 @external
 def transferFunds(_recipient: address, _amount: uint256 = max_value(uint256), _asset: address = empty(address)) -> bool:
     owner: address = self.owner
-    isAgent: bool = self._isAgentWithValidation(msg.sender, owner, _asset)
+    isAgent: bool = self._isAgentWithValidation(msg.sender, owner, [_asset])
+    return self._transferFunds(_recipient, _amount, _asset, owner, isAgent)
 
+
+@internal
+def _transferFunds(_recipient: address, _amount: uint256, _asset: address, _owner: address, _isAgent: bool) -> bool:
     # validate recipient
-    if _recipient != owner:
+    if _recipient != _owner:
         assert self.isRecipientAllowed[_recipient] # dev: recipient not allowed
 
     # finalize amount
@@ -282,7 +354,7 @@ def transferFunds(_recipient: address, _amount: uint256 = max_value(uint256), _a
     else:
         assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
 
-    log WalletFundsTransferred(_recipient, _asset, amount, isAgent)
+    log WalletFundsTransferred(_recipient, _asset, amount, _isAgent)
     return True
 
 
@@ -301,6 +373,53 @@ def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
 
     self.isRecipientAllowed[_addr] = _isAllowed
     log WhitelistAddrSet(_addr, _isAllowed)
+    return True
+
+
+#################
+# Batch Actions #
+#################
+
+
+@nonreentrant
+@external
+def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool:
+    assert len(_instructions) != 0 # dev: no instructions
+
+    owner: address = self.owner
+    isAgent: bool = False
+    agentInfo: AgentInfo = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[])
+
+    # get agent settings
+    if msg.sender != owner:
+        isAgent = True
+        agentInfo = self.agentSettings[msg.sender]
+        assert agentInfo.isActive # dev: agent not active
+
+    # iterate through instructions
+    for i: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
+        instruction: ActionInstruction = _instructions[i]
+
+        # deposit
+        if instruction.action == ActionType.DEPOSIT:
+            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId]) # dev: not allowed
+            self._depositTokens(instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isAgent)
+
+        # withdraw
+        elif instruction.action == ActionType.WITHDRAWAL:
+            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId]) # dev: not allowed
+            self._withdrawTokens(instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isAgent)
+
+        # rebalance
+        elif instruction.action == ActionType.REBALANCE:
+            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: not allowed
+            self._rebalance(instruction.legoId, instruction.altLegoId, instruction.asset, instruction.amount, instruction.vault, instruction.altVault, isAgent)
+
+        # transfer
+        elif instruction.action == ActionType.TRANSFER:
+            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId]) # dev: not allowed
+            self._transferFunds(instruction.recipient, instruction.amount, instruction.asset, owner, isAgent)
+
     return True
 
 
