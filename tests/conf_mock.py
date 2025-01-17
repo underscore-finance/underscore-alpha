@@ -69,6 +69,11 @@ def alpha_token_comp_vault(alpha_token):
     return boa.load("contracts/mock/MockCompVault.vy", alpha_token, name="alpha_comp_vault")
 
 
+@pytest.fixture(scope="session")
+def mock_weth():
+    return boa.load("contracts/mock/MockWeth.vy", name="mock_weth")
+
+
 # mock lego
 
 

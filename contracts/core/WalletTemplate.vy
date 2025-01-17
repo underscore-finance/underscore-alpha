@@ -7,6 +7,10 @@ interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
     def isValidLegoId(_legoId: uint256) -> bool: view
 
+interface WethContract:
+    def withdraw(_amount: uint256) -> bool: nonpayable
+    def deposit() -> bool: payable
+
 flag ActionType:
     DEPOSIT
     WITHDRAWAL
@@ -57,6 +61,19 @@ event WalletFundsTransferred:
     amount: uint256
     isAgent: bool
 
+event EthConvertedToWeth:
+    sender: indexed(address)
+    amount: uint256
+    paidEth: uint256
+    weth: indexed(address)
+    isAgent: bool
+
+event WethConvertedToEth:
+    sender: indexed(address)
+    amount: uint256
+    weth: indexed(address)
+    isAgent: bool
+
 event WhitelistAddrSet:
     addr: indexed(address)
     isAllowed: bool
@@ -91,6 +108,7 @@ isRecipientAllowed: public(HashMap[address, bool])
 
 # config
 legoRegistry: public(address)
+wethAddr: public(address)
 initialized: public(bool)
 
 API_VERSION: constant(String[28]) = "0.0.1"
@@ -106,13 +124,14 @@ def __init__():
 
 
 @external
-def initialize(_legoRegistry: address, _owner: address, _initialAgent: address) -> bool:
+def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _initialAgent: address) -> bool:
     assert not self.initialized # dev: can only initialize once
     self.initialized = True
 
-    assert empty(address) not in [_legoRegistry, _owner, _initialAgent] # dev: invalid addrs
+    assert empty(address) not in [_legoRegistry, _wethAddr, _owner, _initialAgent] # dev: invalid addrs
     assert _initialAgent != _owner # dev: agent cannot be owner
     self.legoRegistry = _legoRegistry
+    self.wethAddr = _wethAddr
     self.owner = _owner
     self.agentSettings[_initialAgent] = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[])
 
@@ -421,6 +440,75 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
             self._transferFunds(instruction.recipient, instruction.amount, instruction.asset, owner, isAgent)
 
     return True
+
+
+################
+# Wrapped ETH #
+################
+
+
+# eth -> weth
+
+
+@nonreentrant
+@payable
+@external
+def convertEthToWeth(
+    _amount: uint256 = max_value(uint256),
+    _depositLegoId: uint256 = 0,
+    _depositVault: address = empty(address),
+) -> (uint256, address, uint256):
+    weth: address = self.wethAddr
+    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [weth], [_depositLegoId])
+
+    # convert eth to weth
+    amount: uint256 = min(_amount, self.balance)
+    assert amount != 0 # dev: nothing to convert
+    extcall WethContract(weth).deposit(value=amount)
+    log EthConvertedToWeth(msg.sender, amount, msg.value, weth, isAgent)
+
+    # deposit weth into lego partner
+    assetAmountDeposited: uint256 = 0
+    vaultToken: address = empty(address)
+    vaultTokenAmountReceived: uint256 = 0
+    if _depositLegoId != 0:
+        assetAmountDeposited, vaultToken, vaultTokenAmountReceived = self._depositTokens(_depositLegoId, weth, amount, _depositVault, isAgent)
+
+    return assetAmountDeposited, vaultToken, vaultTokenAmountReceived
+
+
+# weth -> eth
+
+
+@nonreentrant
+@external
+def convertWethToEth(
+    _amount: uint256 = max_value(uint256),
+    _recipient: address = empty(address),
+    _withdrawLegoId: uint256 = 0,
+    _withdrawVaultToken: address = empty(address),
+) -> uint256:
+    weth: address = self.wethAddr
+    owner: address = self.owner
+    isAgent: bool = self._isAgentWithValidation(msg.sender, owner, [weth], [_withdrawLegoId])
+
+    # withdraw weth from lego partner (if applicable)
+    amount: uint256 = _amount
+    if _withdrawLegoId != 0:
+        _na: uint256 = 0
+        amount, _na = self._withdrawTokens(_withdrawLegoId, weth, _amount, _withdrawVaultToken, isAgent)
+
+    # convert weth to eth
+    amount = min(amount, staticcall IERC20(weth).balanceOf(self))
+    assert amount != 0 # dev: nothing to convert
+    extcall WethContract(weth).withdraw(amount)
+    log WethConvertedToEth(msg.sender, amount, weth, isAgent)
+
+    # transfer eth to recipient (if applicable)
+    if _recipient != empty(address):
+        self._transferFunds(_recipient, amount, empty(address), owner, isAgent)
+
+    return amount
 
 
 ##################

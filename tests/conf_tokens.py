@@ -104,3 +104,11 @@ def getTokenAndWhale(fork, env, alpha_token, alpha_token_whale):
         return boa.from_etherscan(token, name=_token_str), aliased(env, whale, _token_str + "_whale")
 
     yield getTokenAndWhale
+
+
+@pytest.fixture(scope="session")
+def weth(fork, mock_weth):
+    weth_addr = TOKENS["weth"][fork]
+    if weth_addr == ZERO_ADDRESS:
+        return mock_weth
+    return boa.from_etherscan(weth_addr, name="weth")

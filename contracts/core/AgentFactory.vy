@@ -1,7 +1,7 @@
 # @version 0.4.0
 
 interface AgenticWallet:
-    def initialize(_legoRegistry: address, _owner: address, _agent: address) -> bool: nonpayable
+    def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _agent: address) -> bool: nonpayable
 
 interface LegoRegistry:
     def governor() -> address: view
@@ -28,13 +28,15 @@ agentTemplateInfo: public(TemplateInfo)
 isAgenticWallet: public(HashMap[address, bool])
 isActivated: public(bool)
 
-LEGO_REGISTRY: immutable(address)
+LEGO_REGISTRY: public(immutable(address))
+WETH_ADDR: public(immutable(address))
 
 
 @deploy
-def __init__(_legoRegistry: address, _walletTemplate: address):
-    assert _legoRegistry != empty(address) # dev: invalid addrs
+def __init__(_legoRegistry: address, _wethAddr: address, _walletTemplate: address):
+    assert empty(address) not in [_legoRegistry, _wethAddr] # dev: invalid addrs
     LEGO_REGISTRY = _legoRegistry
+    WETH_ADDR = _wethAddr
 
     self.isActivated = True
 
@@ -78,7 +80,7 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = msg.send
 
     # create agentic wallet
     newAgentAddr: address = create_minimal_proxy_to(agentTemplate)
-    assert extcall AgenticWallet(newAgentAddr).initialize(LEGO_REGISTRY, _owner, _agent)
+    assert extcall AgenticWallet(newAgentAddr).initialize(LEGO_REGISTRY, WETH_ADDR, _owner, _agent)
     self.isAgenticWallet[newAgentAddr] = True
 
     log AgenticWalletCreated(newAgentAddr, _owner, _agent)
