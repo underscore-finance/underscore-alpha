@@ -44,7 +44,7 @@ def bob_ai_wallet(agent_factory, bob, bob_agent):
     return WalletTemplate.at(w)
 
 
-# mock assets
+# mock asset: alpha token
 
 
 @pytest.fixture(scope="session")
@@ -69,6 +69,34 @@ def alpha_token_comp_vault(alpha_token):
     return boa.load("contracts/mock/MockCompVault.vy", alpha_token, name="alpha_comp_vault")
 
 
+# mock asset: bravo token
+
+
+@pytest.fixture(scope="session")
+def bravo_token(governor):
+    return boa.load("contracts/mock/MockErc20.vy", governor, "Bravo Token", "BRAVO", 18, 10_000_000, name="bravo_token")
+
+
+@pytest.fixture(scope="session")
+def bravo_token_whale(env, bravo_token, governor):
+    whale = env.generate_address("bravo_token_whale")
+    bravo_token.mint(whale, 1_000_000 * (10 ** bravo_token.decimals()), sender=governor)
+    return whale
+
+
+@pytest.fixture(scope="session")
+def bravo_token_erc4626_vault(bravo_token):
+    return boa.load("contracts/mock/MockErc4626Vault.vy", bravo_token, name="bravo_erc4626_vault")
+
+
+@pytest.fixture(scope="session")
+def bravo_token_comp_vault(bravo_token):
+    return boa.load("contracts/mock/MockCompVault.vy", bravo_token, name="bravo_comp_vault")
+
+
+# mock asset: weth
+
+
 @pytest.fixture(scope="session")
 def mock_weth():
     return boa.load("contracts/mock/MockWeth.vy", name="mock_weth")
@@ -81,6 +109,17 @@ def mock_weth():
 def mock_lego(alpha_token, alpha_token_erc4626_vault, lego_registry, governor):
     addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, lego_registry, name="mock_lego")
     legoId = lego_registry.registerNewLego(addr, "Mock Lego", sender=governor)
+    assert legoId != 0 # dev: invalid lego id
+    return addr
+
+
+# mock lego: another
+
+
+@pytest.fixture(scope="session")
+def mock_lego_another(bravo_token, bravo_token_erc4626_vault, lego_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", bravo_token, bravo_token_erc4626_vault, lego_registry, name="mock_lego_another")
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Another", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
 
