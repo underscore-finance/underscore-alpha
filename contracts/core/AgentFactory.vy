@@ -23,7 +23,6 @@ event AgentTemplateSet:
 event AgentFactoryActivated:
     isActivated: bool
 
-# core
 agentTemplateInfo: public(TemplateInfo)
 isAgenticWallet: public(HashMap[address, bool])
 isActivated: public(bool)
@@ -67,11 +66,11 @@ def isValidWalletSetup(_owner: address, _agent: address) -> bool:
 def _isValidWalletSetup(_template: address, _owner: address, _agent: address) -> bool:
     if _template == empty(address):
         return False
-    return _owner != empty(address) and _agent != empty(address) 
+    return _owner != empty(address) and _owner != _agent
 
 
 @external
-def createAgenticWallet(_owner: address = msg.sender, _agent: address = msg.sender) -> address:
+def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(address)) -> address:
     assert self.isActivated # dev: not activated
 
     agentTemplate: address = self.agentTemplateInfo.addr

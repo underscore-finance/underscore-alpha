@@ -5,17 +5,20 @@ from constants import ZERO_ADDRESS
 from conf_utils import filter_logs
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def new_lego_registry(governor):
     return boa.load("contracts/core/LegoRegistry.vy", governor, name="new_lego_registry")
+
 
 @pytest.fixture(scope="module")
 def new_lego(alpha_token, alpha_token_erc4626_vault, new_lego_registry):
     return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, new_lego_registry, name="new_lego")
 
+
 @pytest.fixture(scope="module")
 def new_lego_b(alpha_token, alpha_token_erc4626_vault, new_lego_registry):
     return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, new_lego_registry, name="new_lego_b")
+
 
 #########
 # Tests #
@@ -52,12 +55,11 @@ def test_register_new_lego(new_lego_registry, new_lego, governor):
     assert new_lego_registry.getLastLegoAddr() == new_lego.address
     assert new_lego_registry.getLastLegoId() == lego_id
     
-    # TODO
-    # info = new_lego_registry.getLegoInfo(lego_id)
-    # assert info.addr == new_lego.address
-    # assert info.version == 1
-    # assert info.description == description
-    # assert info.lastModified == boa.env.evm.patch.timestamp
+    info = new_lego_registry.getLegoInfo(lego_id)
+    assert info.addr == new_lego.address
+    assert info.version == 1
+    assert info.description == description
+    assert info.lastModified == boa.env.evm.patch.timestamp
 
 
 def test_register_new_lego_invalid_cases(new_lego_registry, new_lego, governor, bob):
@@ -106,12 +108,11 @@ def test_update_lego_addr(new_lego_registry, new_lego, new_lego_b, governor, bob
     assert new_lego_registry.getLegoId(new_lego_b.address) == lego_id
     assert new_lego_registry.getLegoId(new_lego.address) == 0  # Old address mapping cleared
     
-    # TODO 
-    # info = new_lego_registry.getLegoInfo(lego_id)
-    # assert info.addr == new_lego_b.address
-    # assert info.version == 2
-    # assert info.description == description
-    # assert info.lastModified == boa.env.evm.patch.timestamp
+    info = new_lego_registry.getLegoInfo(lego_id)
+    assert info.addr == new_lego_b.address
+    assert info.version == 2
+    assert info.description == description
+    assert info.lastModified == boa.env.evm.patch.timestamp
     
 
 def test_disable_lego_addr(new_lego_registry, new_lego, governor, bob):
@@ -139,12 +140,11 @@ def test_disable_lego_addr(new_lego_registry, new_lego, governor, bob):
     assert new_lego_registry.getLegoAddr(lego_id) == ZERO_ADDRESS
     assert new_lego_registry.getLegoId(new_lego.address) == 0
     
-    # TODO
-    # info = new_lego_registry.getLegoInfo(lego_id)
-    # assert info.addr == ZERO_ADDRESS
-    # assert info.version == 2
-    # assert info.description == description
-    # assert info.lastModified == boa.env.evm.patch.timestamp
+    info = new_lego_registry.getLegoInfo(lego_id)
+    assert info.addr == ZERO_ADDRESS
+    assert info.version == 2
+    assert info.description == description
+    assert info.lastModified == boa.env.evm.patch.timestamp
     
     # already disabled
     assert not new_lego_registry.disableLegoAddr(lego_id, sender=governor)

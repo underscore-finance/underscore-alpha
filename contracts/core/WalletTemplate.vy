@@ -128,12 +128,14 @@ def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _ini
     assert not self.initialized # dev: can only initialize once
     self.initialized = True
 
-    assert empty(address) not in [_legoRegistry, _wethAddr, _owner, _initialAgent] # dev: invalid addrs
+    assert empty(address) not in [_legoRegistry, _wethAddr, _owner] # dev: invalid addrs
     assert _initialAgent != _owner # dev: agent cannot be owner
     self.legoRegistry = _legoRegistry
     self.wethAddr = _wethAddr
     self.owner = _owner
-    self.agentSettings[_initialAgent] = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[])
+
+    if _initialAgent != empty(address):
+        self.agentSettings[_initialAgent] = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[])
 
     return True
 
