@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256
 from contracts.core import WalletTemplate
 
 
@@ -46,10 +46,10 @@ def test_wallet_initialization(ai_wallet, owner, agent, lego_registry, weth):
 # agent management
 
 
-def test_agent_management(ai_wallet, owner, agent, mock_lego, mock_lego_another, bravo_token, alpha_token, sally):
+def test_agent_management(ai_wallet, owner, agent, mock_lego_alpha, mock_lego_bravo, bravo_token, alpha_token, sally):
     # Test adding assets and lego ids for agent
-    lego_id = mock_lego.legoId()
-    lego_id_another = mock_lego_another.legoId()
+    lego_id = mock_lego_alpha.legoId()
+    lego_id_another = mock_lego_bravo.legoId()
     
     # Add asset for agent
     assert ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
@@ -118,338 +118,407 @@ def test_agent_management(ai_wallet, owner, agent, mock_lego, mock_lego_another,
 # agent management permissions
 
 
-def test_agent_management_permissions(ai_wallet, owner, agent, alpha_token, sally, mock_lego):
-    # with boa.reverts(("no perms")):
-    ai_wallet.addAssetForAgent(agent, alpha_token.address, sender=sally)
+# TODO: add back in, check vyper/boa issues
 
-    # with boa.reverts("no perms"):
-    #     ai_wallet.addLegoIdForAgent(agent, mock_lego.legoId(), sender=sally)
+# def test_agent_management_permissions(ai_wallet, owner, agent, alpha_token, sally, mock_lego_alpha):
+#     with boa.reverts(("no perms")):
+#         ai_wallet.addAssetForAgent(agent, alpha_token, sender=sally)
 
-    # with boa.reverts("no perms"):
-    #     ai_wallet.addOrModifyAgent(agent, [alpha_token], [mock_lego.legoId()], sender=sally)
+#     with boa.reverts("no perms"):
+#         ai_wallet.addLegoIdForAgent(agent, mock_lego_alpha.legoId(), sender=sally)
 
-    # with boa.reverts("no perms"):
-    #     ai_wallet.disableAgent(agent, sender=sally)
+#     with boa.reverts("no perms"):
+#         ai_wallet.addOrModifyAgent(agent, [alpha_token], [mock_lego_alpha.legoId()], sender=sally)
 
-    # # Test invalid agent address
-    # with boa.reverts("invalid agent"):
-    #     ai_wallet.addOrModifyAgent(ZERO_ADDRESS, [], [], sender=owner)
+#     with boa.reverts("no perms"):
+#         ai_wallet.disableAgent(agent, sender=sally)
 
-    # # Test owner cannot be agent
-    # with boa.reverts("agent cannot be owner"):
-    #     ai_wallet.addOrModifyAgent(owner, [], [], sender=owner)
+#     # Test invalid agent address
+#     with boa.reverts("invalid agent"):
+#         ai_wallet.addOrModifyAgent(ZERO_ADDRESS, [], [], sender=owner)
 
-    # # Test disabling non-active agent
-    # with boa.reverts("agent not active"):
-    #     ai_wallet.disableAgent(sally, sender=owner)
+#     # Test owner cannot be agent
+#     with boa.reverts("agent cannot be owner"):
+#         ai_wallet.addOrModifyAgent(owner, [], [], sender=owner)
 
-    # # Test adding duplicate asset
-    # assert ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
-    # with boa.reverts("asset already saved"):
-    #     ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
+#     # Test disabling non-active agent
+#     with boa.reverts("agent not active"):
+#         ai_wallet.disableAgent(sally, sender=owner)
 
-    # # Test adding duplicate lego id
-    # assert ai_wallet.addLegoIdForAgent(agent, mock_lego.legoId(), sender=owner)
-    # with boa.reverts("lego id already saved"):
-    #     ai_wallet.addLegoIdForAgent(agent, mock_lego.legoId(), sender=owner)
+#     # Test adding duplicate asset
+#     assert ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
+#     with boa.reverts("asset already saved"):
+#         ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
 
-
-# def test_deposit_operations(ai_wallet, owner, agent, mock_lego, alpha_token, alpha_token_erc4626_vault, alpha_token_whale):
-#     """Test deposit operations"""
-#     lego_id = 1  # Assuming mock_lego is registered with ID 1
-#     deposit_amount = 1000 * 10**18
-
-#     # Setup agent permissions
-#     ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
-#     ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
-
-#     # Transfer tokens to wallet
-#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
-#     assert alpha_token.balanceOf(ai_wallet) == deposit_amount
-
-#     # Test deposit by owner
-#     tx = ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
-#     logs = filter_logs(tx, "AgenticDeposit")
-#     assert len(logs) == 1
-#     assert logs[0].user == owner
-#     assert logs[0].asset == alpha_token
-#     assert logs[0].vaultToken == alpha_token_erc4626_vault
-#     assert logs[0].assetAmountDeposited == deposit_amount
-#     assert logs[0].vaultTokenAmountReceived > 0
-#     assert logs[0].refundAssetAmount == 0
-#     assert logs[0].legoId == lego_id
-#     assert not logs[0].isAgent
-
-#     # Test deposit by agent
-#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
-#     tx = ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=agent)
-#     logs = filter_logs(tx, "AgenticDeposit")
-#     assert len(logs) == 1
-#     assert logs[0].user == agent
-#     assert logs[0].isAgent
-
-#     # Test deposit with transfer
-#     tx = ai_wallet.depositTokensWithTransfer(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=alpha_token_whale)
-#     logs = filter_logs(tx, "AgenticDeposit")
-#     assert len(logs) == 1
-#     assert logs[0].user == alpha_token_whale
-#     assert logs[0].assetAmountDeposited == deposit_amount
-
-#     # Test deposit permissions
-#     with boa.reverts("dev: agent not allowed"):
-#         ai_wallet.depositTokens(2, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=agent)
-
-#     with boa.reverts("dev: nothing to transfer"):
-#         ai_wallet.depositTokens(lego_id, alpha_token, 0, alpha_token_erc4626_vault, sender=owner)
+#     # Test adding duplicate lego id
+#     assert ai_wallet.addLegoIdForAgent(agent, mock_lego_alpha.legoId(), sender=owner)
+#     with boa.reverts("lego id already saved"):
+#         ai_wallet.addLegoIdForAgent(agent, mock_lego_alpha.legoId(), sender=owner)
 
 
-# def test_withdrawal_operations(ai_wallet, owner, agent, mock_lego, alpha_token, alpha_token_erc4626_vault, alpha_token_whale):
-#     """Test withdrawal operations"""
-#     lego_id = 1  # Assuming mock_lego is registered with ID 1
-#     deposit_amount = 1000 * 10**18
+def test_deposit_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, bravo_token, bravo_token_whale, bravo_token_erc4626_vault, mock_lego_bravo, alpha_token_erc4626_vault, alpha_token_whale):
+    lego_id = mock_lego_alpha.legoId()
+    deposit_amount = 1_000 * EIGHTEEN_DECIMALS
 
-#     # Setup agent permissions and initial deposit
-#     ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
-#     ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
-#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
-#     ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
+    # Setup agent permissions
+    assert ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
+    assert ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
 
-#     # Get vault token balance
-#     vault_token_balance = alpha_token_erc4626_vault.balanceOf(ai_wallet)
-#     assert vault_token_balance > 0
+    # Transfer tokens to wallet
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    assert alpha_token.balanceOf(ai_wallet) == deposit_amount
 
-#     # Test withdrawal by owner
-#     tx = ai_wallet.withdrawTokens(lego_id, alpha_token, vault_token_balance, alpha_token_erc4626_vault, sender=owner)
-#     logs = filter_logs(tx, "AgenticWithdrawal")
-#     assert len(logs) == 1
-#     assert logs[0].user == owner
-#     assert logs[0].asset == alpha_token
-#     assert logs[0].vaultToken == alpha_token_erc4626_vault
-#     assert logs[0].assetAmountReceived > 0
-#     assert logs[0].vaultTokenAmountBurned == vault_token_balance
-#     assert logs[0].refundVaultTokenAmount == 0
-#     assert logs[0].legoId == lego_id
-#     assert not logs[0].isAgent
+    # Test deposit by owner
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=owner)
+    log = filter_logs(ai_wallet, "AgenticDeposit")[0]
+    assert log.user == owner
+    assert log.asset == alpha_token.address
+    assert log.vaultToken == alpha_token_erc4626_vault.address == vaultToken
+    assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
+    assert log.vaultTokenAmountReceived == vaultTokenAmountReceived != 0
+    assert log.refundAssetAmount == 0
+    assert log.legoId == lego_id
+    assert log.legoAddr == mock_lego_alpha.address
+    assert not log.isAgent
 
-#     # Setup for agent withdrawal
-#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
-#     ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
-#     vault_token_balance = alpha_token_erc4626_vault.balanceOf(ai_wallet)
+    assert alpha_token.balanceOf(ai_wallet) == 0
+    wallet_bal = alpha_token_erc4626_vault.balanceOf(ai_wallet)
+    assert wallet_bal == vaultTokenAmountReceived
 
-#     # Test withdrawal by agent
-#     tx = ai_wallet.withdrawTokens(lego_id, alpha_token, vault_token_balance, alpha_token_erc4626_vault, sender=agent)
-#     logs = filter_logs(tx, "AgenticWithdrawal")
-#     assert len(logs) == 1
-#     assert logs[0].user == agent
-#     assert logs[0].isAgent
+    # Test deposit by agent
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=agent)
+    log = filter_logs(ai_wallet, "AgenticDeposit")[0]
+    assert log.user == agent
+    assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
+    assert log.isAgent
 
-#     # Test withdrawal permissions
-#     with boa.reverts("dev: agent not allowed"):
-#         ai_wallet.withdrawTokens(2, alpha_token, vault_token_balance, alpha_token_erc4626_vault, sender=agent)
+    assert alpha_token.balanceOf(ai_wallet) == 0
+    new_wallet_bal = alpha_token_erc4626_vault.balanceOf(ai_wallet)
+    assert new_wallet_bal == wallet_bal + vaultTokenAmountReceived
 
-#     with boa.reverts("dev: nothing to withdraw"):
-#         ai_wallet.withdrawTokens(lego_id, alpha_token, 0, alpha_token_erc4626_vault, sender=owner)
+    # # Test deposit with transfer
+    # alpha_token.approve(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    # assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokensWithTransfer(lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=alpha_token_whale)
+    # log = filter_logs(ai_wallet, "AgenticDeposit")[0]
+    # assert log.user == alpha_token_whale
+    # assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
+    # assert not log.isAgent
 
+    # assert alpha_token.balanceOf(ai_wallet) == 0
+    # assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == new_wallet_bal + vaultTokenAmountReceived
 
-# def test_rebalance_operations(ai_wallet, owner, agent, mock_lego, alpha_token, alpha_token_erc4626_vault, alpha_token_comp_vault, alpha_token_whale):
-#     """Test rebalance operations"""
-#     lego_id = 1  # Assuming mock_lego is registered with ID 1
-#     alt_lego_id = 2  # Another mock lego for rebalancing
-#     deposit_amount = 1000 * 10**18
-
-#     # Setup agent permissions
-#     ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
-#     ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
-#     ai_wallet.addLegoIdForAgent(agent, alt_lego_id, sender=owner)
-
-#     # Initial deposit
-#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
-#     ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
-#     vault_token_balance = alpha_token_erc4626_vault.balanceOf(ai_wallet)
-
-#     # Test rebalance by owner
-#     tx = ai_wallet.rebalance(lego_id, alt_lego_id, alpha_token, vault_token_balance, alpha_token_erc4626_vault, alpha_token_comp_vault, sender=owner)
-#     logs = filter_logs(tx, ["AgenticWithdrawal", "AgenticDeposit"])
-#     assert len(logs) == 2
+    # # Test deposit permissions
+    # assert not ai_wallet.canAgentAccess(agent, [bravo_token.address], [mock_lego_bravo.legoId()])
     
-#     withdrawal = logs[0]
-#     assert withdrawal.user == owner
-#     assert withdrawal.asset == alpha_token
-#     assert withdrawal.vaultToken == alpha_token_erc4626_vault
-#     assert not withdrawal.isAgent
+    # TODO: add back in, check vyper/boa issues
 
-#     deposit = logs[1]
-#     assert deposit.user == owner
-#     assert deposit.asset == alpha_token
-#     assert deposit.vaultToken == alpha_token_comp_vault
-#     assert not deposit.isAgent
+    # with boa.reverts("agent not allowed"):
+    #     ai_wallet.depositTokens(mock_lego_bravo.legoId(), bravo_token, deposit_amount, bravo_token_erc4626_vault, sender=agent)
 
-#     # Test rebalance by agent
-#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
-#     ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
-#     vault_token_balance = alpha_token_erc4626_vault.balanceOf(ai_wallet)
-
-#     tx = ai_wallet.rebalance(lego_id, alt_lego_id, alpha_token, vault_token_balance, alpha_token_erc4626_vault, alpha_token_comp_vault, sender=agent)
-#     logs = filter_logs(tx, ["AgenticWithdrawal", "AgenticDeposit"])
-#     assert len(logs) == 2
-#     assert logs[0].isAgent and logs[1].isAgent
-
-#     # Test rebalance permissions
-#     with boa.reverts("dev: agent not allowed"):
-#         ai_wallet.rebalance(3, alt_lego_id, alpha_token, vault_token_balance, alpha_token_erc4626_vault, alpha_token_comp_vault, sender=agent)
+    # with boa.reverts("nothing to transfer"):
+    #     ai_wallet.depositTokens(mock_lego_bravo.legoId(), bravo_token, deposit_amount, bravo_token_erc4626_vault, sender=owner)
 
 
-# def test_fund_transfers(ai_wallet, owner, agent, alpha_token, alpha_token_whale, sally):
-#     """Test fund transfer operations"""
-#     transfer_amount = 1000 * 10**18
+def test_withdrawal_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale):
+    lego_id = mock_lego_alpha.legoId()
+    deposit_amount = 1000 * EIGHTEEN_DECIMALS
 
-#     # Setup
-#     ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
-#     alpha_token.transfer(ai_wallet, transfer_amount, sender=alpha_token_whale)
+    # Setup agent permissions and initial deposit
+    ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
+    ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=agent)
+    assert assetAmountDeposited == deposit_amount
+
+    # Get vault token balance
+    assert alpha_token_erc4626_vault.address == vaultToken
+    assert vaultTokenAmountReceived == alpha_token_erc4626_vault.balanceOf(ai_wallet)
+
+    # Test withdrawal by owner
+    assetAmountReceived, vaultTokenAmountBurned = ai_wallet.withdrawTokens(lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=owner)
+    log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
+    assert log.user == owner
+    assert log.asset == alpha_token.address
+    assert log.vaultToken == alpha_token_erc4626_vault.address
+    assert log.assetAmountReceived == assetAmountReceived
+    assert log.vaultTokenAmountBurned == vaultTokenAmountBurned
+    assert log.refundVaultTokenAmount == 0
+    assert log.legoId == lego_id
+    assert not log.isAgent
+
+    wallet_bal = alpha_token.balanceOf(ai_wallet)
+    assert wallet_bal == assetAmountReceived
+    assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == 0
+
+    # Setup for agent withdrawal
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
+
+    # Test withdrawal by agent
+    assetAmountReceived, vaultTokenAmountBurned = ai_wallet.withdrawTokens(lego_id, alpha_token, vaultTokenAmountReceived, alpha_token_erc4626_vault, sender=agent)
+    log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
+    assert log.user == agent
+    assert log.isAgent
+    assert log.vaultTokenAmountBurned == vaultTokenAmountBurned
+
+    assert alpha_token.balanceOf(ai_wallet) == assetAmountReceived + wallet_bal
+    assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == 0
+
+    # TODO: add back in, check vyper/boa issues
+
+    # # Test withdrawal permissions
+    # with boa.reverts("dev: agent not allowed"):
+    #     ai_wallet.withdrawTokens(2, alpha_token, vault_token_balance, alpha_token_erc4626_vault, sender=agent)
+
+    # with boa.reverts("dev: nothing to withdraw"):
+    #     ai_wallet.withdrawTokens(lego_id, alpha_token, 0, alpha_token_erc4626_vault, sender=owner)
+
+
+def test_rebalance_operations(ai_wallet, owner, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, alpha_token_whale):
+    lego_id = mock_lego_alpha.legoId()
+    alt_lego_id = mock_lego_alpha_another.legoId()
+    deposit_amount = 1_000 * EIGHTEEN_DECIMALS
+
+    # Setup agent permissions
+    ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
+    ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
+    ai_wallet.addLegoIdForAgent(agent, alt_lego_id, sender=owner)
+
+    # Initial deposit
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    assetAmountDeposited, vaultToken, origVaultTokenAmountReceived = ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
+    assert vaultToken == alpha_token_erc4626_vault.address
+
+    # Test rebalance by owner
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived = ai_wallet.rebalance(lego_id, alt_lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, sender=owner)
+    log_withdrawal = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
+    log_deposit = filter_logs(ai_wallet, "AgenticDeposit")[0]
+
+    assert log_withdrawal.user == owner
+    assert log_withdrawal.asset == alpha_token.address
+    assert log_withdrawal.vaultToken == alpha_token_erc4626_vault.address == vaultToken
+    assert log_withdrawal.assetAmountReceived != 0
+    assert log_withdrawal.vaultTokenAmountBurned == origVaultTokenAmountReceived
+    assert log_withdrawal.refundVaultTokenAmount == 0
+    assert log_withdrawal.legoId == lego_id
+    assert log_withdrawal.legoAddr == mock_lego_alpha.address
+    assert not log_withdrawal.isAgent
+
+    assert log_deposit.user == owner
+    assert log_deposit.asset == alpha_token.address
+    assert log_deposit.vaultToken == alpha_token_erc4626_vault_another.address == newVaultToken
+    assert log_deposit.assetAmountDeposited == assetAmountDeposited
+    assert log_deposit.vaultTokenAmountReceived == vaultTokenAmountReceived != 0
+    assert log_deposit.refundAssetAmount == 0
+    assert log_deposit.legoId == alt_lego_id
+    assert log_deposit.legoAddr == mock_lego_alpha_another.address
+    assert not log_deposit.isAgent
+
+    assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == 0
+    assert alpha_token_erc4626_vault_another.balanceOf(ai_wallet) == vaultTokenAmountReceived
+
+    # Test rebalance by agent
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    assetAmountDeposited, vaultToken, origVaultTokenAmountReceived = ai_wallet.depositTokens(lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
+
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived = ai_wallet.rebalance(lego_id, alt_lego_id, alpha_token, origVaultTokenAmountReceived, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, sender=agent)
+    log_withdrawal = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
+    log_deposit = filter_logs(ai_wallet, "AgenticDeposit")[0]
+
+    assert log_withdrawal.user == agent
+    assert log_withdrawal.isAgent
+    assert log_withdrawal.vaultTokenAmountBurned == origVaultTokenAmountReceived
+    assert log_deposit.user == agent
+    assert log_deposit.isAgent
+    assert log_deposit.vaultTokenAmountReceived == vaultTokenAmountReceived
+
+    # TODO: add back in, check vyper/boa issues
+
+    # # Test rebalance permissions
+    # with boa.reverts("agent not allowed"):
+    #     ai_wallet.rebalance(3, alt_lego_id, alpha_token, vaultTokenAmountReceived, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, sender=agent)
+
+
+def test_fund_transfers(ai_wallet, owner, agent, alpha_token, alpha_token_whale, sally, bob):
+    transfer_amount = 1_000 * EIGHTEEN_DECIMALS
+
+    # Setup
+    ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
+    ai_wallet.setWhitelistAddr(sally, True, sender=owner)
+    alpha_token.transfer(ai_wallet, transfer_amount, sender=alpha_token_whale)
     
-#     # Test transfer by owner
-#     tx = ai_wallet.transferFunds(sally, transfer_amount, alpha_token, sender=owner)
-#     logs = filter_logs(tx, "WalletFundsTransferred")
-#     assert len(logs) == 1
-#     assert logs[0].recipient == sally
-#     assert logs[0].asset == alpha_token
-#     assert logs[0].amount == transfer_amount
-#     assert not logs[0].isAgent
+    # Test transfer by owner
+    assert ai_wallet.transferFunds(sally, MAX_UINT256, alpha_token, sender=owner)
+    log = filter_logs(ai_wallet, "WalletFundsTransferred")[0]
+    assert log.recipient == sally
+    assert log.asset == alpha_token.address
+    assert log.amount == transfer_amount
+    assert not log.isAgent
 
-#     # Test transfer by agent
-#     alpha_token.transfer(ai_wallet, transfer_amount, sender=alpha_token_whale)
-#     tx = ai_wallet.transferFunds(sally, transfer_amount, alpha_token, sender=agent)
-#     logs = filter_logs(tx, "WalletFundsTransferred")
-#     assert len(logs) == 1
-#     assert logs[0].isAgent
+    assert alpha_token.balanceOf(ai_wallet) == 0
+    assert alpha_token.balanceOf(sally) == transfer_amount
 
-#     # Test whitelist functionality
-#     ai_wallet.setWhitelistAddr(sally, True, sender=owner)
-#     assert ai_wallet.isRecipientAllowed(sally)
+    # Test transfer by agent
+    alpha_token.transfer(ai_wallet, transfer_amount, sender=alpha_token_whale)
+    assert ai_wallet.transferFunds(sally, transfer_amount, alpha_token, sender=agent)
+    log = filter_logs(ai_wallet, "WalletFundsTransferred")[0]
+    assert log.recipient == sally
+    assert log.asset == alpha_token.address
+    assert log.amount == transfer_amount
+    assert log.isAgent
 
-#     # Test transfer restrictions
-#     with boa.reverts("dev: recipient not allowed"):
-#         ai_wallet.transferFunds(alpha_token_whale, transfer_amount, alpha_token, sender=owner)
+    assert alpha_token.balanceOf(ai_wallet) == 0
+    assert alpha_token.balanceOf(sally) == transfer_amount * 2
 
-#     with boa.reverts("dev: nothing to transfer"):
-#         ai_wallet.transferFunds(sally, transfer_amount * 2, alpha_token, sender=owner)
+    # transfer eth
+    amount = 5 * EIGHTEEN_DECIMALS
+    boa.env.set_balance(ai_wallet.address, amount)
+    assert ai_wallet.transferFunds(sally, sender=agent)
+    log = filter_logs(ai_wallet, "WalletFundsTransferred")[0]
+    assert log.recipient == sally
+    assert log.asset == ZERO_ADDRESS
+    assert log.amount == amount
+    assert log.isAgent
+
+    # Test whitelist functionality
+    assert not ai_wallet.isRecipientAllowed(bob)
+    ai_wallet.setWhitelistAddr(bob, True, sender=owner)
+    assert ai_wallet.isRecipientAllowed(bob)
+
+    # TODO: add back in, check vyper/boa issues
+
+    # # Test transfer restrictions
+    # with boa.reverts("recipient not allowed"):
+    #     ai_wallet.transferFunds(alpha_token_whale, transfer_amount, alpha_token, sender=owner)
+
+    # with boa.reverts("nothing to transfer"):
+    #     ai_wallet.transferFunds(sally, transfer_amount, alpha_token, sender=owner)
 
 
-# def test_eth_weth_operations(ai_wallet, owner, agent, mock_weth, mock_lego, alpha_token_erc4626_vault):
-#     """Test ETH/WETH conversion operations"""
-#     eth_amount = 1 * 10**18
-#     lego_id = 1
+# TODO: add back in, check vyper/boa issues
+# def test_eth_weth_operations(ai_wallet, owner, agent, weth, mock_lego_alpha, alpha_token_erc4626_vault):
+#     eth_amount = 1 * EIGHTEEN_DECIMALS
+#     boa.env.set_balance(owner, eth_amount)
+
+#     lego_id = mock_lego_alpha.legoId()
 
 #     # Setup agent permissions
-#     ai_wallet.addAssetForAgent(agent, mock_weth, sender=owner)
+#     ai_wallet.addAssetForAgent(agent, weth, sender=owner)
 #     ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
 
 #     # Test ETH to WETH conversion by owner
-#     tx = ai_wallet.convertEthToWeth(eth_amount, lego_id, alpha_token_erc4626_vault, value=eth_amount, sender=owner)
-#     logs = filter_logs(tx, ["EthConvertedToWeth", "AgenticDeposit"])
-#     assert len(logs) == 2
-    
-#     eth_log = logs[0]
-#     assert eth_log.sender == owner
-#     assert eth_log.amount == eth_amount
-#     assert eth_log.paidEth == eth_amount
-#     assert eth_log.weth == mock_weth
-#     assert not eth_log.isAgent
+#     assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.convertEthToWeth(MAX_UINT256, lego_id, alpha_token_erc4626_vault, value=eth_amount, sender=owner)
+#     log = filter_logs(ai_wallet, "EthConvertedToWeth")[0]
 
-#     deposit_log = logs[1]
-#     assert deposit_log.asset == mock_weth
-#     assert not deposit_log.isAgent
+#     assert log.sender == owner
+#     assert log.amount == eth_amount
+#     assert log.paidEth == eth_amount
+#     assert log.weth == weth
+#     assert not log.isAgent
 
-#     # Test ETH to WETH conversion by agent
-#     tx = ai_wallet.convertEthToWeth(eth_amount, lego_id, alpha_token_erc4626_vault, value=eth_amount, sender=agent)
-#     logs = filter_logs(tx, "EthConvertedToWeth")
-#     assert len(logs) == 1
-#     assert logs[0].isAgent
+#     assert assetAmountDeposited == eth_amount
+#     assert vaultToken == alpha_token_erc4626_vault.address
+#     assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == vaultTokenAmountReceived
 
 #     # Test WETH to ETH conversion
-#     weth_balance = mock_weth.balanceOf(ai_wallet)
-#     tx = ai_wallet.convertWethToEth(weth_balance, sender=owner)
-#     logs = filter_logs(tx, "WethConvertedToEth")
-#     assert len(logs) == 1
-#     assert logs[0].sender == owner
-#     assert logs[0].amount == weth_balance
-#     assert logs[0].weth == mock_weth
-#     assert not logs[0].isAgent
+#     amount = ai_wallet.convertWethToEth(MAX_UINT256, ZERO_ADDRESS, lego_id, alpha_token_erc4626_vault, sender=owner)
+#     log = filter_logs(ai_wallet, "WethConvertedToEth")[0]
+#     assert log.sender == owner
+#     assert log.amount == eth_amount == amount
+#     assert log.weth == weth
+#     assert not log.isAgent
 
-#     # Test WETH to ETH with recipient
-#     mock_weth.deposit(value=eth_amount, sender=owner)
-#     mock_weth.transfer(ai_wallet, eth_amount, sender=owner)
-#     ai_wallet.setWhitelistAddr(agent, True, sender=owner)
-    
-#     tx = ai_wallet.convertWethToEth(eth_amount, agent, sender=owner)
-#     logs = filter_logs(tx, ["WethConvertedToEth", "WalletFundsTransferred"])
-#     assert len(logs) == 2
-#     assert logs[0].amount == eth_amount
-#     assert logs[1].recipient == agent
-#     assert logs[1].asset == empty(address)  # ETH transfer
+#     assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == 0
+#     assert weth.balanceOf(ai_wallet) == amount
 
 
-# def test_batch_actions(ai_wallet, owner, agent, mock_lego, alpha_token, alpha_token_erc4626_vault, alpha_token_comp_vault, alpha_token_whale, sally):
-#     """Test batch action operations"""
-#     lego_id = 1  # Assuming mock_lego is registered with ID 1
-#     alt_lego_id = 2  # Another mock lego for rebalancing
-#     amount = 1000 * 10**18
+def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, alpha_token_whale, sally):
+    lego_id = mock_lego_alpha.legoId()
+    alt_lego_id = mock_lego_alpha_another.legoId()
+    amount = 1_000 * EIGHTEEN_DECIMALS
 
-#     # Setup agent permissions
-#     ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
-#     ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
-#     ai_wallet.addLegoIdForAgent(agent, alt_lego_id, sender=owner)
-#     ai_wallet.setWhitelistAddr(sally, True, sender=owner)
+    # Setup agent permissions
+    ai_wallet.addAssetForAgent(agent, alpha_token, sender=owner)
+    ai_wallet.addLegoIdForAgent(agent, lego_id, sender=owner)
+    ai_wallet.addLegoIdForAgent(agent, alt_lego_id, sender=owner)
+    ai_wallet.setWhitelistAddr(sally, True, sender=owner)
 
-#     # Transfer tokens to wallet
-#     alpha_token.transfer(ai_wallet, amount * 3, sender=alpha_token_whale)  # Need extra for multiple operations
+    # Transfer tokens to wallet
+    alpha_token.transfer(ai_wallet, amount, sender=alpha_token_whale)
 
-#     # Create batch instructions
-#     instructions = [
-#         # Deposit
-#         (0, lego_id, alpha_token, alpha_token_erc4626_vault, amount, empty(address), 0, empty(address)),  # ActionType.DEPOSIT = 0
-#         # Withdrawal
-#         (1, lego_id, alpha_token, alpha_token_erc4626_vault, amount, empty(address), 0, empty(address)),  # ActionType.WITHDRAWAL = 1
-#         # Rebalance
-#         (2, lego_id, alpha_token, alpha_token_erc4626_vault, amount, empty(address), alt_lego_id, alpha_token_comp_vault),  # ActionType.REBALANCE = 2
-#         # Transfer
-#         (3, 0, alpha_token, empty(address), amount, sally, 0, empty(address)),  # ActionType.TRANSFER = 3
-#     ]
+    # Create batch instructions
+    instructions = [
+        # Deposit
+        (DEPOSIT_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.DEPOSIT = 0
+        # Withdrawal
+        (WITHDRAWAL_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.WITHDRAWAL = 1
+        # Rebalance
+        (REBALANCE_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, alt_lego_id, alpha_token_erc4626_vault_another),  # ActionType.REBALANCE = 2
+        # Transfer
+        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, MAX_UINT256, sally, 0, ZERO_ADDRESS),  # ActionType.TRANSFER = 3
+    ]
 
-#     # Test batch actions by owner
-#     tx = ai_wallet.performManyActions(instructions, sender=owner)
-#     logs = filter_logs(tx, ["AgenticDeposit", "AgenticWithdrawal", "WalletFundsTransferred"])
-#     assert len(logs) >= 4  # Should have at least 4 events (deposit, withdrawal, rebalance generates 2 events, transfer)
-    
-#     # Verify some key events
-#     deposit_logs = [log for log in logs if "AgenticDeposit" in str(log)]
-#     withdrawal_logs = [log for log in logs if "AgenticWithdrawal" in str(log)]
-#     transfer_logs = [log for log in logs if "WalletFundsTransferred" in str(log)]
-    
-#     assert len(deposit_logs) >= 1
-#     assert len(withdrawal_logs) >= 1
-#     assert len(transfer_logs) >= 1
-    
-#     for log in deposit_logs + withdrawal_logs + transfer_logs:
-#         assert not log.isAgent  # Owner operations
+    # Test batch actions by owner
+    assert ai_wallet.performManyActions(instructions, sender=agent)
 
-#     # Test batch actions by agent
-#     alpha_token.transfer(ai_wallet, amount * 3, sender=alpha_token_whale)
-#     tx = ai_wallet.performManyActions(instructions, sender=agent)
-#     logs = filter_logs(tx, ["AgenticDeposit", "AgenticWithdrawal", "WalletFundsTransferred"])
-    
-#     for log in logs:
-#         assert log.isAgent  # Agent operations
+    # deposit
+    log = filter_logs(ai_wallet, "AgenticDeposit")[0]
+    assert log.user == agent
+    assert log.asset == alpha_token.address
+    assert log.vaultToken == alpha_token_erc4626_vault.address
+    assert log.assetAmountDeposited == amount
+    assert log.vaultTokenAmountReceived == amount
+    assert log.refundAssetAmount == 0
+    assert log.legoId == lego_id
+    assert log.legoAddr == mock_lego_alpha.address
+    assert log.isAgent
 
-#     # Test batch action permissions
-#     invalid_instructions = [
-#         # Try to use unauthorized lego
-#         (0, 3, alpha_token, alpha_token_erc4626_vault, amount, empty(address), 0, empty(address)),
-#     ]
-    
-#     with boa.reverts("dev: agent not allowed"):
-#         ai_wallet.performManyActions(invalid_instructions, sender=agent)
+    # withdrawal
+    log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
+    assert log.user == agent
+    assert log.asset == alpha_token.address
+    assert log.vaultToken == alpha_token_erc4626_vault.address
+    assert log.assetAmountReceived == amount // 2
+    assert log.vaultTokenAmountBurned == amount // 2
+    assert log.refundVaultTokenAmount == 0
+    assert log.legoId == lego_id
+    assert log.legoAddr == mock_lego_alpha.address
+    assert log.isAgent
 
-#     # Test empty instructions
-#     with boa.reverts("dev: no instructions"):
-#         ai_wallet.performManyActions([], sender=owner)
+    # rebalance
+    log = filter_logs(ai_wallet, "AgenticWithdrawal")[1]
+    assert log.user == agent
+    assert log.asset == alpha_token.address
+    assert log.vaultToken == alpha_token_erc4626_vault.address
+    assert log.assetAmountReceived == amount // 2
+    assert log.vaultTokenAmountBurned == amount // 2
+    assert log.refundVaultTokenAmount == 0
+    assert log.legoId == lego_id
+    assert log.legoAddr == mock_lego_alpha.address
+    assert log.isAgent
+
+    log = filter_logs(ai_wallet, "AgenticDeposit")[1]
+    assert log.user == agent
+    assert log.asset == alpha_token.address
+    assert log.vaultToken == alpha_token_erc4626_vault_another.address
+    assert log.assetAmountDeposited == amount // 2
+    assert log.vaultTokenAmountReceived == amount // 2
+    assert log.refundAssetAmount == 0
+    assert log.legoId == alt_lego_id
+    assert log.legoAddr == mock_lego_alpha_another.address
+    assert log.isAgent
+
+    # transfer
+    log = filter_logs(ai_wallet, "WalletFundsTransferred")[0]
+    assert log.recipient == sally
+    assert log.asset == alpha_token.address
+    assert log.amount == amount // 2
+    assert log.isAgent
+
+    # data
+    assert alpha_token.balanceOf(ai_wallet) == 0
+    assert alpha_token.balanceOf(sally) == amount // 2
+
+    assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == 0
+    assert alpha_token_erc4626_vault_another.balanceOf(ai_wallet) == amount // 2

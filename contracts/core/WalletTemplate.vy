@@ -152,6 +152,12 @@ def apiVersion() -> String[28]:
 
 
 @view
+@external
+def canAgentAccess(_agent: address, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
+    return self._canAgentAccess(self.agentSettings[_agent], _assets, _legoIds)
+
+
+@view
 @internal
 def _canAgentAccess(_agent: AgentInfo, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
     if not _agent.isActive:

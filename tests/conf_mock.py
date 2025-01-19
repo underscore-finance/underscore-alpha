@@ -65,6 +65,11 @@ def alpha_token_erc4626_vault(alpha_token):
 
 
 @pytest.fixture(scope="session")
+def alpha_token_erc4626_vault_another(alpha_token):
+    return boa.load("contracts/mock/MockErc4626Vault.vy", alpha_token, name="alpha_erc4626_vault_another")
+
+
+@pytest.fixture(scope="session")
 def alpha_token_comp_vault(alpha_token):
     return boa.load("contracts/mock/MockCompVault.vy", alpha_token, name="alpha_comp_vault")
 
@@ -89,11 +94,6 @@ def bravo_token_erc4626_vault(bravo_token):
     return boa.load("contracts/mock/MockErc4626Vault.vy", bravo_token, name="bravo_erc4626_vault")
 
 
-@pytest.fixture(scope="session")
-def bravo_token_comp_vault(bravo_token):
-    return boa.load("contracts/mock/MockCompVault.vy", bravo_token, name="bravo_comp_vault")
-
-
 # mock asset: weth
 
 
@@ -106,20 +106,27 @@ def mock_weth():
 
 
 @pytest.fixture(scope="session")
-def mock_lego(alpha_token, alpha_token_erc4626_vault, lego_registry, governor):
-    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, lego_registry, name="mock_lego")
-    legoId = lego_registry.registerNewLego(addr, "Mock Lego", sender=governor)
+def mock_lego_alpha(alpha_token, alpha_token_erc4626_vault, lego_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, lego_registry, name="mock_lego_alpha")
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
 
+
+@pytest.fixture(scope="session")
+def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault_another, lego_registry, name="mock_lego_alpha_another")
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", sender=governor)
+    assert legoId != 0 # dev: invalid lego id
+    return addr
 
 # mock lego: another
 
 
 @pytest.fixture(scope="session")
-def mock_lego_another(bravo_token, bravo_token_erc4626_vault, lego_registry, governor):
-    addr = boa.load("contracts/mock/MockLego.vy", bravo_token, bravo_token_erc4626_vault, lego_registry, name="mock_lego_another")
-    legoId = lego_registry.registerNewLego(addr, "Mock Lego Another", sender=governor)
+def mock_lego_bravo(bravo_token, bravo_token_erc4626_vault, lego_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", bravo_token, bravo_token_erc4626_vault, lego_registry, name="mock_lego_bravo")
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Bravo", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
 
