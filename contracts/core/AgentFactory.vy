@@ -47,6 +47,11 @@ def __init__(_legoRegistry: address, _wethAddr: address, _walletTemplate: addres
 @view
 @external
 def currentAgentTemplate() -> address:
+    """
+    @notice Get the current wallet template address being used by the factory
+    @dev This is a simple getter for the current template address stored in agentTemplateInfo
+    @return The address of the current wallet template
+    """
     return self.agentTemplateInfo.addr
 
 
@@ -58,6 +63,13 @@ def currentAgentTemplate() -> address:
 @view
 @external 
 def isValidWalletSetup(_owner: address, _agent: address) -> bool:
+    """
+    @notice Check if the provided owner and agent addresses form a valid wallet setup
+    @dev Validates that the template exists and owner/agent combination is valid
+    @param _owner The address that will own the wallet
+    @param _agent The address that will be the agent (can be empty)
+    @return True if the setup is valid, False otherwise
+    """
     return self._isValidWalletSetup(self.agentTemplateInfo.addr, _owner, _agent)
 
 
@@ -71,6 +83,13 @@ def _isValidWalletSetup(_template: address, _owner: address, _agent: address) ->
 
 @external
 def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(address)) -> address:
+    """
+    @notice Create a new Agentic Wallet with specified owner and optional agent
+    @dev Creates a minimal proxy of the current template and initializes it
+    @param _owner The address that will own the wallet (defaults to msg.sender)
+    @param _agent The address that will be the agent (defaults to empty address, can add this later)
+    @return The address of the newly created wallet, or empty address if setup is invalid
+    """
     assert self.isActivated # dev: not activated
 
     agentTemplate: address = self.agentTemplateInfo.addr
@@ -94,6 +113,12 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(ad
 @view
 @external 
 def isValidWalletTemplate(_newAddr: address) -> bool:
+    """
+    @notice Check if a given address is valid to be used as a new wallet template
+    @dev Validates the address is a contract and different from current template
+    @param _newAddr The address to validate as a potential new template
+    @return True if the address can be used as a template, False otherwise
+    """
     return self._isValidWalletTemplate(_newAddr)
 
 
@@ -107,6 +132,12 @@ def _isValidWalletTemplate(_newAddr: address) -> bool:
 
 @external
 def setAgenticWalletTemplate(_addr: address) -> bool:
+    """
+    @notice Set a new wallet template address for future wallet deployments
+    @dev Only callable by the governor, updates template info and emits event
+    @param _addr The address of the new template to use
+    @return True if template was successfully updated, False if invalid address
+    """
     assert self.isActivated # dev: not activated
     assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     if not self._isValidWalletTemplate(_addr):
@@ -134,6 +165,11 @@ def _setAgenticWalletTemplate(_addr: address) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
+    """
+    @notice Enable or disable the factory's ability to create new wallets
+    @dev Only callable by the governor, toggles isActivated state
+    @param _shouldActivate True to activate the factory, False to deactivate
+    """
     assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(_shouldActivate)
