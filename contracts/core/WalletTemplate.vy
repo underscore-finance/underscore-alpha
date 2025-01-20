@@ -131,6 +131,15 @@ def __default__():
 
 @external
 def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _initialAgent: address) -> bool:
+    """
+    @notice Sets up the initial state of the wallet template
+    @dev Can only be called once and sets core contract parameters
+    @param _legoRegistry The address of the lego registry contract
+    @param _wethAddr The address of the WETH contract
+    @param _owner The address that will own this wallet
+    @param _initialAgent The address of the initial AI agent (if any)
+    @return bool True if initialization was successful
+    """
     assert not self.initialized # dev: can only initialize once
     self.initialized = True
 
@@ -149,6 +158,11 @@ def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _ini
 @pure
 @external
 def apiVersion() -> String[28]:
+    """
+    @notice Returns the current API version of the contract
+    @dev Returns a constant string representing the contract version
+    @return String[28] The API version string
+    """
     return API_VERSION
 
 
@@ -160,6 +174,14 @@ def apiVersion() -> String[28]:
 @view
 @external
 def canAgentAccess(_agent: address, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
+    """
+    @notice Checks if an agent has access to specific assets and lego IDs
+    @dev Validates agent permissions against their stored settings
+    @param _agent The address of the agent to check
+    @param _assets List of asset addresses to validate
+    @param _legoIds List of lego IDs to validate
+    @return bool True if agent has access to all specified assets and legos
+    """
     return self._canAgentAccess(self.agentSettings[_agent], _assets, _legoIds)
 
 
@@ -213,6 +235,16 @@ def depositTokens(
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
 ) -> (uint256, address, uint256):
+    """
+    @notice Deposits tokens into a specified lego integration and vault
+    @param _legoId The ID of the lego to use for deposit
+    @param _asset The address of the token to deposit
+    @param _amount The amount to deposit (defaults to max)
+    @param _vault The target vault address (optional)
+    @return uint256 The amount of assets deposited
+    @return address The vault token address
+    @return uint256 The amount of vault tokens received
+    """
     isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_asset], [_legoId])
     return self._depositTokens(_legoId, _asset, _amount, _vault, isAgent)
 
@@ -225,6 +257,16 @@ def depositTokensWithTransfer(
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
 ) -> (uint256, address, uint256):
+    """
+    @notice Transfers tokens from sender and deposits them into a specified lego integration and vault
+    @param _legoId The ID of the lego to use for deposit
+    @param _asset The address of the token to deposit
+    @param _amount The amount to deposit (defaults to max)
+    @param _vault The target vault address (optional)
+    @return uint256 The amount of assets deposited
+    @return address The vault token address
+    @return uint256 The amount of vault tokens received
+    """
     amount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(msg.sender))
     assert extcall IERC20(_asset).transferFrom(msg.sender, self, amount, default_return_value=True) # dev: transfer failed
     return self._depositTokens(_legoId, _asset, amount, _vault, self.agentSettings[msg.sender].isActive)
@@ -271,6 +313,15 @@ def withdrawTokens(
     _amount: uint256 = max_value(uint256),
     _vaultToken: address = empty(address),
 ) -> (uint256, uint256):
+    """
+    @notice Withdraws tokens from a specified lego integration and vault
+    @param _legoId The ID of the lego to use for withdrawal
+    @param _asset The address of the token to withdraw
+    @param _amount The amount to withdraw (defaults to max)
+    @param _vaultToken The vault token address (optional)
+    @return uint256 The amount of assets received
+    @return uint256 The amount of vault tokens burned
+    """
     isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_asset], [_legoId])
     return self._withdrawTokens(_legoId, _asset, _amount, _vaultToken, isAgent)
 
@@ -325,6 +376,18 @@ def rebalance(
     _fromVaultToken: address = empty(address),
     _toVault: address = empty(address),
 ) -> (uint256, address, uint256):
+    """
+    @notice Withdraws tokens from one lego and deposits them into another (always same asset)
+    @param _fromLegoId The ID of the source lego
+    @param _toLegoId The ID of the destination lego
+    @param _asset The address of the token to rebalance
+    @param _amount The amount to rebalance (defaults to max)
+    @param _fromVaultToken The source vault token address (optional)
+    @param _toVault The destination vault address (optional)
+    @return uint256 The amount of assets deposited in the destination vault
+    @return address The destination vault token address
+    @return uint256 The amount of destination vault tokens received
+    """
     isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_asset], [_fromLegoId, _toLegoId])
     return self._rebalance(_fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, isAgent)
 
@@ -362,6 +425,14 @@ def _rebalance(
 @nonreentrant
 @external
 def transferFunds(_recipient: address, _amount: uint256 = max_value(uint256), _asset: address = empty(address)) -> bool:
+    """
+    @notice Transfers funds to a specified recipient
+    @dev Handles both ETH and token transfers with optional amount specification
+    @param _recipient The address to receive the funds
+    @param _amount The amount to transfer (defaults to max)
+    @param _asset The token address (empty for ETH)
+    @return bool True if the transfer was successful
+    """
     owner: address = self.owner
     isAgent: bool = self._isAgentWithValidation(msg.sender, owner, [_asset])
     return self._transferFunds(_recipient, _amount, _asset, owner, isAgent)
@@ -397,6 +468,13 @@ def _transferFunds(_recipient: address, _amount: uint256, _asset: address, _owne
 @nonreentrant
 @external
 def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
+    """
+    @notice Sets or removes an address from the transfer whitelist
+    @dev Can only be called by the owner
+    @param _addr The external address to whitelist/blacklist
+    @param _isAllowed Whether the address can receive funds
+    @return bool True if the whitelist was updated successfully
+    """
     owner: address = self.owner
     assert msg.sender == owner # dev: no perms
 
@@ -418,6 +496,12 @@ def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
 @nonreentrant
 @external
 def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool:
+    """
+    @notice Performs multiple actions in a single transaction
+    @dev Executes a batch of instructions with proper permission checks
+    @param _instructions Array of action instructions to execute
+    @return bool True if all actions were executed successfully
+    """
     assert len(_instructions) != 0 # dev: no instructions
 
     owner: address = self.owner
@@ -473,6 +557,15 @@ def convertEthToWeth(
     _depositLegoId: uint256 = 0,
     _depositVault: address = empty(address),
 ) -> (uint256, address, uint256):
+    """
+    @notice Converts ETH to WETH and optionally deposits into a lego integration and vault
+    @param _amount The amount of ETH to convert (defaults to max)
+    @param _depositLegoId The lego ID to use for deposit (optional)
+    @param _depositVault The vault address for deposit (optional)
+    @return uint256 The amount of assets deposited (if deposit performed)
+    @return address The vault token address (if deposit performed)
+    @return uint256 The amount of vault tokens received (if deposit performed)
+    """
     weth: address = self.wethAddr
     isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [weth], [_depositLegoId])
 
@@ -503,6 +596,14 @@ def convertWethToEth(
     _withdrawLegoId: uint256 = 0,
     _withdrawVaultToken: address = empty(address),
 ) -> uint256:
+    """
+    @notice Converts WETH to ETH and optionally withdraws from a vault first
+    @param _amount The amount of WETH to convert (defaults to max)
+    @param _recipient The address to receive the ETH (optional)
+    @param _withdrawLegoId The lego ID to withdraw from (optional)
+    @param _withdrawVaultToken The vault token to withdraw (optional)
+    @return uint256 The amount of ETH received
+    """
     weth: address = self.wethAddr
     owner: address = self.owner
     isAgent: bool = self._isAgentWithValidation(msg.sender, owner, [weth], [_withdrawLegoId])
@@ -541,6 +642,15 @@ def addOrModifyAgent(
     _allowedAssets: DynArray[address, MAX_ASSETS] = [],
     _allowedLegoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> bool:
+    """
+    @notice Adds a new agent or modifies an existing agent's permissions
+        If empty arrays are provided, the agent has access to all assets and lego ids
+    @dev Can only be called by the owner
+    @param _agent The address of the agent to add or modify
+    @param _allowedAssets List of assets the agent can interact with
+    @param _allowedLegoIds List of lego IDs the agent can use
+    @return bool True if the agent was successfully added or modified
+    """
     owner: address = self.owner
     assert msg.sender == owner # dev: no perms
     assert _agent != owner # dev: agent cannot be owner
@@ -604,6 +714,12 @@ def _sanitizeAgentInputData(
 @nonreentrant
 @external
 def disableAgent(_agent: address) -> bool:
+    """
+    @notice Disables an existing agent
+    @dev Can only be called by the owner
+    @param _agent The address of the agent to disable
+    @return bool True if the agent was successfully disabled
+    """
     assert msg.sender == self.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
@@ -620,6 +736,13 @@ def disableAgent(_agent: address) -> bool:
 @nonreentrant
 @external
 def addLegoIdForAgent(_agent: address, _legoId: uint256) -> bool:
+    """
+    @notice Adds a lego ID to an agent's allowed legos
+    @dev Can only be called by the owner
+    @param _agent The address of the agent
+    @param _legoId The lego ID to add
+    @return bool True if the lego ID was successfully added
+    """
     assert msg.sender == self.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
@@ -643,6 +766,13 @@ def addLegoIdForAgent(_agent: address, _legoId: uint256) -> bool:
 @nonreentrant
 @external
 def addAssetForAgent(_agent: address, _asset: address) -> bool:
+    """
+    @notice Adds an asset to an agent's allowed assets
+    @dev Can only be called by the owner
+    @param _agent The address of the agent
+    @param _asset The asset address to add
+    @return bool True if the asset was successfully added
+    """
     assert msg.sender == self.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
