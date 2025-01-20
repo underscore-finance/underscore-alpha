@@ -156,6 +156,7 @@ def anvil(free_port):
                     time.sleep(1)
 
             fork_kwargs = {"block_identifier": block_number} if block_number else {}
+            # fork_kwargs["allow_dirty"] = True
             with boa.fork(anvil_uri, **fork_kwargs) as env:
                 yield env
         finally:

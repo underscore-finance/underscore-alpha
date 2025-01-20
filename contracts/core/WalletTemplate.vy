@@ -8,8 +8,8 @@ interface LegoRegistry:
     def isValidLegoId(_legoId: uint256) -> bool: view
 
 interface WethContract:
-    def withdraw(_amount: uint256) -> bool: nonpayable
-    def deposit() -> bool: payable
+    def withdraw(_amount: uint256): nonpayable
+    def deposit(): payable
 
 flag ActionType:
     DEPOSIT
@@ -121,6 +121,12 @@ MAX_INSTRUCTIONS: constant(uint256) = 20
 def __init__():
     # make sure original reference contract can't be initialized
     self.initialized = True
+
+
+@payable
+@external
+def __default__():
+    pass
 
 
 @external
@@ -396,6 +402,7 @@ def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
 
     assert _addr != empty(address) # dev: invalid addr
     assert _addr != owner # dev: owner cannot be whitelisted
+    assert _addr != self # dev: wallet cannot be whitelisted
     assert _isAllowed != self.isRecipientAllowed[_addr] # dev: already set
 
     self.isRecipientAllowed[_addr] = _isAllowed
