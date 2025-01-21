@@ -29,6 +29,10 @@ LEGO_REGISTRIES = {
         "base": ["0x7F321498A801A191a93C840750ed637149dDf8D0", "0x72bbDB652F2AEC9056115644EfCcDd1986F51f15"],
         "local": [],
     },
+    "sky": {
+        "base": "0x1601843c5E9bC251A3272907010AFa41Fa18347E",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 @pytest.fixture(scope="session")
@@ -109,4 +113,12 @@ def lego_euler(fork, lego_registry, governor, mock_registry):
 
     addr = boa.load("contracts/legos/LegoEuler.vy", evault_factory, earn_factory, lego_registry, name="lego_euler")
     assert lego_registry.registerNewLego(addr, "Euler", sender=governor) != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_sky(getRegistry, fork, mock_sky_psm, lego_registry, governor):
+    pool = getRegistry("sky", fork, mock_sky_psm)
+    addr = boa.load("contracts/legos/LegoSky.vy", pool, lego_registry, name="lego_sky")
+    assert lego_registry.registerNewLego(addr, "Sky", sender=governor) != 0 # dev: invalid lego id
     return addr
