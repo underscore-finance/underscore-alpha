@@ -13,7 +13,7 @@ EULER_ID: public(immutable(uint256))
 FLUID_ID: public(immutable(uint256))
 MOONWELL_ID: public(immutable(uint256))
 MORPHO_ID: public(immutable(uint256))
-
+SKY_ID: public(immutable(uint256))
 
 @deploy
 def __init__(
@@ -24,6 +24,7 @@ def __init__(
     _fluidId: uint256,
     _moonwellId: uint256,
     _morphoId: uint256,
+    _skyId: uint256,
 ):
     LEGO_REGISTRY = _legoRegistry
 
@@ -34,6 +35,7 @@ def __init__(
     assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_fluidId) # dev: invalid id
     assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_moonwellId) # dev: invalid id
     assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_morphoId) # dev: invalid id
+    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_skyId) # dev: invalid id
 
     AAVE_V3_ID = _aaveV3Id
     COMPOUND_V3_ID = _compoundV3Id
@@ -41,7 +43,7 @@ def __init__(
     FLUID_ID = _fluidId
     MOONWELL_ID = _moonwellId
     MORPHO_ID = _morphoId
-
+    SKY_ID = _skyId
 
 @view
 @external
@@ -113,3 +115,15 @@ def morpho() -> address:
 @external
 def morphoId() -> uint256:
     return MORPHO_ID
+
+
+@view
+@external
+def sky() -> address:
+    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(SKY_ID)
+
+
+@view
+@external
+def skyId() -> uint256:
+    return SKY_ID
