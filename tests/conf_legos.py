@@ -117,8 +117,8 @@ def lego_euler(fork, lego_registry, governor, mock_registry):
 
 
 @pytest.fixture(scope="session")
-def lego_sky(getRegistry, fork, mock_sky_psm, lego_registry, governor):
-    pool = getRegistry("sky", fork, mock_sky_psm)
+def lego_sky(getRegistry, fork, lego_registry, governor):
+    pool = getRegistry("sky", fork)
     addr = boa.load("contracts/legos/LegoSky.vy", pool, lego_registry, name="lego_sky")
     assert lego_registry.registerNewLego(addr, "Sky", sender=governor) != 0 # dev: invalid lego id
     return addr

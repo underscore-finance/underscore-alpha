@@ -6,8 +6,7 @@ from ethereum.ercs import IERC20
 import interfaces.LegoInterface as LegoPartner
 
 interface SkyPsm:
-    def withdraw(_asset: address, _receiver: address, _maxAssetsToWithdraw: uint256) -> uint256: nonpayable
-    def deposit(_asset: address, _receiver: address, _assetsToDeposit: uint256) -> uint256: nonpayable
+    def swapExactIn(_assetIn: address, _assetOut: address, _amountIn: uint256, _minAmountOut: uint256, _receiver: address, _referralCode: uint256) -> uint256: nonpayable
     def susds() -> address: view
     def usdc() -> address: view
     def usds() -> address: view
@@ -91,7 +90,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
     # deposit assets into lego partner
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
     assert extcall IERC20(_asset).approve(skyPsm, depositAmount, default_return_value=True) # dev: approval failed
-    vaultTokenAmountReceived: uint256 = extcall SkyPsm(skyPsm).deposit(_asset, _recipient, depositAmount)
+    vaultTokenAmountReceived: uint256 = extcall SkyPsm(skyPsm).swapExactIn(_asset, vaultToken, depositAmount, 0, _recipient, 0)
     assert vaultTokenAmountReceived != 0 # dev: no vault tokens received
     assert extcall IERC20(_asset).approve(skyPsm, 0, default_return_value=True) # dev: approval failed
 
@@ -127,8 +126,11 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     assert extcall IERC20(vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     # withdraw assets from lego partner
-    assetAmountReceived: uint256 = extcall SkyPsm(skyPsm).withdraw(_asset, _recipient, max_value(uint256))
+    withdrawAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(vaultToken).balanceOf(self))
+    assert extcall IERC20(vaultToken).approve(skyPsm, withdrawAmount, default_return_value=True) # dev: approval failed
+    assetAmountReceived: uint256 = extcall SkyPsm(skyPsm).swapExactIn(vaultToken, _asset, withdrawAmount, 0, _recipient, 0)
     assert assetAmountReceived != 0 # dev: no asset amount received
+    assert extcall IERC20(vaultToken).approve(skyPsm, 0, default_return_value=True) # dev: approval failed
 
     # refund if full withdrawal didn't happen
     currentLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)

@@ -143,8 +143,3 @@ def mock_registry(alpha_token_erc4626_vault, alpha_token_comp_vault):
 @pytest.fixture(scope="session")
 def mock_aave_v3_pool():
     return boa.load("contracts/mock/MockAaveV3Pool.vy", name="mock_aave_v3_pool")
-
-
-@pytest.fixture(scope="session")
-def mock_sky_psm(alpha_token):
-    return boa.load("contracts/mock/MockSkyPsm.vy", alpha_token, name="mock_sky_psm")
