@@ -41,8 +41,12 @@ LEGO_REGISTRIES = {
         "base": ["0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6", "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24"],
         "local": [],
     },
-    "aerodrome": {
+    "aero_classic": {
         "base": ["0x420DD381b31aEf6683db6B902084cB0FFECe40Da", "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"],
+        "local": ZERO_ADDRESS,
+    },
+    "aero_slipstream": {
+        "base": ["0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A", "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5"],
         "local": ZERO_ADDRESS,
     },
 }
@@ -164,13 +168,26 @@ def lego_uniswap_v2(fork, lego_registry, governor):
 
 
 @pytest.fixture(scope="session")
-def lego_aerodrome(fork, lego_registry, governor):
-    registries = LEGO_REGISTRIES["aerodrome"][fork]
+def lego_aero_classic(fork, lego_registry, governor):
+    registries = LEGO_REGISTRIES["aero_classic"][fork]
     if len(registries) == 0:
         pytest.skip("asset not relevant on this fork")
 
-    factory = boa.from_etherscan(registries[0], name="aerodrome_factory")
-    swap_router = boa.from_etherscan(registries[1], name="aerodrome_swap_router")
-    addr = boa.load("contracts/legos/LegoAerodrome.vy", factory, swap_router, lego_registry, name="lego_aerodrome")
-    assert lego_registry.registerNewLego(addr, "Aerodrome", sender=governor) != 0 # dev: invalid lego id
+    factory = boa.from_etherscan(registries[0], name="aero_classic_factory")
+    swap_router = boa.from_etherscan(registries[1], name="aero_classic_swap_router")
+    addr = boa.load("contracts/legos/LegoAeroClassic.vy", factory, swap_router, lego_registry, name="lego_aero_classic")
+    assert lego_registry.registerNewLego(addr, "aero_classic", sender=governor) != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_aero_slipstream(fork, lego_registry, governor):
+    registries = LEGO_REGISTRIES["aero_slipstream"][fork]
+    if len(registries) == 0:
+        pytest.skip("asset not relevant on this fork")
+
+    factory = boa.from_etherscan(registries[0], name="aero_slipstream_factory")
+    swap_router = boa.from_etherscan(registries[1], name="aero_slipstream_swap_router")
+    addr = boa.load("contracts/legos/LegoAeroSlipstream.vy", factory, swap_router, lego_registry, name="lego_aero_slipstream")
+    assert lego_registry.registerNewLego(addr, "aero_slipstream", sender=governor) != 0 # dev: invalid lego id
     return addr

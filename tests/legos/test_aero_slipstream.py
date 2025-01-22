@@ -10,24 +10,29 @@ TEST_ASSETS = [
     "weth",
     "aero",
     "cbbtc",
+    "eurc",
 ]
 
 
 TO_TOKEN = {
     "usdc": {
-        "base": "0x526728DBc96689597F85ae4cd716d4f7fCcBAE9d", # msUSD (sAMM)
+        "base": "0x526728DBc96689597F85ae4cd716d4f7fCcBAE9d", # msUSD (CL50)
         "local": ZERO_ADDRESS,
     },
     "weth": {
-        "base": "0x7Ba6F01772924a82D9626c126347A28299E98c98", # msETH (sAMM)
+        "base": "0x60a3e35cc302bfa44cb288bc5a4f316fdb1adb42", # EURC (CL100)
         "local": ZERO_ADDRESS,
     },
     "aero": {
-        "base": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", # USDC (vAMM)
+        "base": "0x4200000000000000000000000000000000000006", # weth (CL200)
         "local": ZERO_ADDRESS,
     },
     "cbbtc": {
-        "base": "0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b", # VIRTUAL (vAMM)
+        "base": "0x236aa50979D5f3De3Bd1Eeb40E81137F22ab794b", # tbtc (CL1)
+        "local": ZERO_ADDRESS,
+    },
+    "eurc": {
+        "base": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", # usdc (CL50)
         "local": ZERO_ADDRESS,
     },
 }
@@ -52,12 +57,12 @@ def getToToken(fork):
 
 @pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_aerodrome_swap_max(
+def test_aero_slipstream_swap_max(
     token_str,
     testLegoSwap,
     getTokenAndWhale,
     bob_ai_wallet,
-    lego_aerodrome,
+    lego_aero_slipstream,
     getToToken,
 ):
     # setup
@@ -65,17 +70,17 @@ def test_aerodrome_swap_max(
     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
     toToken = getToToken(token_str)
 
-    testLegoSwap(lego_aerodrome.legoId(), fromAsset, toToken)
+    testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken)
 
 
 @pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
-def test_aerodrome_swap_partial(
+def test_aero_slipstream_swap_partial(
     token_str,
     testLegoSwap,
     getTokenAndWhale,
     bob_ai_wallet,
-    lego_aerodrome,
+    lego_aero_slipstream,
     getToToken,
 ):
     # setup
@@ -84,4 +89,4 @@ def test_aerodrome_swap_partial(
     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
     toToken = getToToken(token_str)
 
-    testLegoSwap(lego_aerodrome.legoId(), fromAsset, toToken, testAmount // 2)
+    testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken, testAmount // 2)
