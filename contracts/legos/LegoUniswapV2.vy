@@ -5,28 +5,16 @@ implements: LegoPartner
 from ethereum.ercs import IERC20
 import interfaces.LegoInterface as LegoPartner
 
-interface UniV3Factory:
-    def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view
+interface UniV2Router:
+    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[address, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
 
-interface UniV3SwapRouter:
-    def exactInputSingle(_params: ExactInputSingleParams) -> uint256: payable
-
-interface UniV3Pool:
-    def liquidity() -> uint128: view
+interface UniV2Factory:
+    def getPair(_tokenA: address, _tokenB: address) -> address: view
 
 interface LegoRegistry:
     def governor() -> address: view
 
-struct ExactInputSingleParams:
-    tokenIn: address
-    tokenOut: address
-    fee: uint24
-    recipient: address
-    amountIn: uint256
-    amountOutMinimum: uint256
-    sqrtPriceLimitX96: uint160
-
-event UniswapV3Swap:
+event UniswapV2Swap:
     sender: indexed(address)
     tokenIn: indexed(address)
     tokenOut: indexed(address)
@@ -39,54 +27,35 @@ event FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
-event UniswapV3LegoIdSet:
+event UniswapV2LegoIdSet:
     legoId: uint256
 
 legoId: public(uint256)
 
 LEGO_REGISTRY: public(immutable(address))
-UNISWAP_V3_FACTORY: public(immutable(address))
-UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
+UNISWAP_V2_FACTORY: public(immutable(address))
+UNISWAP_V2_ROUTER: public(immutable(address))
 
-FEE_TIERS: constant(uint24[4]) = [100, 500, 3000, 10000] # 0.01%, 0.05%, 0.3%, 1%
+MAX_ASSETS: constant(uint256) = 5
 
 
 @deploy
-def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _legoRegistry: address):
-    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _legoRegistry] # dev: invalid addrs
-    UNISWAP_V3_FACTORY = _uniswapV3Factory
-    UNISWAP_V3_SWAP_ROUTER = _uniswapV3SwapRouter
+def __init__(_uniswapV2Factory: address, _uniswapV2Router: address, _legoRegistry: address):
+    assert empty(address) not in [_uniswapV2Factory, _uniswapV2Router, _legoRegistry] # dev: invalid addrs
+    UNISWAP_V2_FACTORY = _uniswapV2Factory
+    UNISWAP_V2_ROUTER = _uniswapV2Router
     LEGO_REGISTRY = _legoRegistry
 
 
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
-    return [UNISWAP_V3_FACTORY, UNISWAP_V3_SWAP_ROUTER]
+    return [UNISWAP_V2_FACTORY, UNISWAP_V2_ROUTER]
 
 
 ########
 # Swap #
 ########
-
-
-@view
-@internal
-def _getBestFeeTier(_tokenA: address, _tokenB: address) -> uint24:
-    bestLiquidity: uint128 = 0
-    bestFeeTier: uint24 = 0
-
-    factory: address = UNISWAP_V3_FACTORY
-    for i: uint256 in range(4):
-        fee: uint24 = FEE_TIERS[i]
-        pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)
-        if pool != empty(address):
-            liquidity: uint128 = staticcall UniV3Pool(pool).liquidity()
-            if liquidity > bestLiquidity:
-                bestLiquidity = liquidity
-                bestFeeTier = fee
-
-    return bestFeeTier
 
 
 @external
@@ -97,8 +66,7 @@ def swapTokens(
     _minAmountOut: uint256, 
     _recipient: address,
 ) -> (uint256, uint256, uint256):
-    bestFeeTier: uint24 = self._getBestFeeTier(_tokenIn, _tokenOut)
-    assert bestFeeTier != 0 # dev: no pool found
+    assert staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut) != empty(address) # dev: no pool found
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -109,20 +77,12 @@ def swapTokens(
     assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
 
     # swap assets via lego partner
-    swapRouter: address = UNISWAP_V3_SWAP_ROUTER
+    swapRouter: address = UNISWAP_V2_ROUTER
     fromAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
     assert extcall IERC20(_tokenIn).approve(swapRouter, fromAmount, default_return_value=True) # dev: approval failed
-    toAmount: uint256 = extcall UniV3SwapRouter(swapRouter).exactInputSingle(
-        ExactInputSingleParams(
-            tokenIn=_tokenIn,
-            tokenOut=_tokenOut,
-            fee=bestFeeTier,
-            recipient=_recipient,
-            amountIn=fromAmount,
-            amountOutMinimum=_minAmountOut,
-            sqrtPriceLimitX96=0,
-        )
-    )
+    amounts: DynArray[uint256, MAX_ASSETS] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(fromAmount, _minAmountOut, [_tokenIn, _tokenOut], _recipient, block.timestamp)
+    
+    toAmount: uint256 = amounts[1]
     assert toAmount != 0 # dev: no tokens swapped
     assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
 
@@ -134,7 +94,7 @@ def swapTokens(
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
 
     actualSwapAmount: uint256 = fromAmount - refundAssetAmount
-    log UniswapV3Swap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, _recipient)
+    log UniswapV2Swap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, _recipient)
     return actualSwapAmount, toAmount, refundAssetAmount
 
 
@@ -181,5 +141,5 @@ def setLegoId(_legoId: uint256) -> bool:
     assert msg.sender == LEGO_REGISTRY # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
-    log UniswapV3LegoIdSet(_legoId)
+    log UniswapV2LegoIdSet(_legoId)
     return True
