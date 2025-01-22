@@ -139,6 +139,16 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount
 
 
+###################
+# Not Implemented #
+###################
+
+
+@external
+def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256):
+    raise "Not Implemented"
+
+
 #################
 # Recover Funds #
 #################

@@ -32,6 +32,8 @@ struct ActionInstruction:
     recipient: address
     altLegoId: uint256
     altVault: address
+    altAsset: address
+    altAmount: uint256
 
 event AgenticDeposit:
     user: indexed(address)
@@ -51,6 +53,17 @@ event AgenticWithdrawal:
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
     refundVaultTokenAmount: uint256
+    legoId: uint256
+    legoAddr: address
+    isAgent: bool
+
+event AgenticSwap:
+    user: indexed(address)
+    tokenIn: indexed(address)
+    tokenOut: indexed(address)
+    swapAmount: uint256
+    toAmount: uint256
+    refundAssetAmount: uint256
     legoId: uint256
     legoAddr: address
     isAgent: bool
@@ -417,6 +430,64 @@ def _rebalance(
     return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived
 
 
+########
+# Swap #
+########
+
+
+@nonreentrant
+@external
+def swapTokens(
+    _legoId: uint256,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256 = max_value(uint256),
+    _minAmountOut: uint256 = 0, 
+) -> (uint256, uint256):
+    """
+    @notice Swaps tokens using a specified lego integration
+    @dev Validates agent permissions if caller is not the owner
+    @param _legoId The ID of the lego to use for swapping
+    @param _tokenIn The address of the token to swap from
+    @param _tokenOut The address of the token to swap to
+    @param _amountIn The amount of input tokens to swap (defaults to max balance)
+    @param _minAmountOut The minimum amount of output tokens to receive (defaults to 0)
+    @return uint256 The actual amount of input tokens swapped
+    @return uint256 The amount of output tokens received
+    """
+    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_tokenIn, _tokenOut], [_legoId])
+    return self._swapTokens(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, isAgent)
+
+
+@internal
+def _swapTokens(
+    _legoId: uint256,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256, 
+    _isAgent: bool,
+) -> (uint256, uint256):
+    legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
+    assert legoAddr != empty(address) # dev: invalid lego
+    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
+
+    # finalize amount
+    swapAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(self))
+    assert swapAmount != 0 # dev: nothing to swap
+    assert extcall IERC20(_tokenIn).approve(legoAddr, swapAmount, default_return_value=True) # dev: approval failed
+
+    # swap assets via lego partner
+    actualSwapAmount: uint256 = 0
+    toAmount: uint256 = 0
+    refundAssetAmount: uint256 = 0
+    actualSwapAmount, toAmount, refundAssetAmount = extcall LegoPartner(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
+    assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    log AgenticSwap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, refundAssetAmount, _legoId, legoAddr, _isAgent)
+    return actualSwapAmount, toAmount
+
+
 ##################
 # Transfer Funds #
 ##################
@@ -537,6 +608,11 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         elif instruction.action == ActionType.TRANSFER:
             assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId]) # dev: not allowed
             self._transferFunds(instruction.recipient, instruction.amount, instruction.asset, owner, isAgent)
+
+        # swap
+        elif instruction.action == ActionType.SWAP:
+            assert self._canAgentAccess(agentInfo, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: not allowed
+            self._swapTokens(instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, isAgent)
 
     return True
 

@@ -33,6 +33,10 @@ LEGO_REGISTRIES = {
         "base": "0x1601843c5E9bC251A3272907010AFa41Fa18347E",
         "local": ZERO_ADDRESS,
     },
+    "uniswap_v3": {
+        "base": ["0x33128a8fC17869897dcE68Ed026d694621f6FDfD", "0x2626664c2603336E57B271c5C0b26F421741e481"],
+        "local": [],
+    },
 }
 
 @pytest.fixture(scope="session")
@@ -121,4 +125,19 @@ def lego_sky(getRegistry, fork, lego_registry, governor):
     pool = getRegistry("sky", fork)
     addr = boa.load("contracts/legos/LegoSky.vy", pool, lego_registry, name="lego_sky")
     assert lego_registry.registerNewLego(addr, "Sky", sender=governor) != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_uniswap_v3(fork, lego_registry, governor, mock_registry):
+    registries = LEGO_REGISTRIES["uniswap_v3"][fork]
+
+    factory = mock_registry 
+    swap_router = mock_registry
+    if len(registries) != 0:
+        factory = boa.from_etherscan(registries[0], name="uniswap_v3_factory")
+        swap_router = boa.from_etherscan(registries[1], name="uniswap_v3_swap_router")
+
+    addr = boa.load("contracts/legos/LegoUniswapV3.vy", factory, swap_router, lego_registry, name="lego_uniswap_v3")
+    assert lego_registry.registerNewLego(addr, "Uniswap V3", sender=governor) != 0 # dev: invalid lego id
     return addr

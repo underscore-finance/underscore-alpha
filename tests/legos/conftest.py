@@ -119,3 +119,55 @@ def testLegoWithdrawal(bob_ai_wallet, bob_agent, lego_registry, _test):
         _test(pre_user_asset_bal + amount_received, _asset.balanceOf(bob_ai_wallet.address))
 
     yield testLegoWithdrawal
+
+
+@pytest.fixture(scope="package")
+def testLegoSwap(bob_ai_wallet, bob_agent, lego_registry, _test):
+    def testLegoSwap(
+        _legoId,
+        _tokenIn,
+        _tokenOut,
+        _amountIn = MAX_UINT256,
+        _minAmountOut = 0, 
+    ):
+        # pre balances
+        pre_user_from_bal = _tokenIn.balanceOf(bob_ai_wallet)
+        pre_user_to_bal = _tokenOut.balanceOf(bob_ai_wallet)
+
+        lego_addr = lego_registry.getLegoAddr(_legoId)
+        pre_lego_from_bal = _tokenIn.balanceOf(lego_addr)
+        pre_lego_to_bal = _tokenOut.balanceOf(lego_addr)
+
+        # swap
+        fromSwapAmount, toAmount = bob_ai_wallet.swapTokens(_legoId, _tokenIn.address, _tokenOut.address, _amountIn, _minAmountOut, sender=bob_agent)
+
+        # event
+        log_wallet = filter_logs(bob_ai_wallet, "AgenticSwap")[0]
+        assert log_wallet.user == bob_agent
+        assert log_wallet.tokenIn == _tokenIn.address
+        assert log_wallet.tokenOut == _tokenOut.address
+        assert log_wallet.swapAmount == fromSwapAmount
+        assert log_wallet.toAmount == toAmount
+        assert log_wallet.legoId == _legoId
+        assert log_wallet.legoAddr == lego_addr
+        assert log_wallet.isAgent == True
+
+        assert fromSwapAmount != 0
+        assert toAmount != 0
+
+        if _amountIn == MAX_UINT256:
+            _test(fromSwapAmount, pre_user_from_bal)
+        else:
+            _test(fromSwapAmount, _amountIn)
+
+        # lego addr should not have any leftover
+        assert _tokenIn.balanceOf(lego_addr) == pre_lego_from_bal
+        assert _tokenOut.balanceOf(lego_addr) == pre_lego_to_bal
+
+        # to tokens
+        _test(pre_user_to_bal + toAmount, _tokenOut.balanceOf(bob_ai_wallet.address))
+
+        # from tokens
+        _test(pre_user_from_bal - fromSwapAmount, _tokenIn.balanceOf(bob_ai_wallet.address))
+
+    yield testLegoSwap
