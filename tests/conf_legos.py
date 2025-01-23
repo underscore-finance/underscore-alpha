@@ -49,6 +49,10 @@ LEGO_REGISTRIES = {
         "base": ["0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A", "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5"],
         "local": ZERO_ADDRESS,
     },
+    "curve": {
+        "base": "0x5ffe7FB82894076ECB99A30D6A32e969e6e35E98",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 
@@ -190,4 +194,15 @@ def lego_aero_slipstream(fork, lego_registry, governor):
     swap_router = boa.from_etherscan(registries[1], name="aero_slipstream_swap_router")
     addr = boa.load("contracts/legos/LegoAeroSlipstream.vy", factory, swap_router, lego_registry, name="lego_aero_slipstream")
     assert lego_registry.registerNewLego(addr, "aero_slipstream", sender=governor) != 0 # dev: invalid lego id
+    return addr
+
+
+@pytest.fixture(scope="session")
+def lego_curve(fork, lego_registry, governor):
+    registry = LEGO_REGISTRIES["curve"][fork]
+    if registry == ZERO_ADDRESS:
+        pytest.skip("asset not relevant on this fork")
+    factory = boa.from_etherscan(registry, name="curve_factory")
+    addr = boa.load("contracts/legos/LegoCurve.vy", factory, lego_registry, name="lego_curve")
+    assert lego_registry.registerNewLego(addr, "Curve", sender=governor) != 0 # dev: invalid lego id
     return addr
