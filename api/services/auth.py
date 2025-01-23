@@ -29,6 +29,13 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     content={"detail": "Invalid API Key"}
                 )
 
+            # TODO: Get the user/agent from the database
+            # Add user info to request state
+            request.state.agent = {
+                'api_key': api_key,
+                'id': 'agent-123',
+                'pk': '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+            }
             response = await call_next(request)
             return response
 

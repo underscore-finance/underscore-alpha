@@ -10,9 +10,5 @@ def get_blockchain_context():
     yield env
 
 
-def get_account(accountName):
-    accountKey = os.environ.get(f'{accountName}_PRIVATE_KEY')
-    account = Account.from_key(
-        accountKey if accountKey else '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
-
-    return account
+def get_account(key='0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'):
+    return Account.from_key(key)

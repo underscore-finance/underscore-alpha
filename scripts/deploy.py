@@ -8,7 +8,7 @@ from scripts.generate_contracts import generate_contract_files
 def main():
     generate_contract_files()
     with get_blockchain_context():
-        deployer = get_account('deployer')
+        deployer = get_account()
         boa.env.add_account(deployer)
         print("Deploying Undy...")
         deployment = {}
