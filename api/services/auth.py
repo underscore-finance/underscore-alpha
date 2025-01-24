@@ -2,15 +2,33 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
+from api.models import Agent, Agent_Pydantic
+from api.services.turnkey import turnkey_client
 
 
 # handle api key
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # List of paths that don't require authentication
-        open_paths = ["/", "/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"]
+        open_paths = [
+            "/",
+            "/agents",
+            "/agents/",
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+            "/docs/oauth2-redirect"
+        ]
 
-        if request.url.path in open_paths:
+        path = request.url.path
+
+        # Check exact matches
+        if path in open_paths:
+            response = await call_next(request)
+            return response
+
+        # Check if path matches /agents/{id} pattern
+        if path.startswith("/agents/") and path.count("/") == 2:
             response = await call_next(request)
             return response
 
@@ -22,20 +40,24 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                     content={"detail": "API Key header not found"}
                 )
 
-            valid_api_key = 'TEST'
-            if api_key != valid_api_key:
+            agent = await Agent.get_or_none(api_key=api_key)
+            if not agent:
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Invalid API Key"}
                 )
 
-            # TODO: Get the user/agent from the database
-            # Add user info to request state
+            # Convert agent to pydantic model for serialization
+            agent_info = await Agent_Pydantic.from_tortoise_orm(agent)
+            agent_dict = agent_info.model_dump()
+
+            # Get private key and add to request state
+            private_key = await turnkey_client.get_private_key(agent.pk_id)
             request.state.agent = {
-                'api_key': api_key,
-                'id': 'agent-123',
-                'pk': '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+                **agent_dict,
+                'pk': private_key
             }
+
             response = await call_next(request)
             return response
 
