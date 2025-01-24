@@ -130,6 +130,18 @@ MAX_LEGOS: constant(uint256) = 10
 MAX_INSTRUCTIONS: constant(uint256) = 20
 
 
+struct Signature:
+    signature: Bytes[65]
+    signer: address
+    expiration: uint256
+
+usedSignatures: public(HashMap[Bytes[65], bool])
+
+# eip-712
+DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
+ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
+
+
 @deploy
 def __init__():
     # make sure original reference contract can't be initialized
@@ -235,11 +247,58 @@ def _isAgentWithValidation(
     return True
 
 
+
+@view
+@external
+def DOMAIN_SEPARATOR() -> bytes32:
+    return self._domainSeparator()
+
+
+@view
+@internal
+def _domainSeparator() -> bytes32:
+    # eip-712
+    return keccak256(
+        concat(
+            DOMAIN_TYPE_HASH,
+            keccak256('AgenticWallet'),
+            keccak256(API_VERSION),
+            abi_encode(chain.id, self)
+        )
+    )
+
+
+
+@internal
+def _processSignature(_encodedValue: Bytes[192], _signature: Signature):
+    assert not self.usedSignatures[_signature.signature] 
+    assert _signature.expiration >= block.timestamp
+    
+    digest: bytes32 = keccak256(concat(b'\x19\x01', self._domainSeparator(), keccak256(_encodedValue)))
+
+    # NOTE: signature is packed as r, s, v
+    r: bytes32 = convert(slice(_signature.signature, 0, 32), bytes32)
+    s: bytes32 = convert(slice(_signature.signature, 32, 32), bytes32)
+    v: uint8 = convert(slice(_signature.signature, 64, 1), uint8)
+    
+    response: Bytes[32] = raw_call(
+        ECRECOVER_PRECOMPILE,
+        abi_encode(digest, v, r, s),
+        max_outsize=32,
+        is_static_call=True  # This is a view function
+    )
+    
+    assert len(response) == 32  # dev: invalid ecrecover response length
+    assert abi_decode(response, address) == _signature.signer
+    self.usedSignatures[_signature.signature] = True
+
+
+
 ###########
 # Deposit #
 ###########
 
-
+DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address asset,uint256 amount,address vault,uint256 expiry)')
 @nonreentrant
 @external
 def depositTokens(
@@ -247,6 +306,7 @@ def depositTokens(
     _asset: address,
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
+    _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256):
     """
     @notice Deposits tokens into a specified lego integration and vault
@@ -254,11 +314,17 @@ def depositTokens(
     @param _asset The address of the token to deposit
     @param _amount The amount to deposit (defaults to max)
     @param _vault The target vault address (optional)
+    @param _sig The signature of the agent
     @return uint256 The amount of assets deposited
     @return address The vault token address
     @return uint256 The amount of vault tokens received
     """
-    isAgent: bool = self._isAgentWithValidation(msg.sender, self.owner, [_asset], [_legoId])
+    sender: address = msg.sender
+    if _sig.signer != empty(address) and _sig.signature != empty(Bytes[65]):
+        self._processSignature(abi_encode(DEPOSIT_TYPE_HASH, _legoId, _asset, _amount, _vault, _sig.expiration), _sig) # dev: invalid signature
+        sender = _sig.signer
+
+    isAgent: bool = self._isAgentWithValidation(sender, self.owner, [_asset], [_legoId])
     return self._depositTokens(_legoId, _asset, _amount, _vault, isAgent)
 
 

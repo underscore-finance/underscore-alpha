@@ -37,6 +37,18 @@ TOKENS = {
         "base": "0x820C137fa70C8691f0e44Dc420a5e53c168921Dc",
         "local": ZERO_ADDRESS,
     },
+    "tbtc": {
+        "base": "0x236aa50979d5f3de3bd1eeb40e81137f22ab794b",
+        "local": ZERO_ADDRESS,
+    },
+    "frok": {
+        "base": "0x42069babe14fb1802c5cb0f50bb9d2ad6fef55e2",
+        "local": ZERO_ADDRESS,
+    },
+    "crvusd": {
+        "base": "0x417ac0e078398c154edfadd9ef675d30be60af93",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 WHALES = {
@@ -72,6 +84,18 @@ WHALES = {
         "base": "0x1601843c5E9bC251A3272907010AFa41Fa18347E",
         "local": ZERO_ADDRESS,
     },
+    "tbtc": {
+        "base": "0xF2416C264Aa4068fF4D1949383366458F295F205",
+        "local": ZERO_ADDRESS,
+    },
+    "frok": {
+        "base": "0x8A160732913759Db1959C91700C8602793C46D64",
+        "local": ZERO_ADDRESS,
+    },
+    "crvusd": {
+        "base": "0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 
@@ -85,6 +109,9 @@ TEST_AMOUNTS = {
     "aero": 25_000,
     "eurc": 10_000,
     "usds": 10_000,
+    "tbtc": 2,
+    "frok": 1_000,
+    "crvusd": 10_000,
 }
 
 
