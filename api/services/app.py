@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from api.services.auth import setup_auth
+from api.services.db import init_db
 
 # Initialize FastAPI
 app = FastAPI(
@@ -9,3 +10,5 @@ app = FastAPI(
 )
 
 setup_auth(app)
+
+init_db(app)

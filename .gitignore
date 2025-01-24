@@ -12,3 +12,6 @@ __pycache__
 out/
 generated/
 deployments/
+
+# Database
+*.sqlite3*
