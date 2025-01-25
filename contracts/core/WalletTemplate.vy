@@ -616,7 +616,7 @@ def transferFunds(
     _amount: uint256 = max_value(uint256),
     _asset: address = empty(address),
     _sig: Signature = empty(Signature),
-) -> bool:
+) -> uint256:
     """
     @notice Transfers funds to a specified recipient
     @dev Handles both ETH and token transfers with optional amount specification
@@ -624,7 +624,7 @@ def transferFunds(
     @param _amount The amount to transfer (defaults to max)
     @param _asset The token address (empty for ETH)
     @param _sig The signature of agent or owner (optional)
-    @return bool True if the transfer was successful
+    @return uint256 The amount of funds transferred
     """
     owner: address = self.owner
     signer: address = self._getSignerOnTransfer(_recipient, _amount, _asset, _sig)
@@ -640,7 +640,7 @@ def _transferFunds(
     _asset: address,
     _owner: address,
     _isSignerAgent: bool,
-) -> bool:
+) -> uint256:
     # validate recipient
     if _recipient != _owner:
         assert self.isRecipientAllowed[_recipient] # dev: recipient not allowed
@@ -660,7 +660,7 @@ def _transferFunds(
         assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
 
     log WalletFundsTransferred(_signer, _recipient, _asset, amount, msg.sender, _isSignerAgent)
-    return True
+    return amount
 
 
 @internal
@@ -1077,8 +1077,8 @@ def _domainSeparator() -> bytes32:
 
 @internal
 def _isValidSignature(_encodedValue: Bytes[256], _sig: Signature):
-    assert not self.usedSignatures[_sig.signature] 
-    assert _sig.expiration >= block.timestamp
+    assert not self.usedSignatures[_sig.signature] # dev: signature already used
+    assert _sig.expiration >= block.timestamp # dev: signature expired
     
     digest: bytes32 = keccak256(concat(b'\x19\x01', self._domainSeparator(), keccak256(_encodedValue)))
 
@@ -1091,10 +1091,10 @@ def _isValidSignature(_encodedValue: Bytes[256], _sig: Signature):
         ECRECOVER_PRECOMPILE,
         abi_encode(digest, v, r, s),
         max_outsize=32,
-        is_static_call=True  # This is a view function
+        is_static_call=True # This is a view function
     )
     
-    assert len(response) == 32  # dev: invalid ecrecover response length
-    assert abi_decode(response, address) == _sig.signer
+    assert len(response) == 32 # dev: invalid ecrecover response length
+    assert abi_decode(response, address) == _sig.signer # dev: invalid signature
     self.usedSignatures[_sig.signature] = True
 

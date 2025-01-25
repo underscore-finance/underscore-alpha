@@ -119,3 +119,30 @@ def test_swap_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, alp
     assert actualSwapAmount == deposit_amount
     assert alpha_token.balanceOf(ai_wallet) == 0
     assert bravo_token.balanceOf(ai_wallet) == toAmount == deposit_amount
+
+
+def test_transfer_with_signature(ai_wallet, sally, agent, owner, mock_lego_alpha, alpha_token, alpha_token_whale, broadcaster, signTransfer):
+    # setup
+    lego_id = mock_lego_alpha.legoId()
+    deposit_amount = 1_000 * EIGHTEEN_DECIMALS
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+
+    # setup whitelist
+    assert ai_wallet.setWhitelistAddr(sally, True, sender=owner)
+
+    # signature
+    signature = signTransfer(ai_wallet, sally, MAX_UINT256, alpha_token.address)
+
+    # transfer
+    amount = ai_wallet.transferFunds(
+        sally, MAX_UINT256, alpha_token.address, signature, sender=broadcaster)
+    
+    # transfer
+    log = filter_logs(ai_wallet, "WalletFundsTransferred")[0]
+    assert log.signer == agent
+    assert log.broadcaster == broadcaster
+    assert log.isSignerAgent
+
+    assert amount == deposit_amount
+    assert alpha_token.balanceOf(ai_wallet) == 0
+    assert alpha_token.balanceOf(sally) == deposit_amount

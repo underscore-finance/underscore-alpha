@@ -151,7 +151,7 @@ def test_deposit_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_toke
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(
         lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=owner)
     log = filter_logs(ai_wallet, "AgenticDeposit")[0]
-    assert log.user == owner
+    assert log.signer == owner
     assert log.asset == alpha_token.address
     assert log.vaultToken == alpha_token_erc4626_vault.address == vaultToken
     assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
@@ -159,7 +159,7 @@ def test_deposit_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_toke
     assert log.refundAssetAmount == 0
     assert log.legoId == lego_id
     assert log.legoAddr == mock_lego_alpha.address
-    assert not log.isAgent
+    assert not log.isSignerAgent
 
     assert alpha_token.balanceOf(ai_wallet) == 0
     wallet_bal = alpha_token_erc4626_vault.balanceOf(ai_wallet)
@@ -170,9 +170,9 @@ def test_deposit_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_toke
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(
         lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=agent)
     log = filter_logs(ai_wallet, "AgenticDeposit")[0]
-    assert log.user == agent
+    assert log.signer == agent
     assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
-    assert log.isAgent
+    assert log.isSignerAgent
 
     assert alpha_token.balanceOf(ai_wallet) == 0
     new_wallet_bal = alpha_token_erc4626_vault.balanceOf(ai_wallet)
@@ -183,9 +183,9 @@ def test_deposit_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_toke
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokensWithTransfer(
         lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=alpha_token_whale)
     log = filter_logs(ai_wallet, "AgenticDeposit")[0]
-    assert log.user == alpha_token_whale
+    assert log.signer == alpha_token_whale
     assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
-    assert not log.isAgent
+    assert not log.isSignerAgent
 
     assert alpha_token.balanceOf(ai_wallet) == 0
     assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == new_wallet_bal + vaultTokenAmountReceived
@@ -222,14 +222,14 @@ def test_withdrawal_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_t
     assetAmountReceived, vaultTokenAmountBurned = ai_wallet.withdrawTokens(
         lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=owner)
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
-    assert log.user == owner
+    assert log.signer == owner
     assert log.asset == alpha_token.address
     assert log.vaultToken == alpha_token_erc4626_vault.address
     assert log.assetAmountReceived == assetAmountReceived
     assert log.vaultTokenAmountBurned == vaultTokenAmountBurned
     assert log.refundVaultTokenAmount == 0
     assert log.legoId == lego_id
-    assert not log.isAgent
+    assert not log.isSignerAgent
 
     wallet_bal = alpha_token.balanceOf(ai_wallet)
     assert wallet_bal == assetAmountReceived
@@ -244,8 +244,8 @@ def test_withdrawal_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_t
     assetAmountReceived, vaultTokenAmountBurned = ai_wallet.withdrawTokens(
         lego_id, alpha_token, vaultTokenAmountReceived, alpha_token_erc4626_vault, sender=agent)
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
-    assert log.user == agent
-    assert log.isAgent
+    assert log.signer == agent
+    assert log.isSignerAgent
     assert log.vaultTokenAmountBurned == vaultTokenAmountBurned
 
     assert alpha_token.balanceOf(ai_wallet) == assetAmountReceived + wallet_bal
@@ -281,7 +281,7 @@ def test_rebalance_operations(ai_wallet, owner, agent, mock_lego_alpha, mock_leg
     log_withdrawal = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
     log_deposit = filter_logs(ai_wallet, "AgenticDeposit")[0]
 
-    assert log_withdrawal.user == owner
+    assert log_withdrawal.signer == owner
     assert log_withdrawal.asset == alpha_token.address
     assert log_withdrawal.vaultToken == alpha_token_erc4626_vault.address == vaultToken
     assert log_withdrawal.assetAmountReceived != 0
@@ -289,9 +289,9 @@ def test_rebalance_operations(ai_wallet, owner, agent, mock_lego_alpha, mock_leg
     assert log_withdrawal.refundVaultTokenAmount == 0
     assert log_withdrawal.legoId == lego_id
     assert log_withdrawal.legoAddr == mock_lego_alpha.address
-    assert not log_withdrawal.isAgent
+    assert not log_withdrawal.isSignerAgent
 
-    assert log_deposit.user == owner
+    assert log_deposit.signer == owner
     assert log_deposit.asset == alpha_token.address
     assert log_deposit.vaultToken == alpha_token_erc4626_vault_another.address == newVaultToken
     assert log_deposit.assetAmountDeposited == assetAmountDeposited
@@ -299,7 +299,7 @@ def test_rebalance_operations(ai_wallet, owner, agent, mock_lego_alpha, mock_leg
     assert log_deposit.refundAssetAmount == 0
     assert log_deposit.legoId == alt_lego_id
     assert log_deposit.legoAddr == mock_lego_alpha_another.address
-    assert not log_deposit.isAgent
+    assert not log_deposit.isSignerAgent
 
     assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == 0
     assert alpha_token_erc4626_vault_another.balanceOf(ai_wallet) == vaultTokenAmountReceived
@@ -314,11 +314,11 @@ def test_rebalance_operations(ai_wallet, owner, agent, mock_lego_alpha, mock_leg
     log_withdrawal = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
     log_deposit = filter_logs(ai_wallet, "AgenticDeposit")[0]
 
-    assert log_withdrawal.user == agent
-    assert log_withdrawal.isAgent
+    assert log_withdrawal.signer == agent
+    assert log_withdrawal.isSignerAgent
     assert log_withdrawal.vaultTokenAmountBurned == origVaultTokenAmountReceived
-    assert log_deposit.user == agent
-    assert log_deposit.isAgent
+    assert log_deposit.signer == agent
+    assert log_deposit.isSignerAgent
     assert log_deposit.vaultTokenAmountReceived == vaultTokenAmountReceived
 
     # Test rebalance permissions
@@ -341,7 +341,7 @@ def test_fund_transfers(ai_wallet, owner, agent, alpha_token, alpha_token_whale,
     assert log.recipient == sally
     assert log.asset == alpha_token.address
     assert log.amount == transfer_amount
-    assert not log.isAgent
+    assert not log.isSignerAgent
 
     assert alpha_token.balanceOf(ai_wallet) == 0
     assert alpha_token.balanceOf(sally) == transfer_amount
@@ -353,7 +353,7 @@ def test_fund_transfers(ai_wallet, owner, agent, alpha_token, alpha_token_whale,
     assert log.recipient == sally
     assert log.asset == alpha_token.address
     assert log.amount == transfer_amount
-    assert log.isAgent
+    assert log.isSignerAgent
 
     assert alpha_token.balanceOf(ai_wallet) == 0
     assert alpha_token.balanceOf(sally) == transfer_amount * 2
@@ -366,7 +366,7 @@ def test_fund_transfers(ai_wallet, owner, agent, alpha_token, alpha_token_whale,
     assert log.recipient == sally
     assert log.asset == ZERO_ADDRESS
     assert log.amount == amount
-    assert log.isAgent
+    assert log.isSignerAgent
 
     # Test whitelist functionality
     assert not ai_wallet.isRecipientAllowed(bob)
@@ -398,16 +398,13 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
     # Create batch instructions
     instructions = [
         # Deposit
-        (DEPOSIT_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault,
-         MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.DEPOSIT = 0
+        (DEPOSIT_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),  # ActionType.DEPOSIT = 0
         # Withdrawal
-        (WITHDRAWAL_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault,
-         amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.WITHDRAWAL = 1
+        (WITHDRAWAL_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),  # ActionType.WITHDRAWAL = 1
         # Rebalance
-        (REBALANCE_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256,
-         ZERO_ADDRESS, alt_lego_id, alpha_token_erc4626_vault_another),  # ActionType.REBALANCE = 2
+        (REBALANCE_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, alt_lego_id, alpha_token_erc4626_vault_another, ZERO_ADDRESS, 0),  # ActionType.REBALANCE = 2
         # Transfer
-        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, MAX_UINT256, sally, 0, ZERO_ADDRESS),  # ActionType.TRANSFER = 3
+        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, MAX_UINT256, sally, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),  # ActionType.TRANSFER = 3
     ]
 
     # Test batch actions by owner
@@ -415,7 +412,7 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
 
     # deposit
     log = filter_logs(ai_wallet, "AgenticDeposit")[0]
-    assert log.user == agent
+    assert log.signer == agent
     assert log.asset == alpha_token.address
     assert log.vaultToken == alpha_token_erc4626_vault.address
     assert log.assetAmountDeposited == amount
@@ -423,11 +420,11 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
     assert log.refundAssetAmount == 0
     assert log.legoId == lego_id
     assert log.legoAddr == mock_lego_alpha.address
-    assert log.isAgent
+    assert log.isSignerAgent
 
     # withdrawal
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
-    assert log.user == agent
+    assert log.signer == agent
     assert log.asset == alpha_token.address
     assert log.vaultToken == alpha_token_erc4626_vault.address
     assert log.assetAmountReceived == amount // 2
@@ -435,11 +432,11 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
     assert log.refundVaultTokenAmount == 0
     assert log.legoId == lego_id
     assert log.legoAddr == mock_lego_alpha.address
-    assert log.isAgent
+    assert log.isSignerAgent
 
     # rebalance
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[1]
-    assert log.user == agent
+    assert log.signer == agent
     assert log.asset == alpha_token.address
     assert log.vaultToken == alpha_token_erc4626_vault.address
     assert log.assetAmountReceived == amount // 2
@@ -447,10 +444,10 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
     assert log.refundVaultTokenAmount == 0
     assert log.legoId == lego_id
     assert log.legoAddr == mock_lego_alpha.address
-    assert log.isAgent
+    assert log.isSignerAgent
 
     log = filter_logs(ai_wallet, "AgenticDeposit")[1]
-    assert log.user == agent
+    assert log.signer == agent
     assert log.asset == alpha_token.address
     assert log.vaultToken == alpha_token_erc4626_vault_another.address
     assert log.assetAmountDeposited == amount // 2
@@ -458,14 +455,14 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
     assert log.refundAssetAmount == 0
     assert log.legoId == alt_lego_id
     assert log.legoAddr == mock_lego_alpha_another.address
-    assert log.isAgent
+    assert log.isSignerAgent
 
     # transfer
     log = filter_logs(ai_wallet, "WalletFundsTransferred")[0]
     assert log.recipient == sally
     assert log.asset == alpha_token.address
     assert log.amount == amount // 2
-    assert log.isAgent
+    assert log.isSignerAgent
 
     # data
     assert alpha_token.balanceOf(ai_wallet) == 0
@@ -499,7 +496,7 @@ def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale):
     assert log.amount == eth_amount
     assert log.paidEth == 0
     assert log.weth == weth.address
-    assert log.isAgent
+    assert log.isSignerAgent
 
     assert assetAmountDeposited == eth_amount
     assert vaultToken == vault_token.address
@@ -524,7 +521,7 @@ def test_payable_eth_to_weth_deposit(owner, ai_wallet, lego_aave_v3, getTokenAnd
     assert log.amount == eth_amount
     assert log.paidEth == eth_amount
     assert log.weth == weth.address
-    assert not log.isAgent
+    assert not log.isSignerAgent
 
     assert assetAmountDeposited == eth_amount
     assert vaultToken == vault_token.address
@@ -561,7 +558,7 @@ def test_weth_to_eth_withdraw(
     assert log.sender == agent
     assert log.amount == amount
     assert log.weth == asset.address
-    assert log.isAgent
+    assert log.isSignerAgent
 
     # ai wallet is zero
     assert asset.balanceOf(ai_wallet.address) == 0

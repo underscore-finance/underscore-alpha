@@ -197,3 +197,39 @@ def signSwap(agent_signer):
         }
         return (Account.sign_typed_data(agent_signer.key, full_message=message).signature, agent_signer.address, _expiration)
     yield signSwap
+
+
+@pytest.fixture(scope="package")
+def signTransfer(agent_signer):
+    def signTransfer(
+        _wallet,
+        _recipient,
+        _amount,
+        _asset,
+        _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
+    ):
+        # the data to be signed
+        message = {
+            "domain": {
+                "name": "AgenticWallet",
+                "version": _wallet.apiVersion(),
+                "chainId": boa.env.evm.patch.chain_id,
+                "verifyingContract": _wallet.address,
+            },
+            "types": {
+                "Transfer": [
+                    {"name": "recipient", "type": "address"},
+                    {"name": "amount", "type": "uint256"},
+                    {"name": "asset", "type": "address"},
+                    {"name": "expiration", "type": "uint256"},
+                ],
+            },
+            "message": {
+                "recipient": _recipient,
+                "amount": _amount,
+                "asset": _asset,
+                "expiration": _expiration,
+            }
+        }
+        return (Account.sign_typed_data(agent_signer.key, full_message=message).signature, agent_signer.address, _expiration)
+    yield signTransfer
