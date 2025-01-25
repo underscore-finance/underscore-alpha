@@ -492,7 +492,7 @@ def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale):
         MAX_UINT256, lego_id, vault_token, sender=agent)
 
     log = filter_logs(ai_wallet, "EthConvertedToWeth")[0]
-    assert log.sender == agent
+    assert log.signer == agent
     assert log.amount == eth_amount
     assert log.paidEth == 0
     assert log.weth == weth.address
@@ -517,7 +517,7 @@ def test_payable_eth_to_weth_deposit(owner, ai_wallet, lego_aave_v3, getTokenAnd
         MAX_UINT256, lego_id, vault_token, value=eth_amount, sender=owner)
 
     log = filter_logs(ai_wallet, "EthConvertedToWeth")[0]
-    assert log.sender == owner
+    assert log.signer == owner
     assert log.amount == eth_amount
     assert log.paidEth == eth_amount
     assert log.weth == weth.address
@@ -555,7 +555,7 @@ def test_weth_to_eth_withdraw(
     assert amount != 0
 
     log = filter_logs(ai_wallet, "WethConvertedToEth")[0]
-    assert log.sender == agent
+    assert log.signer == agent
     assert log.amount == amount
     assert log.weth == asset.address
     assert log.isSignerAgent

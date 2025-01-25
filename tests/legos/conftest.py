@@ -38,14 +38,14 @@ def testLegoDeposit(bob_ai_wallet, bob_agent, lego_registry, _test):
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticDeposit")[0]
-        assert log_wallet.user == bob_agent
+        assert log_wallet.signer == bob_agent
         assert log_wallet.asset == _asset.address
         assert log_wallet.vaultToken == vault_token
         assert log_wallet.assetAmountDeposited == deposit_amount
         assert log_wallet.vaultTokenAmountReceived == vault_tokens_received
         assert log_wallet.legoId == _legoId
         assert log_wallet.legoAddr == lego_addr
-        assert log_wallet.isAgent == True
+        assert log_wallet.isSignerAgent == True
 
         assert _vaultToken.address == vault_token
         assert deposit_amount != 0
@@ -91,14 +91,14 @@ def testLegoWithdrawal(bob_ai_wallet, bob_agent, lego_registry, _test):
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticWithdrawal")[0]
-        assert log_wallet.user == bob_agent
+        assert log_wallet.signer == bob_agent
         assert log_wallet.asset == _asset.address
         assert log_wallet.vaultToken == _vaultToken.address
         assert log_wallet.assetAmountReceived == amount_received
         assert log_wallet.vaultTokenAmountBurned == vault_token_burned
         assert log_wallet.legoId == _legoId
         assert log_wallet.legoAddr == lego_addr
-        assert log_wallet.isAgent == True
+        assert log_wallet.isSignerAgent == True
 
         assert amount_received != 0
         assert vault_token_burned != 0
@@ -143,14 +143,14 @@ def testLegoSwap(bob_ai_wallet, bob_agent, lego_registry, _test):
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticSwap")[0]
-        assert log_wallet.user == bob_agent
+        assert log_wallet.signer == bob_agent
         assert log_wallet.tokenIn == _tokenIn.address
         assert log_wallet.tokenOut == _tokenOut.address
         assert log_wallet.swapAmount == fromSwapAmount
         assert log_wallet.toAmount == toAmount
         assert log_wallet.legoId == _legoId
         assert log_wallet.legoAddr == lego_addr
-        assert log_wallet.isAgent == True
+        assert log_wallet.isSignerAgent == True
 
         assert fromSwapAmount != 0
         assert toAmount != 0
