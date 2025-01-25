@@ -270,7 +270,7 @@ def _domainSeparator() -> bytes32:
 
 
 @internal
-def _processSignature(_encodedValue: Bytes[192], _signature: Signature):
+def _processSignature(_encodedValue: Bytes[512], _signature: Signature):
     assert not self.usedSignatures[_signature.signature] 
     assert _signature.expiration >= block.timestamp
     

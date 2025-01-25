@@ -1,14 +1,13 @@
-from pydantic import BaseModel
-from api.routes.agents import router as agents_router
-from api.routes.legos import router as legos_router
 from api.services.app import app
-from dotenv import load_dotenv
-load_dotenv()
-
+from api.routes.legos import router as legos_router
+from api.routes.agents import router as agents_router
+from api.routes.login import router as login_router
+from pydantic import BaseModel
 
 # Include API routes
 app.include_router(legos_router, prefix="/legos", tags=["Legos"])
 app.include_router(agents_router, prefix="/agents", tags=["Agents"])
+app.include_router(login_router, prefix="/login", tags=["Login"])
 
 
 class RootResponse(BaseModel):

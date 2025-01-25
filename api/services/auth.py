@@ -3,15 +3,20 @@ from fastapi import Request, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
 from api.models import Agent, Agent_Pydantic
-from api.services.turnkey import turnkey_client
 
 
 # handle api key
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Allow OPTIONS requests to pass through for CORS preflight
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # List of paths that don't require authentication
         open_paths = [
             "/",
+            "/login",
+            "/login/",
             "/agents",
             "/agents/",
             "/docs",
@@ -49,14 +54,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 
             # Convert agent to pydantic model for serialization
             agent_info = await Agent_Pydantic.from_tortoise_orm(agent)
-            agent_dict = agent_info.model_dump()
-
-            # Get private key and add to request state
-            private_key = await turnkey_client.get_private_key(agent.pk_id)
-            request.state.agent = {
-                **agent_dict,
-                'pk': private_key
-            }
+            request.state.agent = agent_info.model_dump()
 
             response = await call_next(request)
             return response

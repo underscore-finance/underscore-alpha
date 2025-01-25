@@ -5,8 +5,8 @@ from base64 import urlsafe_b64encode
 import httpx
 from typing import Dict, Any, List
 import os
-from dotenv import load_dotenv
 import time
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()

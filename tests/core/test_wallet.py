@@ -32,10 +32,10 @@ def ai_wallet(agent_factory, owner, agent):
     w = agent_factory.createAgenticWallet(owner, agent, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isAgenticWallet(w)
-    return WalletTemplate.at(w)
+    return boa.env.lookup_contract(w)
 
 
-@pytest.fixture(scope="module")
+@ pytest.fixture(scope="module")
 def signDeposit(agent_signer):
     def signDeposit(
         _wallet,
@@ -550,7 +550,7 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
 # Base WETH tests
 
 
-@pytest.base
+@ pytest.base
 def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale):
     eth_amount = 5 * EIGHTEEN_DECIMALS
     boa.env.set_balance(ai_wallet.address, eth_amount)
@@ -578,7 +578,7 @@ def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale):
     assert vault_token.balanceOf(ai_wallet.address) == vaultTokenAmountReceived
 
 
-@pytest.base
+@ pytest.base
 def test_payable_eth_to_weth_deposit(owner, ai_wallet, lego_aave_v3, getTokenAndWhale):
     eth_amount = 5 * EIGHTEEN_DECIMALS
     boa.env.set_balance(owner, eth_amount + EIGHTEEN_DECIMALS)
@@ -603,7 +603,7 @@ def test_payable_eth_to_weth_deposit(owner, ai_wallet, lego_aave_v3, getTokenAnd
     assert vault_token.balanceOf(ai_wallet.address) == vaultTokenAmountReceived
 
 
-@pytest.base
+@ pytest.base
 def test_weth_to_eth_withdraw(
     getTokenAndWhale,
     ai_wallet,
