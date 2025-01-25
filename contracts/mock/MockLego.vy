@@ -171,5 +171,16 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256):
-    return 0, 0, 0
+    # THIS IS A TOTAL HACK
+
+    # transfer tokens to this contract
+    tokenInAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
+    assert tokenInAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, tokenInAmount, default_return_value=True) # dev: transfer failed
+
+    # make sure equivalent amount of `_tokenOut` is in contract before doing this 
+    assert staticcall IERC20(_tokenOut).balanceOf(self) >= tokenInAmount # dev: need equivalent amount of `_tokenOut`
+    assert extcall IERC20(_tokenOut).transfer(msg.sender, tokenInAmount, default_return_value=True) # dev: transfer failed
+
+    return tokenInAmount, tokenInAmount, 0
     
