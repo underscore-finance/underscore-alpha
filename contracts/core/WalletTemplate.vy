@@ -17,11 +17,22 @@ flag ActionType:
     REBALANCE
     TRANSFER
     SWAP
+    CONVERSION
 
 struct AgentInfo:
     isActive: bool
     allowedAssets: DynArray[address, MAX_ASSETS]
     allowedLegoIds: DynArray[uint256, MAX_LEGOS]
+    allowedActions: AllowedActions
+
+struct AllowedActions:
+    isSet: bool
+    canDeposit: bool
+    canWithdraw: bool
+    canRebalance: bool
+    canTransfer: bool
+    canSwap: bool
+    canConvert: bool
 
 struct Signature:
     signature: Bytes[65]
@@ -126,6 +137,15 @@ event AssetAddedToAgent:
     agent: indexed(address)
     asset: indexed(address)
 
+event AllowedActionsModified:
+    agent: indexed(address)
+    canDeposit: bool
+    canWithdraw: bool
+    canRebalance: bool
+    canTransfer: bool
+    canSwap: bool
+    canConvert: bool
+
 # settings
 owner: public(address)
 agentSettings: public(HashMap[address, AgentInfo])
@@ -137,6 +157,7 @@ wethAddr: public(address)
 initialized: public(bool)
 
 API_VERSION: constant(String[28]) = "0.0.1"
+
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 10
 MAX_INSTRUCTIONS: constant(uint256) = 20
@@ -189,7 +210,7 @@ def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _ini
     self.owner = _owner
 
     if _initialAgent != empty(address):
-        self.agentSettings[_initialAgent] = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[])
+        self.agentSettings[_initialAgent] = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[], allowedActions=empty(AllowedActions))
 
     return True
 
@@ -212,22 +233,27 @@ def apiVersion() -> String[28]:
 
 @view
 @external
-def canAgentAccess(_agent: address, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
+def canAgentAccess(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
     """
     @notice Checks if an agent has access to specific assets and lego IDs
     @dev Validates agent permissions against their stored settings
     @param _agent The address of the agent to check
+    @param _action The action to check
     @param _assets List of asset addresses to validate
     @param _legoIds List of lego IDs to validate
     @return bool True if agent has access to all specified assets and legos
     """
-    return self._canAgentAccess(self.agentSettings[_agent], _assets, _legoIds)
+    return self._canAgentAccess(self.agentSettings[_agent], _action, _assets, _legoIds)
 
 
 @view
 @internal
-def _canAgentAccess(_agent: AgentInfo, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
+def _canAgentAccess(_agent: AgentInfo, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
     if not _agent.isActive:
+        return False
+
+    # check allowed actions
+    if not self._canAgentPerformAction(_action, _agent.allowedActions):
         return False
 
     # check allowed assets
@@ -249,9 +275,31 @@ def _canAgentAccess(_agent: AgentInfo, _assets: DynArray[address, MAX_ASSETS], _
 
 @view
 @internal
+def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions) -> bool:
+    if not _allowedActions.isSet:
+        return True
+    if _action == ActionType.DEPOSIT:
+        return _allowedActions.canDeposit
+    elif _action == ActionType.WITHDRAWAL:
+        return _allowedActions.canWithdraw
+    elif _action == ActionType.REBALANCE:
+        return _allowedActions.canRebalance
+    elif _action == ActionType.TRANSFER:
+        return _allowedActions.canTransfer
+    elif _action == ActionType.SWAP:
+        return _allowedActions.canSwap
+    elif _action == ActionType.CONVERSION:
+        return _allowedActions.canConvert
+    else:
+        return False
+
+
+@view
+@internal
 def _checkSignerPermissions(
     _signer: address,
     _owner: address,
+    _action: ActionType,
     _assets: DynArray[address, MAX_ASSETS] = [],
     _legoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> bool:
@@ -259,7 +307,7 @@ def _checkSignerPermissions(
         return False
     
     # if signer is not owner, check if they have access to the assets and lego ids
-    assert self._canAgentAccess(self.agentSettings[_signer], _assets, _legoIds) # dev: agent not allowed
+    assert self._canAgentAccess(self.agentSettings[_signer], _action, _assets, _legoIds) # dev: agent not allowed
 
     return True
 
@@ -290,7 +338,7 @@ def depositTokens(
     @return uint256 The amount of vault tokens received
     """
     signer: address = self._getSignerOnDeposit(_legoId, _asset, _amount, _vault, _sig)
-    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, [_asset], [_legoId])
+    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.DEPOSIT, [_asset], [_legoId])
     return self._depositTokens(signer, _legoId, _asset, _amount, _vault, isSignerAgent)
 
 
@@ -388,7 +436,7 @@ def withdrawTokens(
     @return uint256 The amount of vault tokens burned
     """
     signer: address = self._getSignerOnWithdrawal(_legoId, _asset, _amount, _vaultToken, _sig)
-    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, [_asset], [_legoId])
+    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.WITHDRAWAL, [_asset], [_legoId])
     return self._withdrawTokens(signer, _legoId, _asset, _amount, _vaultToken, isSignerAgent)
 
 
@@ -475,7 +523,7 @@ def rebalance(
     @return uint256 The amount of destination vault tokens received
     """
     signer: address = self._getSignerOnRebalance(_fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, _sig)
-    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, [_asset], [_fromLegoId, _toLegoId])
+    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.REBALANCE, [_asset], [_fromLegoId, _toLegoId])
     return self._rebalance(signer, _fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, isSignerAgent)
 
 
@@ -552,7 +600,7 @@ def swapTokens(
     @return uint256 The amount of output tokens received
     """
     signer: address = self._getSignerOnSwap(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _sig)
-    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, [_tokenIn, _tokenOut], [_legoId])
+    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId])
     return self._swapTokens(signer, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, isSignerAgent)
 
 
@@ -628,7 +676,7 @@ def transferFunds(
     """
     owner: address = self.owner
     signer: address = self._getSignerOnTransfer(_recipient, _amount, _asset, _sig)
-    isSignerAgent: bool = self._checkSignerPermissions(signer, owner, [_asset])
+    isSignerAgent: bool = self._checkSignerPermissions(signer, owner, ActionType.TRANSFER, [_asset])
     return self._transferFunds(signer, _recipient, _amount, _asset, owner, isSignerAgent)
 
 
@@ -723,7 +771,7 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
 
     owner: address = self.owner
     isSignerAgent: bool = False
-    agentInfo: AgentInfo = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[])
+    agentInfo: AgentInfo = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[], allowedActions=empty(AllowedActions))
 
     # get agent settings
     if msg.sender != owner:
@@ -737,27 +785,27 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
 
         # deposit
         if instruction.action == ActionType.DEPOSIT:
-            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId]) # dev: not allowed
+            assert self._canAgentAccess(agentInfo, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
             self._depositTokens(msg.sender, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent)
 
         # withdraw
         elif instruction.action == ActionType.WITHDRAWAL:
-            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId]) # dev: not allowed
+            assert self._canAgentAccess(agentInfo, ActionType.WITHDRAWAL, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
             self._withdrawTokens(msg.sender, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent)
 
         # rebalance
         elif instruction.action == ActionType.REBALANCE:
-            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: not allowed
+            assert self._canAgentAccess(agentInfo, ActionType.REBALANCE, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: agent not allowed
             self._rebalance(msg.sender, instruction.legoId, instruction.altLegoId, instruction.asset, instruction.amount, instruction.vault, instruction.altVault, isSignerAgent)
 
         # transfer
         elif instruction.action == ActionType.TRANSFER:
-            assert self._canAgentAccess(agentInfo, [instruction.asset], [instruction.legoId]) # dev: not allowed
+            assert self._canAgentAccess(agentInfo, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
             self._transferFunds(msg.sender, instruction.recipient, instruction.amount, instruction.asset, owner, isSignerAgent)
 
         # swap
         elif instruction.action == ActionType.SWAP:
-            assert self._canAgentAccess(agentInfo, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: not allowed
+            assert self._canAgentAccess(agentInfo, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
             self._swapTokens(msg.sender, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, isSignerAgent)
 
     return True
@@ -792,7 +840,7 @@ def convertEthToWeth(
     """
     weth: address = self.wethAddr
     signer: address = self._getSignerOnEthToWeth(_amount, _depositLegoId, _depositVault, _sig)
-    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, [weth], [_depositLegoId])
+    isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.CONVERSION, [weth], [_depositLegoId])
 
     # convert eth to weth
     amount: uint256 = min(_amount, self.balance)
@@ -850,7 +898,7 @@ def convertWethToEth(
     weth: address = self.wethAddr
     owner: address = self.owner
     signer: address = self._getSignerOnWethToEth(_amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig)
-    isSignerAgent: bool = self._checkSignerPermissions(signer, owner, [weth], [_withdrawLegoId])
+    isSignerAgent: bool = self._checkSignerPermissions(signer, owner, ActionType.CONVERSION, [weth], [_withdrawLegoId])
 
     # withdraw weth from lego partner (if applicable)
     amount: uint256 = _amount
@@ -1049,6 +1097,31 @@ def addAssetForAgent(_agent: address, _asset: address) -> bool:
     # log event
     log AssetAddedToAgent(_agent, _asset)
     return True
+
+
+# modify allowed actions
+
+
+@nonreentrant
+@external
+def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empty(AllowedActions)) -> bool:
+    assert msg.sender == self.owner # dev: no perms
+
+    agentInfo: AgentInfo = self.agentSettings[_agent]
+    assert agentInfo.isActive # dev: agent not active
+
+    agentInfo.allowedActions = _allowedActions
+    agentInfo.allowedActions.isSet = self._hasAllowedActionsSet(_allowedActions)
+    self.agentSettings[_agent] = agentInfo
+
+    log AllowedActionsModified(_agent, _allowedActions.canDeposit, _allowedActions.canWithdraw, _allowedActions.canRebalance, _allowedActions.canTransfer, _allowedActions.canSwap, _allowedActions.canConvert)
+    return True
+
+
+@view
+@internal
+def _hasAllowedActionsSet(_actions: AllowedActions) -> bool:
+    return _actions.canDeposit or _actions.canWithdraw or _actions.canRebalance or _actions.canTransfer or _actions.canSwap or _actions.canConvert
 
 
 ###########
