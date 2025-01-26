@@ -3,7 +3,15 @@ from tortoise import BaseDBAsyncClient
 
 async def upgrade(db: BaseDBAsyncClient) -> str:
     return """
-        CREATE TABLE IF NOT EXISTS "agents" (
+        CREATE TABLE IF NOT EXISTS "users" (
+    "id" CHAR(36) NOT NULL PRIMARY KEY,
+    "firebase_id" VARCHAR(255) NOT NULL UNIQUE,
+    "email" VARCHAR(255) NOT NULL,
+    "wallet_address" VARCHAR(255) NOT NULL UNIQUE,
+    "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS "agents" (
     "id" CHAR(36) NOT NULL PRIMARY KEY,
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT,
@@ -12,7 +20,8 @@ async def upgrade(db: BaseDBAsyncClient) -> str:
     "api_key" VARCHAR(255) NOT NULL,
     "verified" INT NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "user_id" CHAR(36) NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS "aerich" (
     "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

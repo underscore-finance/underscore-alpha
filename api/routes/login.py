@@ -25,7 +25,6 @@ async def login(request: LoginRequest):
     address = request.address
     signature = request.signature
     message = request.message
-    print(address, signature, message)
     if not verify_signature(address, signature, message):
         raise HTTPException(status_code=401, detail="Invalid signature")
-    return create_custom_token(address)
+    return await create_custom_token(address)

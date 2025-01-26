@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from api.services.dependencies import get_undy
 from utils.undy import UndyContracts
 from pydantic import BaseModel
@@ -42,8 +42,11 @@ class LegosResponse(BaseModel):
         }
 
 
-@router.get("/", response_model=LegosResponse)
+@router.get("/list", response_model=LegosResponse, tags=["Legos"])
 def get_legos(undy: UndyContracts = Depends(get_undy)):
+    """
+    Get all legos.
+    """
     num_legos = undy.lego_registry.getNumLegos()
     legos = []
     for i in range(num_legos):
@@ -62,9 +65,14 @@ def get_legos(undy: UndyContracts = Depends(get_undy)):
     )
 
 
-@router.get("/{lego_id}", response_model=LegoInfo)
+@router.get("/get/{lego_id}", response_model=LegoInfo, tags=["Legos"])
 def get_lego(lego_id: int, undy: UndyContracts = Depends(get_undy)):
+    """
+    Get a specific lego by ID.
+    """
     lego = undy.lego_registry.getLegoInfo(lego_id)
+    if lego.addr == "0x0000000000000000000000000000000000000000":
+        raise HTTPException(status_code=404, detail="Lego not found")
     return LegoInfo(
         addr=str(lego.addr),
         version=lego.version,

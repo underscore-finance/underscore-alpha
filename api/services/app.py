@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.services.auth import setup_auth
 from api.services.db import init_db
 
+app = FastAPI(redirect_slashes=True)
+
 # Initialize FastAPI
 app = FastAPI(
     title="Underscore API",

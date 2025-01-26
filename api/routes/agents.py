@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException
-from api.models import Agent, Agent_Pydantic
+from fastapi import APIRouter, HTTPException, Depends
+from api.models import Agent, Agent_Pydantic, User
 from typing import List
 from pydantic import BaseModel
-import secrets
-import string
 from uuid import UUID
 from api.services.turnkey import turnkey_client
+from api.services.auth import generate_api_key, user_auth, requires_user_auth
+
 
 # Router for agent
 router = APIRouter()
@@ -17,6 +17,19 @@ class AgentPublic(BaseModel):
     description: str | None
     wallet_address: str
     verified: bool
+
+    model_config = {
+        "from_attributes": True,
+    }
+
+
+class AgentPrivate(BaseModel):
+    id: UUID
+    name: str
+    description: str | None
+    wallet_address: str
+    verified: bool
+    api_key: str
 
     model_config = {
         "from_attributes": True,
@@ -37,27 +50,34 @@ class AgentCreateResponse(BaseModel):
     api_key: str
 
 
-@router.get("/", response_model=List[AgentPublic])
-async def get_agents():
-    return await Agent.all()
+@requires_user_auth()
+@router.get("/user/list", response_model=List[AgentPrivate])
+async def get_user_agents(user: User = Depends(user_auth)):
+    """
+    Get all agents for a user.
+    """
+    agents = await Agent.filter(user=user)
+    return agents
 
 
-@router.get("/{agent_id}", response_model=AgentPublic)
-async def get_agent(agent_id: str):
-    agent = await Agent.get_or_none(id=agent_id)
+@requires_user_auth()
+@router.get("/user/get/{agent_id}", response_model=AgentPrivate)
+async def get_user_agent(agent_id: str, user: User = Depends(user_auth)):
+    """
+    Get a single agent for a user.
+    """
+    agent = await Agent.get_or_none(id=agent_id, user=user)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return await Agent_Pydantic.from_tortoise_orm(agent)
 
 
-def generate_api_key(length: int = 32) -> str:
-    """Generate a secure random API key"""
-    alphabet = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
-
-
-@router.post("/", response_model=AgentCreateResponse)
-async def create_agent(agent: AgentCreate):
+@requires_user_auth()
+@router.post("/user/create", response_model=AgentCreateResponse)
+async def create_agent(agent: AgentCreate, user: User = Depends(user_auth)):
+    """
+    Create an agent for a user.
+    """
     # First create agent with basic info
     agent_dict = agent.model_dump()
     agent_dict["verified"] = False
@@ -66,7 +86,7 @@ async def create_agent(agent: AgentCreate):
     agent_dict["pk_id"] = ""  # Temporary empty value
 
     # Create the agent first to get the ID
-    agent_obj = await Agent.create(**agent_dict)
+    agent_obj = await Agent.create(**agent_dict, user=user)
 
     # Now create the wallet using agent ID
     wallet = await turnkey_client.create_private_key(f"agent-{agent_obj.id}")
@@ -77,3 +97,22 @@ async def create_agent(agent: AgentCreate):
     await agent_obj.save()
 
     return agent_obj
+
+
+@router.get("/public/list", response_model=List[AgentPublic])
+async def get_agents():
+    """
+    Get all agents.
+    """
+    return await Agent.all()
+
+
+@router.get("/public/get/{agent_id}", response_model=AgentPublic)
+async def get_agent(agent_id: str):
+    """
+    Get a single agent.
+    """
+    agent = await Agent.get_or_none(id=agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return await Agent_Pydantic.from_tortoise_orm(agent)

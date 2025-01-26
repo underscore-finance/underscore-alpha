@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from api.models import User
 
 # Load environment variables
 load_dotenv()
@@ -27,7 +28,7 @@ firebase_admin.initialize_app(cred)
 
 
 def get_user_by_token(token: str):
-    print(auth.verify_id_token(token))
+    return auth.verify_id_token(token)
 
 
 def verify_signature(address, signature, message):
@@ -38,26 +39,16 @@ def verify_signature(address, signature, message):
     return recovered_address.lower() == address.lower()
 
 
-def create_custom_token(address):
+async def create_custom_token(address):
     # Create a custom token for the user
 
     try:
         user = auth.get_user_by_email(f"{address}@underscore.finance")
-    except Exception as e:
+    except:
         user = auth.create_user(email=f"{address}@underscore.finance", display_name=address)
 
     custom_token = auth.create_custom_token(user.uid)
-    custom_token = auth.create_custom_token(address)
+    if not await User.get_or_none(firebase_id=user.uid):
+        await User.create(firebase_id=user.uid, wallet_address=address, email="")
+
     return custom_token
-
-
-# # Example usage
-# address = "0xUserEthereumAddress"
-# signature = "0xUserSignature"
-# message = "Sign in with Ethereum"
-
-# if verify_signature(address, signature, message):
-#     custom_token = create_custom_token(address)
-#     print("Custom Token:", custom_token)
-# else:
-#     print("Invalid signature")
