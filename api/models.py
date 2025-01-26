@@ -48,3 +48,38 @@ AgentPublic_Pydantic = pydantic_model_creator(
     name="AgentPublic",
     include=("id", "name", "description")  # only include these fields
 )
+
+
+class Message(models.Model):
+    id = fields.UUIDField(pk=True)
+    agent = fields.ForeignKeyField("models.Agent", related_name="messages", null=True, index=True)
+    user = fields.ForeignKeyField("models.User", related_name="messages", null=True, index=True)
+    sender = fields.CharField(max_length=255, index=True)
+    agentic_wallet = fields.CharField(max_length=255, index=True)
+    message = fields.TextField()
+    created_at = fields.DatetimeField(auto_now_add=True, index=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "messages"
+        ordering = ["-created_at"]
+
+
+class UserMessageCounter(models.Model):
+    id = fields.UUIDField(pk=True)
+    user = fields.ForeignKeyField("models.User", related_name="message_counter", unique=True)
+    message_count = fields.IntField(default=0)
+    last_message_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "user_message_counters"
+
+
+class AgentMessageCounter(models.Model):
+    id = fields.UUIDField(pk=True)
+    agent = fields.ForeignKeyField("models.Agent", related_name="message_counter", unique=True)
+    message_count = fields.IntField(default=0)
+    last_message_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "agent_message_counters"
