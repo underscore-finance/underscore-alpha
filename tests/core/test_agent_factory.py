@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, MAX_UINT256
 from contracts.core import AgentFactory
 
 
@@ -22,8 +22,10 @@ def new_wallet_template():
 
 
 @pytest.fixture(scope="module")
-def new_agent_factory(lego_registry, weth, new_wallet_template):
-    return boa.load("contracts/core/AgentFactory.vy", lego_registry, weth, new_wallet_template, name="new_wallet_template")
+def new_agent_factory(lego_registry, weth, new_wallet_template, governor):
+    f = boa.load("contracts/core/AgentFactory.vy", lego_registry, weth, new_wallet_template, name="new_wallet_template")
+    assert f.setNumAgenticWalletsAllowed(MAX_UINT256, sender=governor)
+    return f
 
 
 #########
@@ -129,3 +131,80 @@ def test_activation_control(new_agent_factory, governor, bob):
     # Test activation by non-governor
     with boa.reverts("no perms"):
         new_agent_factory.activate(False, sender=bob)
+
+
+def test_whitelist_control(new_agent_factory, governor, bob):
+    # Test setting whitelist by governor
+    assert new_agent_factory.setWhitelist(bob, True, sender=governor)
+    
+    log = filter_logs(new_agent_factory, "WhitelistSet")[0]
+    assert log.addr == bob
+    assert log.shouldWhitelist == True
+
+    assert new_agent_factory.whitelist(bob)
+
+    # Test removing from whitelist
+    assert new_agent_factory.setWhitelist(bob, False, sender=governor)
+    assert not new_agent_factory.whitelist(bob)
+    
+    # Test setting whitelist by non-governor
+    with boa.reverts("no perms"):
+        new_agent_factory.setWhitelist(bob, True, sender=bob)
+
+
+def test_whitelist_enforcement(new_agent_factory, governor, owner, agent, bob):
+    # Enable whitelist enforcement
+    assert new_agent_factory.setShouldEnforceWhitelist(True, sender=governor)
+    
+    log = filter_logs(new_agent_factory, "ShouldEnforceWhitelistSet")[0]
+    assert log.shouldEnforce == True
+
+    assert new_agent_factory.shouldEnforceWhitelist()
+
+    # Test wallet creation with non-whitelisted creator
+    wallet_addr = new_agent_factory.createAgenticWallet(owner, agent, sender=bob)
+    assert wallet_addr == ZERO_ADDRESS
+    
+    # Whitelist bob and try again
+    assert new_agent_factory.setWhitelist(bob, True, sender=governor)
+    wallet_addr = new_agent_factory.createAgenticWallet(owner, agent, sender=bob)
+    assert wallet_addr != ZERO_ADDRESS
+    
+    # Test setting enforcement by non-governor
+    with boa.reverts("no perms"):
+        new_agent_factory.setShouldEnforceWhitelist(False, sender=bob)
+
+
+def test_wallet_limit_control(new_agent_factory, governor, bob):
+    # Test setting limit by governor
+    assert new_agent_factory.setNumAgenticWalletsAllowed(5, sender=governor)
+    
+    log = filter_logs(new_agent_factory, "NumAgenticWalletsAllowedSet")[0]
+    assert log.numAllowed == 5
+
+    assert new_agent_factory.numAgenticWalletsAllowed() == 5
+
+    # Test setting limit by non-governor
+    with boa.reverts("no perms"):
+        new_agent_factory.setNumAgenticWalletsAllowed(10, sender=bob)
+
+
+def test_wallet_limit_enforcement(new_agent_factory, governor, owner, agent):
+    # Set limit to 2 wallets
+    assert new_agent_factory.setNumAgenticWalletsAllowed(2, sender=governor)
+    
+    # Create first wallet
+    wallet1 = new_agent_factory.createAgenticWallet(owner, agent)
+    assert wallet1 != ZERO_ADDRESS
+    assert new_agent_factory.numAgenticWallets() == 1
+    
+    # Create second wallet
+    wallet2 = new_agent_factory.createAgenticWallet(owner, agent)
+    assert wallet2 != ZERO_ADDRESS
+    assert new_agent_factory.numAgenticWallets() == 2
+    
+    # Try to create third wallet - should fail
+    wallet3 = new_agent_factory.createAgenticWallet(owner, agent)
+    assert wallet3 == ZERO_ADDRESS
+    assert new_agent_factory.numAgenticWallets() == 2
+

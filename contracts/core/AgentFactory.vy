@@ -15,16 +15,38 @@ event AgenticWalletCreated:
     addr: indexed(address)
     owner: indexed(address)
     agent: indexed(address)
+    creator: address
 
 event AgentTemplateSet:
     template: indexed(address)
     version: uint256
 
+event WhitelistSet:
+    addr: address
+    shouldWhitelist: bool
+
+event NumAgenticWalletsAllowedSet:
+    numAllowed: uint256
+
+event ShouldEnforceWhitelistSet:
+    shouldEnforce: bool
+
 event AgentFactoryActivated:
     isActivated: bool
 
+# template info
 agentTemplateInfo: public(TemplateInfo)
+
+# agentic wallets
 isAgenticWallet: public(HashMap[address, bool])
+numAgenticWallets: public(uint256)
+
+# limits
+shouldEnforceWhitelist: public(bool)
+whitelist: public(HashMap[address, bool])
+numAgenticWalletsAllowed: public(uint256)
+
+# config
 isActivated: public(bool)
 
 LEGO_REGISTRY: public(immutable(address))
@@ -96,12 +118,20 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(ad
     if not self._isValidWalletSetup(agentTemplate, _owner, _agent):
         return empty(address)
 
+    # check limits
+    if self.shouldEnforceWhitelist and not self.whitelist[msg.sender]:
+        return empty(address)
+    if self.numAgenticWallets >= self.numAgenticWalletsAllowed:
+        return empty(address)
+
     # create agentic wallet
     newAgentAddr: address = create_minimal_proxy_to(agentTemplate)
     assert extcall AgenticWallet(newAgentAddr).initialize(LEGO_REGISTRY, WETH_ADDR, _owner, _agent)
+    
     self.isAgenticWallet[newAgentAddr] = True
+    self.numAgenticWallets += 1
 
-    log AgenticWalletCreated(newAgentAddr, _owner, _agent)
+    log AgenticWalletCreated(newAgentAddr, _owner, _agent, msg.sender)
     return newAgentAddr
 
 
@@ -155,6 +185,57 @@ def _setAgenticWalletTemplate(_addr: address) -> bool:
     )
     self.agentTemplateInfo = newData
     log AgentTemplateSet(_addr, newData.version)
+    return True
+
+
+########################
+# Whitelist and Limits #
+########################
+
+
+@external
+def setWhitelist(_addr: address, _shouldWhitelist: bool) -> bool:
+    """
+    @notice Set the whitelist status for a given address
+    @dev Only callable by the governor, updates the whitelist state
+    @param _addr The address to set the whitelist status for
+    @param _shouldWhitelist True to whitelist, False to unwhitelist
+    @return True if the whitelist status was successfully updated, False otherwise
+    """
+    assert self.isActivated # dev: not activated
+    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    self.whitelist[_addr] = _shouldWhitelist
+    log WhitelistSet(_addr, _shouldWhitelist)
+    return True
+
+
+@external
+def setNumAgenticWalletsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bool:
+    """
+    @notice Set the maximum number of agentic wallets allowed
+    @dev Only callable by the governor, updates the maximum number of wallets
+    @param _numAllowed The new maximum number of wallets allowed
+    @return True if the maximum number was successfully updated, False otherwise
+    """
+    assert self.isActivated # dev: not activated
+    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    self.numAgenticWalletsAllowed = _numAllowed
+    log NumAgenticWalletsAllowedSet(_numAllowed)
+    return True
+
+
+@external
+def setShouldEnforceWhitelist(_shouldEnforce: bool) -> bool:
+    """
+    @notice Set whether to enforce the whitelist for wallet creation
+    @dev Only callable by the governor, updates the whitelist enforcement state
+    @param _shouldEnforce True to enforce whitelist, False to disable
+    @return True if the whitelist enforcement state was successfully updated, False otherwise
+    """
+    assert self.isActivated # dev: not activated
+    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    self.shouldEnforceWhitelist = _shouldEnforce
+    log ShouldEnforceWhitelistSet(_shouldEnforce)
     return True
 
 

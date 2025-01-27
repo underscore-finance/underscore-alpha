@@ -1,6 +1,8 @@
 import pytest
 import boa
 
+from constants import MAX_UINT256
+
 
 @pytest.fixture(scope="session")
 def lego_registry(governor):
@@ -8,8 +10,10 @@ def lego_registry(governor):
 
 
 @pytest.fixture(scope="session")
-def agent_factory(lego_registry, weth, wallet_template):
-    return boa.load("contracts/core/AgentFactory.vy", lego_registry, weth, wallet_template, name="agent_factory")
+def agent_factory(lego_registry, weth, wallet_template, governor):
+    f = boa.load("contracts/core/AgentFactory.vy", lego_registry, weth, wallet_template, name="agent_factory")
+    assert f.setNumAgenticWalletsAllowed(MAX_UINT256, sender=governor)
+    return f
 
 
 @pytest.fixture(scope="session")
