@@ -43,11 +43,11 @@ LEGO_REGISTRIES = {
     },
     "aero_classic": {
         "base": ["0x420DD381b31aEf6683db6B902084cB0FFECe40Da", "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"],
-        "local": ZERO_ADDRESS,
+        "local": [],
     },
     "aero_slipstream": {
         "base": ["0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A", "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5"],
-        "local": ZERO_ADDRESS,
+        "local": [],
     },
     "curve": {
         "base": "0x5ffe7FB82894076ECB99A30D6A32e969e6e35E98",
