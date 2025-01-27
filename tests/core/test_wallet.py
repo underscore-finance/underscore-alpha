@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, CONVERSION_UINT256
 
 
 #########
@@ -191,7 +191,7 @@ def test_deposit_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_toke
     assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == new_wallet_bal + vaultTokenAmountReceived
 
     # Test deposit permissions
-    assert not ai_wallet.canAgentAccess(agent, [bravo_token.address], [mock_lego_bravo.legoId()])
+    assert not ai_wallet.canAgentAccess(agent, DEPOSIT_UINT256, [bravo_token.address], [mock_lego_bravo.legoId()])
 
     with boa.reverts("agent not allowed"):
         ai_wallet.depositTokens(mock_lego_bravo.legoId(), bravo_token, deposit_amount,
@@ -485,7 +485,7 @@ def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale):
     weth, _ = getTokenAndWhale("weth")
 
     assert ai_wallet.wethAddr() == weth.address
-    assert ai_wallet.canAgentAccess(agent, [weth.address], [lego_id])
+    assert ai_wallet.canAgentAccess(agent, CONVERSION_UINT256, [weth.address], [lego_id])
 
     # Test ETH to WETH conversion by agent
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.convertEthToWeth(
@@ -548,7 +548,7 @@ def test_weth_to_eth_withdraw(
     assert deposit_amount != 0 and vault_tokens_received != 0
 
     assert ai_wallet.wethAddr() == asset.address
-    assert ai_wallet.canAgentAccess(agent, [asset.address], [lego_id])
+    assert ai_wallet.canAgentAccess(agent, CONVERSION_UINT256, [asset.address], [lego_id])
 
     # convert weth to eth
     amount = ai_wallet.convertWethToEth(MAX_UINT256, owner, lego_id, vault_token, sender=agent)
