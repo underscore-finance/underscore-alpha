@@ -3,6 +3,11 @@
 from ethereum.ercs import IERC20
 import interfaces.LegoInterface as LegoPartner
 
+interface AgentPrices:
+    def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> CostData: view
+    def agentSubPriceData(_agent: address) -> SubscriptionInfo: view
+    def getSubscriptionCost(_agent: address) -> CostData: view
+
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
     def isValidLegoId(_legoId: uint256) -> bool: view
@@ -10,9 +15,6 @@ interface LegoRegistry:
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
-
-interface AgentPrices:
-    def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> CostData: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -27,6 +29,8 @@ flag ActionType:
 
 struct AgentInfo:
     isActive: bool
+    installBlock: uint256
+    paidThroughBlock: uint256
     allowedAssets: DynArray[address, MAX_ASSETS]
     allowedLegoIds: DynArray[uint256, MAX_LEGOS]
     allowedActions: AllowedActions
@@ -65,6 +69,12 @@ struct CostData:
     agentAsset: address
     agentAssetAmount: uint256
     agentUsdValue: uint256
+
+struct SubscriptionInfo:
+    asset: address
+    usdValue: uint256
+    trialPeriod: uint256
+    payPeriod: uint256
 
 event AgenticDeposit:
     signer: indexed(address)
@@ -150,6 +160,20 @@ event BatchTransactionFeePaid:
     protocolAsset: indexed(address)
     protocolAssetAmount: uint256
     protocolUsdValue: uint256
+
+event SubscriptionFeePaid:
+    agent: indexed(address)
+    agentAsset: indexed(address)
+    agentAssetAmount: uint256
+    agentUsdValue: uint256
+    protocolRecipient: address
+    protocolAsset: indexed(address)
+    protocolAssetAmount: uint256
+    protocolUsdValue: uint256
+
+event SubscriptionSetupRefreshed:
+    agent: indexed(address)
+    paidThroughBlock: uint256
 
 event WhitelistAddrSet:
     addr: indexed(address)
@@ -255,7 +279,14 @@ def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _ini
     self.owner = _owner
 
     if _initialAgent != empty(address):
-        self.agentSettings[_initialAgent] = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[], allowedActions=empty(AllowedActions))
+        self.agentSettings[_initialAgent] = AgentInfo(
+            isActive=True,
+            installBlock=block.number,
+            paidThroughBlock=0,
+            allowedAssets=[],
+            allowedLegoIds=[],
+            allowedActions=empty(AllowedActions),
+        )
 
     return True
 
@@ -295,6 +326,10 @@ def canAgentAccess(_agent: address, _action: ActionType, _assets: DynArray[addre
 @internal
 def _canAgentAccess(_agent: AgentInfo, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
     if not _agent.isActive:
+        return False
+
+    # check if agent payment is current
+    if _agent.paidThroughBlock != 0 and block.number > _agent.paidThroughBlock:
         return False
 
     # check allowed actions
@@ -919,7 +954,8 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
 
     # get agent settings
     isSignerAgent: bool = False
-    agentInfo: AgentInfo = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[], allowedActions=empty(AllowedActions))
+    agentInfo: AgentInfo = empty(AgentInfo)
+    agentInfo.isActive = True
     if signer != owner:
         isSignerAgent = True
         agentInfo = self.agentSettings[signer]
@@ -1124,24 +1160,27 @@ def _getSignerOnWethToEth(
 ###############
 
 
+# transaction fees
+
+
 @internal
 def _handleSimpleTransactionFee(_agent: address, _action: ActionType, _usdValue: uint256, _addyRegistry: address):
     agentPrices: address = staticcall AddyRegistry(_addyRegistry).getAddy(AGENT_PRICES_ID)
     cost: CostData = staticcall AgentPrices(agentPrices).getTransactionCost(_agent, _action, _usdValue)
-    didPay: bool = self._payTransactionFees(_agent, cost.agentAsset, cost.agentAssetAmount, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount)
+    didPay: bool = self._payAgentAndProtocolFees(_agent, cost.agentAsset, cost.agentAssetAmount, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount)
     if didPay:
         log SimpleTransactionFeePaid(_agent, _action, _usdValue, cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue)
 
 
 @internal
 def _handleBatchTransactionFees(_agent: address, _aggCostData: CostData):
-    didPay: bool = self._payTransactionFees(_agent, _aggCostData.agentAsset, _aggCostData.agentAssetAmount, _aggCostData.protocolRecipient, _aggCostData.protocolAsset, _aggCostData.protocolAssetAmount)
+    didPay: bool = self._payAgentAndProtocolFees(_agent, _aggCostData.agentAsset, _aggCostData.agentAssetAmount, _aggCostData.protocolRecipient, _aggCostData.protocolAsset, _aggCostData.protocolAssetAmount)
     if didPay:
         log BatchTransactionFeePaid(_agent, _aggCostData.agentAsset, _aggCostData.agentAssetAmount, _aggCostData.agentUsdValue, _aggCostData.protocolRecipient, _aggCostData.protocolAsset, _aggCostData.protocolAssetAmount, _aggCostData.protocolUsdValue)
 
 
 @internal
-def _payTransactionFees(
+def _payAgentAndProtocolFees(
     _agent: address,
     _agentAsset: address,
     _agentAssetAmount: uint256,
@@ -1151,12 +1190,12 @@ def _payTransactionFees(
 ) -> bool:
     didPay: bool = False
 
-    # transfer agent tx fees
+    # transfer agent fees
     if _agent != empty(address) and _agentAsset != empty(address) and _agentAssetAmount != 0:
         assert extcall IERC20(_agentAsset).transfer(_agent, _agentAssetAmount, default_return_value=True) # dev: agent tx fee transfer failed
         didPay = True
 
-    # transfer protocol tx fees
+    # transfer protocol fees
     if _protocolRecipient != empty(address) and _protocolAsset != empty(address) and _protocolAssetAmount != 0:
         assert extcall IERC20(_protocolAsset).transfer(_protocolRecipient, _protocolAssetAmount, default_return_value=True) # dev: protocol tx fee transfer failed
         didPay = True
@@ -1201,6 +1240,58 @@ def _aggregateBatchTxCostData(
     return aggCostData
 
 
+# subscription fees
+
+
+@external
+def chargeSubscriptionFee(_agent: address) -> bool:
+    agentInfo: AgentInfo = self.agentSettings[_agent]
+    assert agentInfo.isActive # dev: agent not active
+    assert block.number >= agentInfo.paidThroughBlock # dev: agent payments are current
+
+    # addys
+    agentPrices: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_PRICES_ID)
+
+    # make sure agent has a subscription
+    subInfo: SubscriptionInfo = staticcall AgentPrices(agentPrices).agentSubPriceData(_agent)
+    assert subInfo.usdValue != 0 # dev: agent has no subscription
+
+    cost: CostData = staticcall AgentPrices(agentPrices).getSubscriptionCost(_agent)
+    didPay: bool = self._payAgentAndProtocolFees(_agent, cost.agentAsset, cost.agentAssetAmount, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount)
+    
+    if didPay:
+        agentInfo.paidThroughBlock = block.number + subInfo.payPeriod
+        self.agentSettings[_agent] = agentInfo
+        log SubscriptionFeePaid(_agent, cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue)
+
+    return True
+
+
+@external
+def refreshSubscriptionSetup(_agent: address) -> bool:
+    agentInfo: AgentInfo = self.agentSettings[_agent]
+    assert agentInfo.isActive # dev: agent not active
+
+    agentPrices: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_PRICES_ID)
+    subInfo: SubscriptionInfo = staticcall AgentPrices(agentPrices).agentSubPriceData(_agent)
+
+    # subscription was added
+    if agentInfo.paidThroughBlock == 0 and subInfo.usdValue != 0:
+        agentInfo.paidThroughBlock = block.number + subInfo.trialPeriod
+
+    # subscription was removed
+    elif agentInfo.paidThroughBlock != 0 and subInfo.usdValue == 0:
+        agentInfo.paidThroughBlock = 0
+
+    else:
+        raise "no subscription info to refresh"
+
+    self.agentSettings[_agent] = agentInfo
+    
+    log SubscriptionSetupRefreshed(_agent, agentInfo.paidThroughBlock)
+    return True
+
+
 ##################
 # Agent Settings #
 ##################
@@ -1215,6 +1306,7 @@ def addOrModifyAgent(
     _agent: address,
     _allowedAssets: DynArray[address, MAX_ASSETS] = [],
     _allowedLegoIds: DynArray[uint256, MAX_LEGOS] = [],
+    _allowedActions: AllowedActions = empty(AllowedActions),
 ) -> bool:
     """
     @notice Adds a new agent or modifies an existing agent's permissions
@@ -1223,6 +1315,7 @@ def addOrModifyAgent(
     @param _agent The address of the agent to add or modify
     @param _allowedAssets List of assets the agent can interact with
     @param _allowedLegoIds List of lego IDs the agent can use
+    @param _allowedActions The actions the agent can perform
     @return bool True if the agent was successfully added or modified
     """
     owner: address = self.owner
@@ -1231,13 +1324,29 @@ def addOrModifyAgent(
     assert _agent != empty(address) # dev: invalid agent
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
-    isNewAgent: bool = not agentInfo.isActive
+    agentInfo.isActive = True
 
-    # sanitize input data
+    # allowed actions
+    agentInfo.allowedActions = _allowedActions
+    agentInfo.allowedActions.isSet = self._hasAllowedActionsSet(_allowedActions)
+
+    # sanitize other input data
     agentInfo.allowedAssets, agentInfo.allowedLegoIds = self._sanitizeAgentInputData(_allowedAssets, _allowedLegoIds)
 
-    # save data
-    agentInfo.isActive = True
+    # get subscription info
+    agentPrices: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_PRICES_ID)
+    subInfo: SubscriptionInfo = staticcall AgentPrices(agentPrices).agentSubPriceData(_agent)
+    
+    isNewAgent: bool = (agentInfo.installBlock == 0)
+    if isNewAgent:
+        agentInfo.installBlock = block.number
+        if subInfo.usdValue != 0:
+            agentInfo.paidThroughBlock = block.number + subInfo.trialPeriod
+
+    # may not have had sub setup before
+    elif subInfo.usdValue != 0:
+        agentInfo.paidThroughBlock = max(agentInfo.paidThroughBlock, agentInfo.installBlock + subInfo.trialPeriod)
+
     self.agentSettings[_agent] = agentInfo
 
     # log event
@@ -1298,7 +1407,8 @@ def disableAgent(_agent: address) -> bool:
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
     assert agentInfo.isActive # dev: agent not active
-    self.agentSettings[_agent] = empty(AgentInfo)
+    agentInfo.isActive = False
+    self.agentSettings[_agent] = agentInfo
 
     log AgentDisabled(_agent, len(agentInfo.allowedAssets), len(agentInfo.allowedLegoIds))
     return True

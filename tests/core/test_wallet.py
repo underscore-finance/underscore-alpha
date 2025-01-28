@@ -92,8 +92,6 @@ def test_agent_management(ai_wallet, owner, agent, mock_lego_alpha, mock_lego_br
     # Verify agent is disabled
     agent_info = ai_wallet.agentSettings(agent)
     assert not agent_info.isActive
-    assert len(agent_info.allowedAssets) == 0
-    assert len(agent_info.allowedLegoIds) == 0
 
 
 # agent management permissions

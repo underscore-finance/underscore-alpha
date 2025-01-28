@@ -110,7 +110,9 @@ isActivated: public(bool)
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 MAX_AGENT_TX_FEE: constant(uint256) = 10_00 # 10.00%
 MAX_PROTOCOL_TAKE_RATE: constant(uint256) = 50_00 # 50.00%
-MIN_TRIAL_PERIOD: constant(uint256) = 300_000 # 1 day on Base (2 seconds per block)
+MIN_TRIAL_PERIOD: constant(uint256) = 43_200 # 1 day on Base (2 seconds per block)
+MAX_TRIAL_PERIOD: constant(uint256) = 1_296_000 # 1 month on Base (2 seconds per block)
+MIN_PAY_PERIOD: constant(uint256) = 302_400 # 7 days on Base (2 seconds per block)
 MAX_PAY_PERIOD: constant(uint256) = 3_900_000 # 3 months on Base (2 seconds per block)
 
 
@@ -169,8 +171,11 @@ def isValidAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _
 def _isValidAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _trialPeriod: uint256, _payPeriod: uint256) -> bool:
     if empty(address) in [_agent, _asset]:
         return False
+    
+    if _payPeriod < MIN_PAY_PERIOD or _payPeriod > MAX_PAY_PERIOD:
+        return False
 
-    if _trialPeriod < MIN_TRIAL_PERIOD or _payPeriod > MAX_PAY_PERIOD:
+    if _trialPeriod < MIN_TRIAL_PERIOD or _trialPeriod > MAX_TRIAL_PERIOD:
         return False
 
     return _usdValue != 0
