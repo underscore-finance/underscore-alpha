@@ -50,7 +50,7 @@ def get_legos(undy: UndyContracts = Depends(get_undy)):
     num_legos = undy.lego_registry.getNumLegos()
     legos = []
     for i in range(num_legos):
-        lego = undy.lego_registry.getLegoInfo(i)
+        lego = undy.lego_registry.getLegoInfo(i + 1)
         # Convert Vyper struct to dict for Pydantic
         legos.append(LegoInfo(
             addr=str(lego.addr),

@@ -3,6 +3,9 @@ from contextlib import contextmanager
 import os
 from eth_account import Account
 
+import dotenv
+dotenv.load_dotenv()
+
 
 @contextmanager
 def get_blockchain_context():

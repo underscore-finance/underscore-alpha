@@ -67,7 +67,7 @@ class Message(models.Model):
 
 class UserMessageCounter(models.Model):
     id = fields.UUIDField(pk=True)
-    user = fields.ForeignKeyField("models.User", related_name="message_counter", unique=True)
+    agentic_wallet = fields.CharField(max_length=255, index=True)
     message_count = fields.IntField(default=0)
     last_message_at = fields.DatetimeField(auto_now=True)
 
@@ -83,3 +83,7 @@ class AgentMessageCounter(models.Model):
 
     class Meta:
         table = "agent_message_counters"
+
+
+# Add this with your other pydantic model creators
+Message_Pydantic = pydantic_model_creator(Message, name="Message")

@@ -29,17 +29,73 @@ def vyper_to_python_type(vyper_type: str) -> str:
         'int256': 'int',
         'uint8': 'int',
         'int8': 'int',
+        'bytes': 'bytes',
+        # Add any other basic types you encounter
     }
 
-    if '[' in vyper_type:
-        base_type = vyper_type[:vyper_type.index('[')]
-        return f"List[{type_mapping.get(base_type, 'Any')}]"
+    try:
+        # Handle tuple types (structs)
+        if vyper_type.startswith('tuple'):
+            # Handle empty tuple
+            if vyper_type == 'tuple':
+                return 'Tuple'
 
-    return type_mapping.get(vyper_type, 'Any')
+            # Find the opening and closing parentheses
+            start_idx = vyper_type.find('(')
+            end_idx = vyper_type.rfind(')')
+
+            if start_idx == -1 or end_idx == -1:
+                print(f"Warning: Malformed tuple type: {vyper_type}, falling back to Any")
+                return 'Any'
+
+            # Extract the components
+            components_str = vyper_type[start_idx + 1:end_idx]
+            if not components_str:
+                return 'Tuple'
+
+            # Handle nested tuples by counting parentheses
+            components = []
+            current = ''
+            paren_count = 0
+
+            for char in components_str:
+                if char == '(' or char == '[':
+                    paren_count += 1
+                elif char == ')' or char == ']':
+                    paren_count -= 1
+                elif char == ',' and paren_count == 0:
+                    if current:
+                        components.append(current.strip())
+                    current = ''
+                    continue
+                current += char
+
+            if current:
+                components.append(current.strip())
+
+            component_types = [vyper_to_python_type(comp) for comp in components]
+            return f"Tuple[{', '.join(component_types)}]"
+
+        # Handle array types with dimensions
+        if '[' in vyper_type:
+            base_type = vyper_type[:vyper_type.index('[')]
+            dimensions = vyper_type.count('[')
+            python_type = type_mapping.get(base_type, 'Any')
+
+            # Wrap in List[] for each dimension
+            for _ in range(dimensions):
+                python_type = f"List[{python_type}]"
+            return python_type
+
+        return type_mapping.get(vyper_type, 'Any')
+
+    except Exception as e:
+        print(f"Warning: Error converting type {vyper_type}: {str(e)}, falling back to Any")
+        return 'Any'
 
 
 def generate_type_file(contract_name: str, abi: List[dict], output_dir: Path) -> bool:
-    """Generate a Python type file from ABI data"""
+    """Generate a Python type file and ABI JSON from ABI data"""
     try:
         content = [
             "from typing import Protocol, List, Any, Optional, Tuple\n\n",
@@ -65,7 +121,7 @@ def generate_type_file(contract_name: str, abi: List[dict], output_dir: Path) ->
                 func_def = f"    def {item['name']}({', '.join(inputs)}) -> {return_type}:\n        ...\n\n"
                 content.append(func_def)
 
-        output_path = output_dir / f"{contract_name}_types.py"
+        output_path = output_dir / f"{contract_name}.py"
         output_path.write_text(''.join(content))
         print(f"Generated type stub for {contract_name}:")
         print(f"  - {output_path}")
@@ -77,14 +133,16 @@ def generate_type_file(contract_name: str, abi: List[dict], output_dir: Path) ->
 
 
 def generate_contract_files(contracts_dir: str = "contracts", output_dir: str = "generated"):
-    """Generate type stubs for all Vyper contracts"""
+    """Generate type stubs and ABI files for all Vyper contracts"""
     # Create Path objects
     output_path = Path(output_dir)
     types_dir = output_path / "types"
+    abi_dir = output_path / "abi"  # New directory for ABI files
 
     # Clean and recreate directories
     clean_directory(output_path)
     clean_directory(types_dir)
+    clean_directory(abi_dir)  # Clean ABI directory
 
     # Create __init__.py files
     output_path.joinpath("__init__.py").write_text("")
@@ -116,8 +174,15 @@ def generate_contract_files(contracts_dir: str = "contracts", output_dir: str = 
                 print(f"\nWarning: Empty ABI generated for {contract_path}, skipping")
                 continue
 
-            # Parse ABI and generate type file
+            # Parse ABI and generate type file and save ABI
             abi = json.loads(abi_result.stdout)
+
+            # Save ABI file
+            abi_file = abi_dir / f"{contract_name}.json"
+            abi_file.write_text(json.dumps(abi, indent=2))
+            print(f"  - {abi_file}")
+
+            # Generate type file
             if generate_type_file(contract_name, abi, types_dir):
                 successful_contracts.append(contract_name)
 
@@ -128,7 +193,7 @@ def generate_contract_files(contracts_dir: str = "contracts", output_dir: str = 
         # Generate __init__.py to expose all types
         init_content = []
         for contract_name in successful_contracts:
-            init_content.append(f"from .{contract_name}_types import {contract_name}Contract\n")
+            init_content.append(f"from .{contract_name} import {contract_name}Contract\n")
 
         types_dir.joinpath("__init__.py").write_text(''.join(init_content))
         print(f"\nGenerated type stubs in {types_dir}")

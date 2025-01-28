@@ -144,16 +144,14 @@ async def user_auth(credentials: HTTPAuthorizationCredentials = Security(jwt_bea
 async def agent_auth(
     agent_id: str = Security(agent_id_header),
     api_key: str = Security(agent_key_header)
-) -> dict:
+) -> Agent:
     if not agent_id or not api_key:
         raise HTTPException(status_code=401, detail="Agent ID or API Key header not found")
 
     agent = await Agent.get_or_none(id=agent_id, api_key=api_key)
     if not agent:
         raise HTTPException(status_code=401, detail="Invalid Agent ID or API Key")
-
-    agent_info = await Agent_Pydantic.from_tortoise_orm(agent)
-    return agent_info.model_dump()
+    return agent
 
 
 def generate_api_key(length: int = 32) -> str:
