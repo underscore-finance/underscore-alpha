@@ -22,8 +22,10 @@ def new_wallet_template():
 
 
 @pytest.fixture(scope="module")
-def new_agent_factory(lego_registry, weth, new_wallet_template, governor):
-    f = boa.load("contracts/core/AgentFactory.vy", lego_registry, weth, new_wallet_template, name="new_wallet_template")
+def new_agent_factory(addy_registry, weth, new_wallet_template, governor, agent_factory):
+    f = boa.load("contracts/core/AgentFactory.vy", addy_registry, weth, new_wallet_template, name="new_wallet_template")
+    agent_factory_addy_id = addy_registry.getAddyId(agent_factory.address)
+    assert addy_registry.updateAddy(agent_factory_addy_id, f.address, sender=governor)
     assert f.setNumAgenticWalletsAllowed(MAX_UINT256, sender=governor)
     return f
 
@@ -33,8 +35,8 @@ def new_agent_factory(lego_registry, weth, new_wallet_template, governor):
 #########
 
 
-def test_agent_factory_init(new_agent_factory, lego_registry, weth, new_wallet_template):
-    assert new_agent_factory.LEGO_REGISTRY() == lego_registry.address
+def test_agent_factory_init(new_agent_factory, addy_registry, weth, new_wallet_template):
+    assert new_agent_factory.ADDY_REGISTRY() == addy_registry.address
     assert new_agent_factory.WETH_ADDR() == weth.address
     assert new_agent_factory.isActivated()
     assert new_agent_factory.currentAgentTemplate() == new_wallet_template.address

@@ -11,6 +11,12 @@ interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
 
+interface AgentPrices:
+    def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> CostData: view
+
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
+
 flag ActionType:
     DEPOSIT
     WITHDRAWAL
@@ -51,6 +57,15 @@ struct ActionInstruction:
     altAsset: address
     altAmount: uint256
 
+struct CostData:
+    protocolRecipient: address
+    protocolAsset: address
+    protocolAssetAmount: uint256
+    protocolUsdValue: uint256
+    agentAsset: address
+    agentAssetAmount: uint256
+    agentUsdValue: uint256
+
 event AgenticDeposit:
     signer: indexed(address)
     asset: indexed(address)
@@ -58,6 +73,7 @@ event AgenticDeposit:
     assetAmountDeposited: uint256
     vaultTokenAmountReceived: uint256
     refundAssetAmount: uint256
+    usdValue: uint256
     legoId: uint256
     legoAddr: address
     broadcaster: address
@@ -70,6 +86,7 @@ event AgenticWithdrawal:
     assetAmountReceived: uint256
     vaultTokenAmountBurned: uint256
     refundVaultTokenAmount: uint256
+    usdValue: uint256
     legoId: uint256
     legoAddr: address
     broadcaster: address
@@ -82,6 +99,7 @@ event AgenticSwap:
     swapAmount: uint256
     toAmount: uint256
     refundAssetAmount: uint256
+    usdValue: uint256
     legoId: uint256
     legoAddr: address
     broadcaster: address
@@ -92,6 +110,7 @@ event WalletFundsTransferred:
     recipient: indexed(address)
     asset: indexed(address)
     amount: uint256
+    usdValue: uint256
     broadcaster: address
     isSignerAgent: bool
 
@@ -109,6 +128,28 @@ event WethConvertedToEth:
     weth: indexed(address)
     broadcaster: indexed(address)
     isSignerAgent: bool
+
+event SimpleTransactionFeePaid:
+    agent: indexed(address)
+    action: ActionType
+    transactionUsdValue: uint256
+    agentAsset: indexed(address)
+    agentAssetAmount: uint256
+    agentUsdValue: uint256
+    protocolRecipient: address
+    protocolAsset: indexed(address)
+    protocolAssetAmount: uint256
+    protocolUsdValue: uint256
+
+event BatchTransactionFeePaid:
+    agent: indexed(address)
+    agentAsset: indexed(address)
+    agentAssetAmount: uint256
+    agentUsdValue: uint256
+    protocolRecipient: address
+    protocolAsset: indexed(address)
+    protocolAssetAmount: uint256
+    protocolUsdValue: uint256
 
 event WhitelistAddrSet:
     addr: indexed(address)
@@ -152,7 +193,7 @@ agentSettings: public(HashMap[address, AgentInfo])
 isRecipientAllowed: public(HashMap[address, bool])
 
 # config
-legoRegistry: public(address)
+addyRegistry: public(address)
 wethAddr: public(address)
 initialized: public(bool)
 
@@ -161,6 +202,10 @@ API_VERSION: constant(String[28]) = "0.0.1"
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 10
 MAX_INSTRUCTIONS: constant(uint256) = 20
+
+# registry ids
+LEGO_REGISTRY_ID: constant(uint256) = 1
+AGENT_PRICES_ID: constant(uint256) = 3
 
 # eip-712
 usedSignatures: public(HashMap[Bytes[65], bool])
@@ -190,11 +235,11 @@ def __default__():
 
 
 @external
-def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _initialAgent: address) -> bool:
+def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _initialAgent: address) -> bool:
     """
     @notice Sets up the initial state of the wallet template
     @dev Can only be called once and sets core contract parameters
-    @param _legoRegistry The address of the lego registry contract
+    @param _addyRegistry The address of the core registry contract
     @param _wethAddr The address of the WETH contract
     @param _owner The address that will own this wallet
     @param _initialAgent The address of the initial AI agent (if any)
@@ -203,9 +248,9 @@ def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _ini
     assert not self.initialized # dev: can only initialize once
     self.initialized = True
 
-    assert empty(address) not in [_legoRegistry, _wethAddr, _owner] # dev: invalid addrs
+    assert empty(address) not in [_addyRegistry, _wethAddr, _owner] # dev: invalid addrs
     assert _initialAgent != _owner # dev: agent cannot be owner
-    self.legoRegistry = _legoRegistry
+    self.addyRegistry = _addyRegistry
     self.wethAddr = _wethAddr
     self.owner = _owner
 
@@ -325,7 +370,7 @@ def depositTokens(
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
     _sig: Signature = empty(Signature),
-) -> (uint256, address, uint256):
+) -> (uint256, address, uint256, uint256):
     """
     @notice Deposits tokens into a specified lego integration and vault
     @param _legoId The ID of the lego to use for deposit
@@ -336,10 +381,27 @@ def depositTokens(
     @return uint256 The amount of assets deposited
     @return address The vault token address
     @return uint256 The amount of vault tokens received
+    @return uint256 The usd value of the transaction
     """
     signer: address = self._getSignerOnDeposit(_legoId, _asset, _amount, _vault, _sig)
     isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.DEPOSIT, [_asset], [_legoId])
-    return self._depositTokens(signer, _legoId, _asset, _amount, _vault, isSignerAgent)
+
+    # addys
+    addyRegistry: address = self.addyRegistry
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+
+    # deposit tokens
+    assetAmountDeposited: uint256 = 0
+    vaultToken: address = empty(address)
+    vaultTokenAmountReceived: uint256 = 0
+    usdValue: uint256 = 0
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = self._depositTokens(signer, _legoId, _asset, _amount, _vault, isSignerAgent, legoRegistry)
+
+    # handle transaction fees
+    if isSignerAgent:
+        self._handleSimpleTransactionFee(signer, ActionType.DEPOSIT, usdValue, addyRegistry)
+
+    return assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue
 
 
 @nonreentrant
@@ -349,7 +411,7 @@ def depositTokensWithTransfer(
     _asset: address,
     _amount: uint256 = max_value(uint256),
     _vault: address = empty(address),
-) -> (uint256, address, uint256):
+) -> (uint256, address, uint256, uint256):
     """
     @notice Transfers tokens from sender and deposits them into a specified lego integration and vault
     @param _legoId The ID of the lego to use for deposit
@@ -359,10 +421,12 @@ def depositTokensWithTransfer(
     @return uint256 The amount of assets deposited
     @return address The vault token address
     @return uint256 The amount of vault tokens received
+    @return uint256 The usd value of the transaction
     """
     amount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(msg.sender))
     assert extcall IERC20(_asset).transferFrom(msg.sender, self, amount, default_return_value=True) # dev: transfer failed
-    return self._depositTokens(msg.sender, _legoId, _asset, amount, _vault, self.agentSettings[msg.sender].isActive)
+    legoRegistry: address = staticcall AddyRegistry(self.addyRegistry).getAddy(LEGO_REGISTRY_ID)
+    return self._depositTokens(msg.sender, _legoId, _asset, amount, _vault, self.agentSettings[msg.sender].isActive, legoRegistry)
 
 
 @internal
@@ -373,8 +437,9 @@ def _depositTokens(
     _amount: uint256,
     _vault: address,
     _isSignerAgent: bool,
-) -> (uint256, address, uint256):
-    legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
+    _legoRegistry: address,
+) -> (uint256, address, uint256, uint256):
+    legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     # finalize amount
@@ -387,11 +452,12 @@ def _depositTokens(
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
     refundAssetAmount: uint256 = 0
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, refundAssetAmount = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault, self)
+    usdValue: uint256 = 0
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault, self)
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticDeposit(_signer, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, refundAssetAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
-    return assetAmountDeposited, vaultToken, vaultTokenAmountReceived
+    log AgenticDeposit(_signer, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    return assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue
 
 
 @internal
@@ -424,7 +490,7 @@ def withdrawTokens(
     _amount: uint256 = max_value(uint256),
     _vaultToken: address = empty(address),
     _sig: Signature = empty(Signature),
-) -> (uint256, uint256):
+) -> (uint256, uint256, uint256):
     """
     @notice Withdraws tokens from a specified lego integration and vault
     @param _legoId The ID of the lego to use for withdrawal
@@ -434,10 +500,26 @@ def withdrawTokens(
     @param _sig The signature of agent or owner (optional)
     @return uint256 The amount of assets received
     @return uint256 The amount of vault tokens burned
+    @return uint256 The usd value of the transaction
     """
     signer: address = self._getSignerOnWithdrawal(_legoId, _asset, _amount, _vaultToken, _sig)
     isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.WITHDRAWAL, [_asset], [_legoId])
-    return self._withdrawTokens(signer, _legoId, _asset, _amount, _vaultToken, isSignerAgent)
+
+    # addys
+    addyRegistry: address = self.addyRegistry
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+
+    # withdraw from lego partner
+    assetAmountReceived: uint256 = 0
+    vaultTokenAmountBurned: uint256 = 0
+    usdValue: uint256 = 0
+    assetAmountReceived, vaultTokenAmountBurned, usdValue = self._withdrawTokens(signer, _legoId, _asset, _amount, _vaultToken, isSignerAgent, legoRegistry)
+
+    # handle transaction fees
+    if isSignerAgent:
+        self._handleSimpleTransactionFee(signer, ActionType.WITHDRAWAL, usdValue, addyRegistry)
+
+    return assetAmountReceived, vaultTokenAmountBurned, usdValue
 
 
 @internal
@@ -448,8 +530,9 @@ def _withdrawTokens(
     _amount: uint256,
     _vaultToken: address,
     _isSignerAgent: bool,
-) -> (uint256, uint256):
-    legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
+    _legoRegistry: address,
+) -> (uint256, uint256, uint256):
+    legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     # finalize amount, this will look at vault token balance (not always 1:1 with underlying asset)
@@ -466,14 +549,15 @@ def _withdrawTokens(
     assetAmountReceived: uint256 = 0
     vaultTokenAmountBurned: uint256 = 0
     refundVaultTokenAmount: uint256 = 0
-    assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken, self)
+    usdValue: uint256 = 0
+    assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken, self)
 
     # zero out approvals
     if _vaultToken != empty(address):
         assert extcall IERC20(_vaultToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticWithdrawal(_signer, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
-    return assetAmountReceived, vaultTokenAmountBurned
+    log AgenticWithdrawal(_signer, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    return assetAmountReceived, vaultTokenAmountBurned, usdValue
 
 
 @internal
@@ -508,7 +592,7 @@ def rebalance(
     _fromVaultToken: address = empty(address),
     _toVault: address = empty(address),
     _sig: Signature = empty(Signature),
-) -> (uint256, address, uint256):
+) -> (uint256, address, uint256, uint256):
     """
     @notice Withdraws tokens from one lego and deposits them into another (always same asset)
     @param _fromLegoId The ID of the source lego
@@ -521,10 +605,27 @@ def rebalance(
     @return uint256 The amount of assets deposited in the destination vault
     @return address The destination vault token address
     @return uint256 The amount of destination vault tokens received
+    @return uint256 The usd value of the transaction
     """
     signer: address = self._getSignerOnRebalance(_fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, _sig)
     isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.REBALANCE, [_asset], [_fromLegoId, _toLegoId])
-    return self._rebalance(signer, _fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, isSignerAgent)
+
+    # addys
+    addyRegistry: address = self.addyRegistry
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+
+    # rebalance
+    assetAmountDeposited: uint256 = 0
+    newVaultToken: address = empty(address)
+    vaultTokenAmountReceived: uint256 = 0
+    usdValue: uint256 = 0
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = self._rebalance(signer, _fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, isSignerAgent, legoRegistry)
+
+    # handle transaction fees
+    if isSignerAgent:
+        self._handleSimpleTransactionFee(signer, ActionType.REBALANCE, usdValue, addyRegistry)
+
+    return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue
 
 
 @internal
@@ -537,20 +638,23 @@ def _rebalance(
     _fromVaultToken: address,
     _toVault: address,
     _isSignerAgent: bool,
-) -> (uint256, address, uint256):
+    _legoRegistry: address,
+) -> (uint256, address, uint256, uint256):
 
     # withdraw from the first lego
     assetAmountReceived: uint256 = 0
     vaultTokenAmountBurned: uint256 = 0
-    assetAmountReceived, vaultTokenAmountBurned = self._withdrawTokens(_signer, _fromLegoId, _asset, _amount, _fromVaultToken, _isSignerAgent)
+    withdrawUsdValue: uint256 = 0
+    assetAmountReceived, vaultTokenAmountBurned, withdrawUsdValue = self._withdrawTokens(_signer, _fromLegoId, _asset, _amount, _fromVaultToken, _isSignerAgent, _legoRegistry)
 
     # deposit the received assets into the second lego
     assetAmountDeposited: uint256 = 0
     newVaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
-    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived = self._depositTokens(_signer, _toLegoId, _asset, assetAmountReceived, _toVault, _isSignerAgent)
+    depositUsdValue: uint256 = 0
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(_signer, _toLegoId, _asset, assetAmountReceived, _toVault, _isSignerAgent, _legoRegistry)
 
-    return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived
+    return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, max(withdrawUsdValue, depositUsdValue)
 
 
 @internal
@@ -586,7 +690,7 @@ def swapTokens(
     _amountIn: uint256 = max_value(uint256),
     _minAmountOut: uint256 = 0,
     _sig: Signature = empty(Signature),
-) -> (uint256, uint256):
+) -> (uint256, uint256, uint256):
     """
     @notice Swaps tokens using a specified lego integration
     @dev Validates agent permissions if caller is not the owner
@@ -598,10 +702,26 @@ def swapTokens(
     @param _sig The signature of agent or owner (optional)
     @return uint256 The actual amount of input tokens swapped
     @return uint256 The amount of output tokens received
+    @return uint256 The usd value of the transaction
     """
     signer: address = self._getSignerOnSwap(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _sig)
     isSignerAgent: bool = self._checkSignerPermissions(signer, self.owner, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId])
-    return self._swapTokens(signer, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, isSignerAgent)
+
+    # addys
+    addyRegistry: address = self.addyRegistry
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+
+    # swap
+    actualSwapAmount: uint256 = 0
+    toAmount: uint256 = 0
+    usdValue: uint256 = 0
+    actualSwapAmount, toAmount, usdValue = self._swapTokens(signer, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, isSignerAgent, legoRegistry)
+
+    # handle transaction fees
+    if isSignerAgent:
+        self._handleSimpleTransactionFee(signer, ActionType.SWAP, usdValue, addyRegistry)
+
+    return actualSwapAmount, toAmount, usdValue
 
 
 @internal
@@ -613,8 +733,9 @@ def _swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256, 
     _isSignerAgent: bool,
-) -> (uint256, uint256):
-    legoAddr: address = staticcall LegoRegistry(self.legoRegistry).getLegoAddr(_legoId)
+    _legoRegistry: address,
+) -> (uint256, uint256, uint256):
+    legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
     assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
 
@@ -627,11 +748,12 @@ def _swapTokens(
     actualSwapAmount: uint256 = 0
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
-    actualSwapAmount, toAmount, refundAssetAmount = extcall LegoPartner(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
+    usdValue: uint256 = 0
+    actualSwapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoPartner(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticSwap(_signer, _tokenIn, _tokenOut, actualSwapAmount, toAmount, refundAssetAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
-    return actualSwapAmount, toAmount
+    log AgenticSwap(_signer, _tokenIn, _tokenOut, actualSwapAmount, toAmount, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    return actualSwapAmount, toAmount, usdValue
 
 
 @internal
@@ -664,7 +786,7 @@ def transferFunds(
     _amount: uint256 = max_value(uint256),
     _asset: address = empty(address),
     _sig: Signature = empty(Signature),
-) -> uint256:
+) -> (uint256, uint256):
     """
     @notice Transfers funds to a specified recipient
     @dev Handles both ETH and token transfers with optional amount specification
@@ -673,11 +795,25 @@ def transferFunds(
     @param _asset The token address (empty for ETH)
     @param _sig The signature of agent or owner (optional)
     @return uint256 The amount of funds transferred
+    @return uint256 The usd value of the transaction
     """
     owner: address = self.owner
     signer: address = self._getSignerOnTransfer(_recipient, _amount, _asset, _sig)
     isSignerAgent: bool = self._checkSignerPermissions(signer, owner, ActionType.TRANSFER, [_asset])
-    return self._transferFunds(signer, _recipient, _amount, _asset, owner, isSignerAgent)
+
+    # addys
+    addyRegistry: address = self.addyRegistry
+
+    # transfer funds
+    amount: uint256 = 0
+    usdValue: uint256 = 0
+    amount, usdValue = self._transferFunds(signer, _recipient, _amount, _asset, owner, isSignerAgent, addyRegistry)
+
+    # handle transaction fees
+    if isSignerAgent:
+        self._handleSimpleTransactionFee(signer, ActionType.TRANSFER, usdValue, addyRegistry)
+
+    return amount, usdValue
 
 
 @internal
@@ -688,7 +824,8 @@ def _transferFunds(
     _asset: address,
     _owner: address,
     _isSignerAgent: bool,
-) -> uint256:
+    _addyRegistry: address,
+) -> (uint256, uint256):
     # validate recipient
     if _recipient != _owner:
         assert self.isRecipientAllowed[_recipient] # dev: recipient not allowed
@@ -707,8 +844,10 @@ def _transferFunds(
     else:
         assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
 
-    log WalletFundsTransferred(_signer, _recipient, _asset, amount, msg.sender, _isSignerAgent)
-    return amount
+    usdValue: uint256 = 0 # TODO: implement, use `_addyRegistry` to get price desk and calc usd value
+
+    log WalletFundsTransferred(_signer, _recipient, _asset, amount, usdValue, msg.sender, _isSignerAgent)
+    return amount, usdValue
 
 
 @internal
@@ -769,15 +908,29 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
     """
     assert len(_instructions) != 0 # dev: no instructions
 
+    # addys
+    addyRegistry: address = self.addyRegistry
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+    agentPrices: address = staticcall AddyRegistry(addyRegistry).getAddy(AGENT_PRICES_ID)
+
     owner: address = self.owner
-    isSignerAgent: bool = False
-    agentInfo: AgentInfo = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[], allowedActions=empty(AllowedActions))
+    signer: address = msg.sender
+    # TODO: allow broadcaster to be different from signer
 
     # get agent settings
-    if msg.sender != owner:
+    isSignerAgent: bool = False
+    agentInfo: AgentInfo = AgentInfo(isActive=True, allowedAssets=[], allowedLegoIds=[], allowedActions=empty(AllowedActions))
+    if signer != owner:
         isSignerAgent = True
-        agentInfo = self.agentSettings[msg.sender]
+        agentInfo = self.agentSettings[signer]
         assert agentInfo.isActive # dev: agent not active
+
+    # init vars
+    aggCostData: CostData = empty(CostData)
+    usdValue: uint256 = 0
+    naValueA: uint256 = 0
+    naAddyA: address = empty(address)
+    naValueB: uint256 = 0
 
     # iterate through instructions
     for i: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
@@ -786,27 +939,36 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         # deposit
         if instruction.action == ActionType.DEPOSIT:
             assert self._canAgentAccess(agentInfo, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            self._depositTokens(msg.sender, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent)
+            naValueA, naAddyA, naValueB, usdValue = self._depositTokens(signer, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent, legoRegistry)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.DEPOSIT, usdValue, agentPrices)
 
         # withdraw
         elif instruction.action == ActionType.WITHDRAWAL:
             assert self._canAgentAccess(agentInfo, ActionType.WITHDRAWAL, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            self._withdrawTokens(msg.sender, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent)
+            naValueA, naValueB, usdValue = self._withdrawTokens(signer, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent, legoRegistry)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, agentPrices)
 
         # rebalance
         elif instruction.action == ActionType.REBALANCE:
             assert self._canAgentAccess(agentInfo, ActionType.REBALANCE, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: agent not allowed
-            self._rebalance(msg.sender, instruction.legoId, instruction.altLegoId, instruction.asset, instruction.amount, instruction.vault, instruction.altVault, isSignerAgent)
-
-        # transfer
-        elif instruction.action == ActionType.TRANSFER:
-            assert self._canAgentAccess(agentInfo, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            self._transferFunds(msg.sender, instruction.recipient, instruction.amount, instruction.asset, owner, isSignerAgent)
+            naValueA, naAddyA, naValueB, usdValue = self._rebalance(signer, instruction.legoId, instruction.altLegoId, instruction.asset, instruction.amount, instruction.vault, instruction.altVault, isSignerAgent, legoRegistry)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.REBALANCE, usdValue, agentPrices)
 
         # swap
         elif instruction.action == ActionType.SWAP:
             assert self._canAgentAccess(agentInfo, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
-            self._swapTokens(msg.sender, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, isSignerAgent)
+            naValueA, naValueB, usdValue = self._swapTokens(signer, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, isSignerAgent, legoRegistry)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.SWAP, usdValue, agentPrices)
+
+        # transfer
+        elif instruction.action == ActionType.TRANSFER:
+            assert self._canAgentAccess(agentInfo, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
+            naValueA, usdValue = self._transferFunds(signer, instruction.recipient, instruction.amount, instruction.asset, owner, isSignerAgent, addyRegistry)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.TRANSFER, usdValue, agentPrices)
+
+    # handle transaction fees
+    if isSignerAgent:
+        self._handleBatchTransactionFees(signer, aggCostData)
 
     return True
 
@@ -848,14 +1010,22 @@ def convertEthToWeth(
     extcall WethContract(weth).deposit(value=amount)
     log EthConvertedToWeth(signer, amount, msg.value, weth, msg.sender, isSignerAgent)
 
+    # addys
+    addyRegistry: address = self.addyRegistry
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+
     # deposit weth into lego partner
-    assetAmountDeposited: uint256 = 0
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
     if _depositLegoId != 0:
-        assetAmountDeposited, vaultToken, vaultTokenAmountReceived = self._depositTokens(signer, _depositLegoId, weth, amount, _depositVault, isSignerAgent)
+        depositUsdValue: uint256 = 0
+        amount, vaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(signer, _depositLegoId, weth, amount, _depositVault, isSignerAgent, legoRegistry)
 
-    return assetAmountDeposited, vaultToken, vaultTokenAmountReceived
+        # handle transaction fees
+        if isSignerAgent:
+            self._handleSimpleTransactionFee(signer, ActionType.DEPOSIT, depositUsdValue, addyRegistry)
+
+    return amount, vaultToken, vaultTokenAmountReceived
 
 
 @internal
@@ -900,11 +1070,20 @@ def convertWethToEth(
     signer: address = self._getSignerOnWethToEth(_amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig)
     isSignerAgent: bool = self._checkSignerPermissions(signer, owner, ActionType.CONVERSION, [weth], [_withdrawLegoId])
 
+    # addys
+    addyRegistry: address = self.addyRegistry
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+
     # withdraw weth from lego partner (if applicable)
     amount: uint256 = _amount
+    usdValue: uint256 = 0
     if _withdrawLegoId != 0:
         _na: uint256 = 0
-        amount, _na = self._withdrawTokens(signer, _withdrawLegoId, weth, _amount, _withdrawVaultToken, isSignerAgent)
+        amount, _na, usdValue = self._withdrawTokens(signer, _withdrawLegoId, weth, _amount, _withdrawVaultToken, isSignerAgent, legoRegistry)
+
+        # handle transaction fees
+        if isSignerAgent:
+            self._handleSimpleTransactionFee(signer, ActionType.WITHDRAWAL, usdValue, addyRegistry)
 
     # convert weth to eth
     amount = min(amount, staticcall IERC20(weth).balanceOf(self))
@@ -914,8 +1093,12 @@ def convertWethToEth(
 
     # transfer eth to recipient (if applicable)
     if _recipient != empty(address):
-        self._transferFunds(signer, _recipient, amount, empty(address), owner, isSignerAgent)
+        amount, usdValue = self._transferFunds(signer, _recipient, amount, empty(address), owner, isSignerAgent, addyRegistry)
 
+        # handle transaction fees
+        if isSignerAgent:
+            self._handleSimpleTransactionFee(signer, ActionType.TRANSFER, usdValue, addyRegistry)
+            
     return amount
 
 
@@ -934,6 +1117,88 @@ def _getSignerOnWethToEth(
     self._isValidSignature(abi_encode(WETH_TO_ETH_TYPE_HASH, _amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig.expiration), _sig)
 
     return _sig.signer
+
+
+###############
+# Agent Costs #
+###############
+
+
+@internal
+def _handleSimpleTransactionFee(_agent: address, _action: ActionType, _usdValue: uint256, _addyRegistry: address):
+    agentPrices: address = staticcall AddyRegistry(_addyRegistry).getAddy(AGENT_PRICES_ID)
+    cost: CostData = staticcall AgentPrices(agentPrices).getTransactionCost(_agent, _action, _usdValue)
+    didPay: bool = self._payTransactionFees(_agent, cost.agentAsset, cost.agentAssetAmount, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount)
+    if didPay:
+        log SimpleTransactionFeePaid(_agent, _action, _usdValue, cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue)
+
+
+@internal
+def _handleBatchTransactionFees(_agent: address, _aggCostData: CostData):
+    didPay: bool = self._payTransactionFees(_agent, _aggCostData.agentAsset, _aggCostData.agentAssetAmount, _aggCostData.protocolRecipient, _aggCostData.protocolAsset, _aggCostData.protocolAssetAmount)
+    if didPay:
+        log BatchTransactionFeePaid(_agent, _aggCostData.agentAsset, _aggCostData.agentAssetAmount, _aggCostData.agentUsdValue, _aggCostData.protocolRecipient, _aggCostData.protocolAsset, _aggCostData.protocolAssetAmount, _aggCostData.protocolUsdValue)
+
+
+@internal
+def _payTransactionFees(
+    _agent: address,
+    _agentAsset: address,
+    _agentAssetAmount: uint256,
+    _protocolRecipient: address,
+    _protocolAsset: address,
+    _protocolAssetAmount: uint256,
+) -> bool:
+    didPay: bool = False
+
+    # transfer agent tx fees
+    if _agent != empty(address) and _agentAsset != empty(address) and _agentAssetAmount != 0:
+        assert extcall IERC20(_agentAsset).transfer(_agent, _agentAssetAmount, default_return_value=True) # dev: agent tx fee transfer failed
+        didPay = True
+
+    # transfer protocol tx fees
+    if _protocolRecipient != empty(address) and _protocolAsset != empty(address) and _protocolAssetAmount != 0:
+        assert extcall IERC20(_protocolAsset).transfer(_protocolRecipient, _protocolAssetAmount, default_return_value=True) # dev: protocol tx fee transfer failed
+        didPay = True
+
+    return didPay
+
+
+@view
+@internal
+def _aggregateBatchTxCostData(
+    _aggCostData: CostData,
+    _agent: address,
+    _isSignerAgent: bool,
+    _action: ActionType,
+    _usdValue: uint256,
+    _agentPrices: address,
+) -> CostData:
+    if not _isSignerAgent:
+        return _aggCostData
+
+    aggCostData: CostData = _aggCostData
+    txCost: CostData = staticcall AgentPrices(_agentPrices).getTransactionCost(_agent, _action, _usdValue)
+
+    # agent asset
+    if aggCostData.agentAsset == empty(address) and txCost.agentAsset != empty(address):
+        aggCostData.agentAsset = txCost.agentAsset
+
+    # protocol asset
+    if aggCostData.protocolAsset == empty(address) and txCost.protocolAsset != empty(address):
+        aggCostData.protocolAsset = txCost.protocolAsset
+
+    # protocol recipient
+    if aggCostData.protocolRecipient == empty(address) and txCost.protocolRecipient != empty(address):
+        aggCostData.protocolRecipient = txCost.protocolRecipient
+
+    # aggregate amounts / usd values
+    aggCostData.agentAssetAmount += txCost.agentAssetAmount
+    aggCostData.protocolAssetAmount += txCost.protocolAssetAmount
+    aggCostData.agentUsdValue += txCost.agentUsdValue
+    aggCostData.protocolUsdValue += txCost.protocolUsdValue
+
+    return aggCostData
 
 
 ##################
@@ -1006,7 +1271,7 @@ def _sanitizeAgentInputData(
     # validate and dedupe lego ids
     cleanLegoIds: DynArray[uint256, MAX_LEGOS] = []
     if len(_allowedLegoIds) != 0:
-        legoRegistry: address = self.legoRegistry
+        legoRegistry: address = staticcall AddyRegistry(self.addyRegistry).getAddy(LEGO_REGISTRY_ID)
         for i: uint256 in range(len(_allowedLegoIds), bound=MAX_LEGOS):
             legoId: uint256 = _allowedLegoIds[i]
             if not staticcall LegoRegistry(legoRegistry).isValidLegoId(legoId):
@@ -1057,7 +1322,8 @@ def addLegoIdForAgent(_agent: address, _legoId: uint256) -> bool:
     agentInfo: AgentInfo = self.agentSettings[_agent]
     assert agentInfo.isActive # dev: agent not active
 
-    assert staticcall LegoRegistry(self.legoRegistry).isValidLegoId(_legoId)
+    legoRegistry: address = staticcall AddyRegistry(self.addyRegistry).getAddy(LEGO_REGISTRY_ID)
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_legoId)
     assert _legoId not in agentInfo.allowedLegoIds # dev: lego id already saved
 
     # save data

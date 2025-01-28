@@ -19,6 +19,7 @@ event SkyDeposit:
     asset: indexed(address)
     vaultToken: indexed(address)
     assetAmountDeposited: uint256
+    usdValue: uint256
     vaultTokenAmountReceived: uint256
     recipient: address
 
@@ -27,6 +28,7 @@ event SkyWithdrawal:
     asset: indexed(address)
     vaultToken: indexed(address)
     assetAmountReceived: uint256
+    usdValue: uint256
     vaultTokenAmountBurned: uint256
     recipient: address
 
@@ -74,7 +76,7 @@ def _validateAssetAndVault(_asset: address, _vault: address, _skyPsm: address) -
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256, uint256):
     skyPsm: address = SKY_PSM
     vaultToken: address = self._validateAssetAndVault(_asset, _vault, skyPsm)
 
@@ -102,8 +104,10 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
         assert extcall IERC20(_asset).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAssetAmount
-    log SkyDeposit(msg.sender, _asset, vaultToken, actualDepositAmount, vaultTokenAmountReceived, _recipient)
-    return actualDepositAmount, vaultToken, vaultTokenAmountReceived, refundAssetAmount
+    usdValue: uint256 = 0 # TODO: add usd value (_asset, actualDepositAmount)
+
+    log SkyDeposit(msg.sender, _asset, vaultToken, actualDepositAmount, usdValue, vaultTokenAmountReceived, _recipient)
+    return actualDepositAmount, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue
 
 
 ############
@@ -112,7 +116,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256, uint256):
     skyPsm: address = SKY_PSM
     vaultToken: address = self._validateAssetAndVault(_asset, _vaultToken, skyPsm)
 
@@ -132,6 +136,8 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     assert assetAmountReceived != 0 # dev: no asset amount received
     assert extcall IERC20(vaultToken).approve(skyPsm, 0, default_return_value=True) # dev: approval failed
 
+    usdValue: uint256 = 0 # TODO: add usd value (_asset, assetAmountReceived)
+
     # refund if full withdrawal didn't happen
     currentLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)
     refundVaultTokenAmount: uint256 = 0
@@ -140,8 +146,8 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
         assert extcall IERC20(vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     vaultTokenAmountBurned: uint256 = transferVaultTokenAmount - refundVaultTokenAmount
-    log SkyWithdrawal(msg.sender, _asset, vaultToken, assetAmountReceived, vaultTokenAmountBurned, _recipient)
-    return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount
+    log SkyWithdrawal(msg.sender, _asset, vaultToken, assetAmountReceived, usdValue, vaultTokenAmountBurned, _recipient)
+    return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue
 
 
 ###################
@@ -150,7 +156,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 
 @external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256):
+def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256, uint256):
     raise "Not Implemented"
 
 

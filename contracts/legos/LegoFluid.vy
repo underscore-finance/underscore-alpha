@@ -21,6 +21,7 @@ event FluidDeposit:
     asset: indexed(address)
     vaultToken: indexed(address)
     assetAmountDeposited: uint256
+    usdValue: uint256
     vaultTokenAmountReceived: uint256
     recipient: address
 
@@ -29,6 +30,7 @@ event FluidWithdrawal:
     asset: indexed(address)
     vaultToken: indexed(address)
     assetAmountReceived: uint256
+    usdValue: uint256
     vaultTokenAmountBurned: uint256
     recipient: address
 
@@ -75,7 +77,7 @@ def _validateAssetAndVault(_asset: address, _vault: address):
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256, uint256):
     self._validateAssetAndVault(_asset, _vault)
 
     # pre balances
@@ -101,8 +103,10 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
         assert extcall IERC20(_asset).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAssetAmount
-    log FluidDeposit(msg.sender, _asset, _vault, actualDepositAmount, vaultTokenAmountReceived, _recipient)
-    return actualDepositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount
+    usdValue: uint256 = 0 # TODO: add usd value (_asset, actualDepositAmount)
+
+    log FluidDeposit(msg.sender, _asset, _vault, actualDepositAmount, usdValue, vaultTokenAmountReceived, _recipient)
+    return actualDepositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount, usdValue
 
 
 ############
@@ -111,7 +115,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256, uint256):
     self._validateAssetAndVault(_asset, _vaultToken)
 
     # pre balances
@@ -127,6 +131,8 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     assetAmountReceived: uint256 = extcall Erc4626Interface(_vaultToken).redeem(withdrawVaultTokenAmount, _recipient, self)
     assert assetAmountReceived != 0 # dev: no asset amount received
 
+    usdValue: uint256 = 0 # TODO: add usd value (_asset, assetAmountReceived)
+
     # refund if full withdrawal didn't happen
     currentLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
     refundVaultTokenAmount: uint256 = 0
@@ -135,8 +141,8 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
         assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
-    log FluidWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, _recipient)
-    return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount
+    log FluidWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, usdValue, vaultTokenAmountBurned, _recipient)
+    return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue
 
 
 ###################
@@ -145,7 +151,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 
 @external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256):
+def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256, uint256):
     raise "Not Implemented"
 
 

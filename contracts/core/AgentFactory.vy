@@ -1,9 +1,9 @@
 # @version 0.4.0
 
 interface AgenticWallet:
-    def initialize(_legoRegistry: address, _wethAddr: address, _owner: address, _agent: address) -> bool: nonpayable
+    def initialize(_AddyRegistry: address, _wethAddr: address, _owner: address, _agent: address) -> bool: nonpayable
 
-interface LegoRegistry:
+interface AddyRegistry:
     def governor() -> address: view
 
 struct TemplateInfo:
@@ -48,15 +48,14 @@ numAgenticWalletsAllowed: public(uint256)
 
 # config
 isActivated: public(bool)
-
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 WETH_ADDR: public(immutable(address))
 
 
 @deploy
-def __init__(_legoRegistry: address, _wethAddr: address, _walletTemplate: address):
-    assert empty(address) not in [_legoRegistry, _wethAddr] # dev: invalid addrs
-    LEGO_REGISTRY = _legoRegistry
+def __init__(_addyRegistry: address, _wethAddr: address, _walletTemplate: address):
+    assert empty(address) not in [_addyRegistry, _wethAddr] # dev: invalid addrs
+    ADDY_REGISTRY = _addyRegistry
     WETH_ADDR = _wethAddr
 
     self.isActivated = True
@@ -126,7 +125,7 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(ad
 
     # create agentic wallet
     newAgentAddr: address = create_minimal_proxy_to(agentTemplate)
-    assert extcall AgenticWallet(newAgentAddr).initialize(LEGO_REGISTRY, WETH_ADDR, _owner, _agent)
+    assert extcall AgenticWallet(newAgentAddr).initialize(ADDY_REGISTRY, WETH_ADDR, _owner, _agent)
     
     self.isAgenticWallet[newAgentAddr] = True
     self.numAgenticWallets += 1
@@ -169,7 +168,7 @@ def setAgenticWalletTemplate(_addr: address) -> bool:
     @return True if template was successfully updated, False if invalid address
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     if not self._isValidWalletTemplate(_addr):
         return False
     return self._setAgenticWalletTemplate(_addr)
@@ -203,7 +202,7 @@ def setWhitelist(_addr: address, _shouldWhitelist: bool) -> bool:
     @return True if the whitelist status was successfully updated, False otherwise
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     self.whitelist[_addr] = _shouldWhitelist
     log WhitelistSet(_addr, _shouldWhitelist)
     return True
@@ -218,7 +217,7 @@ def setNumAgenticWalletsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bo
     @return True if the maximum number was successfully updated, False otherwise
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     self.numAgenticWalletsAllowed = _numAllowed
     log NumAgenticWalletsAllowedSet(_numAllowed)
     return True
@@ -233,7 +232,7 @@ def setShouldEnforceWhitelist(_shouldEnforce: bool) -> bool:
     @return True if the whitelist enforcement state was successfully updated, False otherwise
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     self.shouldEnforceWhitelist = _shouldEnforce
     log ShouldEnforceWhitelistSet(_shouldEnforce)
     return True
@@ -251,6 +250,6 @@ def activate(_shouldActivate: bool):
     @dev Only callable by the governor, toggles isActivated state
     @param _shouldActivate True to activate the factory, False to deactivate
     """
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(_shouldActivate)

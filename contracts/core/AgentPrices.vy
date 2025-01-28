@@ -2,8 +2,10 @@
 
 interface LegoRegistry:
     def isValidLegoId(_legoId: uint256) -> bool: view
-    def governor() -> address: view
     def numLegos() -> uint256: view
+
+interface AddyRegistry:
+    def governor() -> address: view
 
 flag ActionType:
     DEPOSIT
@@ -27,6 +29,7 @@ struct SubscriptionInfo:
     payPeriod: uint256
 
 struct ProtocolPricing:
+    recipient: address
     asset: address
     txTakeRate: uint256
     minTxFeeUsdValue: uint256
@@ -34,6 +37,7 @@ struct ProtocolPricing:
     minSubFeeUsdValue: uint256
 
 struct CostData:
+    protocolRecipient: address
     protocolAsset: address
     protocolAssetAmount: uint256
     protocolUsdValue: uint256
@@ -74,6 +78,7 @@ event AgentTxPriceSheetRemoved:
     swapFee: uint256
 
 event ProtocolPricingSet:
+    recipient: indexed(address)
     asset: indexed(address)
     txTakeRate: uint256
     minTxFeeUsdValue: uint256
@@ -81,6 +86,7 @@ event ProtocolPricingSet:
     minSubFeeUsdValue: uint256
 
 event ProtocolPricingRemoved:
+    prevRecipient: indexed(address)
     prevAsset: indexed(address)
     prevTxTakeRate: uint256
     prevMinTxFeeUsdValue: uint256
@@ -97,9 +103,9 @@ protocolPricing: public(ProtocolPricing)
 agentTxPriceData: public(HashMap[address, TxPriceSheet]) # agent -> transaction pricing
 agentSubPriceData: public(HashMap[address, SubscriptionInfo]) # agent -> subscription pricing
 
-# system
+# config
+ADDY_REGISTRY: public(immutable(address))
 isActivated: public(bool)
-LEGO_REGISTRY: public(immutable(address))
 
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 MAX_AGENT_TX_FEE: constant(uint256) = 10_00 # 10.00%
@@ -109,9 +115,9 @@ MAX_PAY_PERIOD: constant(uint256) = 3_900_000 # 3 months on Base (2 seconds per 
 
 
 @deploy
-def __init__(_legoRegistry: address):
-    assert empty(address) not in [_legoRegistry] # dev: invalid addrs
-    LEGO_REGISTRY = _legoRegistry
+def __init__(_addyRegistry: address):
+    assert _addyRegistry != empty(address) # dev: invalid addy registry
+    ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
 
 
@@ -125,7 +131,7 @@ def __init__(_legoRegistry: address):
 def getSubscriptionCost(_agent: address) -> CostData:
     cost: CostData = empty(CostData)
     cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue = self._getAgentSubFeeData(_agent)
-    cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue = self._getProtocolFee(False, cost.agentUsdValue)
+    cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue = self._getProtocolFee(False, cost.agentUsdValue)
     return cost
 
 
@@ -173,7 +179,7 @@ def _isValidAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, 
 @external
 def setAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _trialPeriod: uint256, _payPeriod: uint256) -> bool:
     assert self.isActivated # dev: not active
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     # validation
     if not self._isValidAgentSubPrice(_agent, _asset, _usdValue, _trialPeriod, _payPeriod):
@@ -209,7 +215,7 @@ def _isValidAgentSubPriceRemoval(_agent: address, _prevInfo: SubscriptionInfo) -
 @external
 def removeAgentSubPrice(_agent: address) -> bool:
     assert self.isActivated # dev: not active
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     prevInfo: SubscriptionInfo = self.agentSubPriceData[_agent]
     if not self._isValidAgentSubPriceRemoval(_agent, prevInfo):
@@ -230,7 +236,7 @@ def removeAgentSubPrice(_agent: address) -> bool:
 def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> CostData:
     cost: CostData = empty(CostData)
     cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue = self._getAgentTxFeeData(_agent, _action, _usdValue)
-    cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue = self._getProtocolFee(True, cost.agentUsdValue)
+    cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue = self._getProtocolFee(True, cost.agentUsdValue)
     return cost
 
 
@@ -319,7 +325,7 @@ def setAgentTxPriceSheet(
     _swapFee: uint256,
 ) -> bool:
     assert self.isActivated # dev: not active
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     # validation
     if not self._isValidTxPriceSheet(_agent, _asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee):
@@ -357,7 +363,7 @@ def _isValidAgentTxPriceSheetRemoval(_agent: address, _prevInfo: TxPriceSheet) -
 @external
 def removeAgentTxPriceSheet(_agent: address) -> bool:
     assert self.isActivated # dev: not active
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     prevInfo: TxPriceSheet = self.agentTxPriceData[_agent]
     if not self._isValidAgentTxPriceSheetRemoval(_agent, prevInfo):
@@ -375,10 +381,10 @@ def removeAgentTxPriceSheet(_agent: address) -> bool:
 
 @view
 @internal
-def _getProtocolFee(_isTx: bool, _agentUsdValue: uint256) -> (address, uint256, uint256):
+def _getProtocolFee(_isTx: bool, _agentUsdValue: uint256) -> (address, address, uint256, uint256):
     data: ProtocolPricing = self.protocolPricing
-    if data.asset == empty(address):
-        return empty(address), 0, 0
+    if data.asset == empty(address) or data.recipient == empty(address):
+        return empty(address), empty(address), 0, 0
 
     takeRate: uint256 = 0
     minFee: uint256 = 0
@@ -395,16 +401,36 @@ def _getProtocolFee(_isTx: bool, _agentUsdValue: uint256) -> (address, uint256, 
     if feeUsdValue != 0:
         assetAmount = 0 # TODO: convert feeUsdValue to protocol asset amount
 
-    return data.asset, assetAmount, feeUsdValue
+    return data.recipient, data.asset, assetAmount, feeUsdValue
 
 
 # set protocol pricing
 
 
 @view
+@external
+def isValidProtocolPricing(
+    _recipient: address,
+    _asset: address,
+    _txTakeRate: uint256,
+    _minTxFeeUsdValue: uint256,
+    _subTakeRate: uint256,
+    _minSubFeeUsdValue: uint256,
+) -> bool:
+    return self._isValidProtocolPricing(_recipient, _asset, _txTakeRate, _minTxFeeUsdValue, _subTakeRate, _minSubFeeUsdValue)
+
+
+@view
 @internal
-def _isValidProtocolPricing(_asset: address, _txTakeRate: uint256, _minTxFeeUsdValue: uint256, _subTakeRate: uint256, _minSubFeeUsdValue: uint256) -> bool:
-    if empty(address) == _asset:
+def _isValidProtocolPricing(
+    _recipient: address,
+    _asset: address,
+    _txTakeRate: uint256,
+    _minTxFeeUsdValue: uint256,
+    _subTakeRate: uint256,
+    _minSubFeeUsdValue: uint256,
+) -> bool:
+    if empty(address) in [_recipient, _asset]:
         return False
 
     if _txTakeRate > MAX_PROTOCOL_TAKE_RATE or _subTakeRate > MAX_PROTOCOL_TAKE_RATE:
@@ -416,6 +442,7 @@ def _isValidProtocolPricing(_asset: address, _txTakeRate: uint256, _minTxFeeUsdV
 
 @external
 def setProtocolPricing(
+    _recipient: address,
     _asset: address,
     _txTakeRate: uint256,
     _minTxFeeUsdValue: uint256,
@@ -423,14 +450,15 @@ def setProtocolPricing(
     _minSubFeeUsdValue: uint256,
 ) -> bool:
     assert self.isActivated # dev: not active
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     # validation
-    if not self._isValidProtocolPricing(_asset, _txTakeRate, _minTxFeeUsdValue, _subTakeRate, _minSubFeeUsdValue):
+    if not self._isValidProtocolPricing(_recipient, _asset, _txTakeRate, _minTxFeeUsdValue, _subTakeRate, _minSubFeeUsdValue):
         return False
 
     # save data
     self.protocolPricing = ProtocolPricing(
+        recipient=_recipient,
         asset=_asset,
         txTakeRate=_txTakeRate,
         minTxFeeUsdValue=_minTxFeeUsdValue,
@@ -438,7 +466,7 @@ def setProtocolPricing(
         minSubFeeUsdValue=_minSubFeeUsdValue,
     )
 
-    log ProtocolPricingSet(_asset, _txTakeRate, _minTxFeeUsdValue, _subTakeRate, _minSubFeeUsdValue)
+    log ProtocolPricingSet(_recipient, _asset, _txTakeRate, _minTxFeeUsdValue, _subTakeRate, _minSubFeeUsdValue)
     return True
 
 
@@ -448,26 +476,27 @@ def setProtocolPricing(
 @view
 @external
 def isValidProtocolPricingRemoval() -> bool:
-    return self._isValidProtocolPricingRemoval(self.protocolPricing.asset)
+    prevInfo: ProtocolPricing = self.protocolPricing
+    return self._isValidProtocolPricingRemoval(prevInfo.recipient, prevInfo.asset)
 
 
 @view
 @internal
-def _isValidProtocolPricingRemoval(_prevAsset: address) -> bool:
-    return _prevAsset != empty(address)
+def _isValidProtocolPricingRemoval(_prevRecipient: address, _prevAsset: address) -> bool:
+    return _prevRecipient != empty(address) and _prevAsset != empty(address)
 
 
 @external
 def removeProtocolPricing() -> bool:
     assert self.isActivated # dev: not active
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     prevInfo: ProtocolPricing = self.protocolPricing
-    if not self._isValidProtocolPricingRemoval(prevInfo.asset):
+    if not self._isValidProtocolPricingRemoval(prevInfo.recipient, prevInfo.asset):
         return False
 
     self.protocolPricing = empty(ProtocolPricing)
-    log ProtocolPricingRemoved(prevInfo.asset, prevInfo.txTakeRate, prevInfo.minTxFeeUsdValue, prevInfo.subTakeRate, prevInfo.minSubFeeUsdValue)
+    log ProtocolPricingRemoved(prevInfo.recipient, prevInfo.asset, prevInfo.txTakeRate, prevInfo.minTxFeeUsdValue, prevInfo.subTakeRate, prevInfo.minSubFeeUsdValue)
     return True
 
 
@@ -478,6 +507,6 @@ def removeProtocolPricing() -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
     log AgentRegistryActivated(_shouldActivate)

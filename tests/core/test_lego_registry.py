@@ -6,8 +6,11 @@ from conf_utils import filter_logs
 
 
 @pytest.fixture(scope="module")
-def new_lego_registry(governor):
-    return boa.load("contracts/core/LegoRegistry.vy", governor, name="new_lego_registry")
+def new_lego_registry(governor, addy_registry, lego_registry):
+    r = boa.load("contracts/core/LegoRegistry.vy", addy_registry, name="new_lego_registry")
+    lego_registry_addy_id = addy_registry.getAddyId(lego_registry.address)
+    assert addy_registry.updateAddy(lego_registry_addy_id, r.address, sender=governor)
+    return r
 
 
 @pytest.fixture(scope="module")
@@ -25,8 +28,7 @@ def new_lego_b(alpha_token, alpha_token_erc4626_vault, new_lego_registry):
 #########
 
 
-def test_initial_state(new_lego_registry, governor):
-    assert new_lego_registry.governor() == governor
+def test_initial_state(new_lego_registry):
     assert new_lego_registry.isActivated()
     assert new_lego_registry.numLegos() == 1
     assert new_lego_registry.legoHelper() == ZERO_ADDRESS
@@ -172,29 +174,6 @@ def test_set_lego_helper(new_lego_registry, alpha_token, governor, bob):
     
     # Test cannot set same helper again
     assert not new_lego_registry.setLegoHelper(lego_helper, sender=governor)
-
-
-def test_set_governor(new_lego_registry, alpha_token, governor, bob):
-    new_governor = alpha_token # just using random contract
-
-    # Test non-governor cannot set new governor
-    with boa.reverts("no perms"):
-        new_lego_registry.setGovernor(new_governor, sender=bob)
-    
-    # invalid governor
-    assert not new_lego_registry.setGovernor(ZERO_ADDRESS, sender=governor)
-    assert not new_lego_registry.setGovernor(bob, sender=governor)
-
-    # Test successful governor set
-    assert new_lego_registry.setGovernor(new_governor, sender=governor)
-
-    log = filter_logs(new_lego_registry, "LegoRegistryGovernorSet")[0]
-    assert log.governor == new_governor.address
-
-    assert new_lego_registry.governor() == new_governor.address
-       
-    # Test cannot set same governor again
-    assert not new_lego_registry.setGovernor(new_governor, sender=new_governor.address)
 
 
 def test_activation(new_lego_registry, new_lego, governor, bob):

@@ -20,7 +20,7 @@ def test_deposit_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, 
     signature = signDeposit(ai_wallet, lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address)
 
     # deposit
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
         lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, signature, sender=broadcaster)
     
     # deposit
@@ -41,14 +41,14 @@ def test_withdraw_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token,
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
 
     # deposit
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.depositTokens(
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
         lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=agent)
     
     # signature
     signature = signWithdrawal(ai_wallet, lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address)
 
     # withdrawal
-    assetAmountReceived, vaultTokenAmountBurned = ai_wallet.withdrawTokens(
+    assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
         lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, signature, sender=broadcaster)
 
     # withdrawal
@@ -69,14 +69,14 @@ def test_rebalance_with_signature(ai_wallet, owner, broadcaster, agent, mock_leg
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
 
     # deposit
-    assetAmountDeposited, vaultToken, origVaultTokenAmountReceived = ai_wallet.depositTokens(
+    assetAmountDeposited, vaultToken, origVaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
         lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
 
     # signature
     signature = signRebalance(ai_wallet, lego_id, alt_lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address, alpha_token_erc4626_vault_another.address)
 
     # rebalance
-    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived = ai_wallet.rebalance(
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.rebalance(
         lego_id, alt_lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address, alpha_token_erc4626_vault_another.address, signature, sender=broadcaster)
     
     # rebalance
@@ -107,7 +107,7 @@ def test_swap_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, alp
     signature = signSwap(ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0)
 
     # swap
-    actualSwapAmount, toAmount = ai_wallet.swapTokens(
+    actualSwapAmount, toAmount, usdValue = ai_wallet.swapTokens(
         lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, signature, sender=broadcaster)
     
     # swap
@@ -134,7 +134,7 @@ def test_transfer_with_signature(ai_wallet, sally, agent, owner, mock_lego_alpha
     signature = signTransfer(ai_wallet, sally, MAX_UINT256, alpha_token.address)
 
     # transfer
-    amount = ai_wallet.transferFunds(
+    amount, usdValue = ai_wallet.transferFunds(
         sally, MAX_UINT256, alpha_token.address, signature, sender=broadcaster)
     
     # transfer

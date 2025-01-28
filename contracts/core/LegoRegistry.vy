@@ -3,6 +3,9 @@
 interface LegoPartner:
     def setLegoId(_legoId: uint256) -> bool: nonpayable
 
+interface AddyRegistry:
+    def governor() -> address: view
+
 struct LegoInfo:
     addr: address
     version: uint256
@@ -30,28 +33,26 @@ event LegoAddrDisabled:
 event LegoHelperSet:
     helperAddr: indexed(address)
 
-event LegoRegistryGovernorSet:
-    governor: indexed(address)
-
 event LegoRegistryActivated:
     isActivated: bool
 
-# core
+# other
+legoHelper: public(address)
+
+# registry core
 legoInfo: public(HashMap[uint256, LegoInfo])
 legoAddrToId: public(HashMap[address, uint256])
 numLegos: public(uint256)
 
-legoHelper: public(address)
-
 # config
-governor: public(address)
+ADDY_REGISTRY: public(immutable(address))
 isActivated: public(bool)
 
 
 @deploy
-def __init__(_governor: address):
-    assert _governor != empty(address) # dev: invalid governor
-    self.governor = _governor
+def __init__(_addyRegistry: address):
+    assert _addyRegistry != empty(address) # dev: invalid addy registry
+    ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
 
     # start at 1 index
@@ -93,7 +94,7 @@ def registerNewLego(_addr: address, _description: String[64]) -> uint256:
     @return The assigned Lego ID if registration successful, 0 if failed
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     if not self._isValidNewLegoAddr(_addr):
         return 0
@@ -153,7 +154,7 @@ def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     @return True if update successful, False otherwise
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     data: LegoInfo = self.legoInfo[_legoId]
     prevAddr: address = data.addr # needed for later
@@ -211,7 +212,7 @@ def disableLegoAddr(_legoId: uint256) -> bool:
     @return True if disable successful, False otherwise
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     data: LegoInfo = self.legoInfo[_legoId]
     prevAddr: address = data.addr # needed for later
@@ -390,53 +391,11 @@ def setLegoHelper(_helperAddr: address) -> bool:
     @return True if helper was set successfully, False otherwise
     """
     assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     if not self._isValidLegoHelper(_helperAddr):
         return False
     self.legoHelper = _helperAddr
     log LegoHelperSet(_helperAddr)
-    return True
-
-
-################
-# Set Governor #
-################
-
-
-@view
-@external 
-def isValidGovernor(_newGovernor: address) -> bool:
-    """
-    @notice Check if an address can be set as the governor
-    @dev Address must be a contract and different from current governor
-    @param _newGovernor The address to validate
-    @return True if address can be set as governor, False otherwise
-    """
-    return self._isValidGovernor(_newGovernor)
-
-
-@view
-@internal 
-def _isValidGovernor(_newGovernor: address) -> bool:
-    if not _newGovernor.is_contract or _newGovernor == empty(address):
-        return False
-    return _newGovernor != self.governor
-
-
-@external
-def setGovernor(_newGovernor: address) -> bool:
-    """
-    @notice Set a new governor address
-    @dev Only callable by current governor when registry is activated
-    @param _newGovernor The address to set as governor
-    @return True if governor was set successfully, False otherwise
-    """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == self.governor # dev: no perms
-    if not self._isValidGovernor(_newGovernor):
-        return False
-    self.governor = _newGovernor
-    log LegoRegistryGovernorSet(_newGovernor)
     return True
 
 
@@ -452,6 +411,6 @@ def activate(_shouldActivate: bool):
     @dev Only callable by governor. When deactivated, most functions cannot be called.
     @param _shouldActivate True to activate, False to deactivate
     """
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
     self.isActivated = _shouldActivate
     log LegoRegistryActivated(_shouldActivate)

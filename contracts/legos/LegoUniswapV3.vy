@@ -32,6 +32,7 @@ event UniswapV3Swap:
     tokenOut: indexed(address)
     amountIn: uint256
     amountOut: uint256
+    usdValue: uint256
     recipient: address
 
 event FundsRecovered:
@@ -96,7 +97,7 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256, 
     _recipient: address,
-) -> (uint256, uint256, uint256):
+) -> (uint256, uint256, uint256, uint256):
     bestFeeTier: uint24 = self._getBestFeeTier(_tokenIn, _tokenOut)
     assert bestFeeTier != 0 # dev: no pool found
 
@@ -134,8 +135,13 @@ def swapTokens(
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
 
     actualSwapAmount: uint256 = fromAmount - refundAssetAmount
-    log UniswapV3Swap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, _recipient)
-    return actualSwapAmount, toAmount, refundAssetAmount
+
+    # TODO: add usd value
+    # use the maximum of the two: either (_tokenIn, actualSwapAmount) or (_tokenOut, toAmount)
+    usdValue: uint256 = 0
+
+    log UniswapV3Swap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, usdValue, _recipient)
+    return actualSwapAmount, toAmount, refundAssetAmount, usdValue
 
 
 ###################
@@ -144,12 +150,12 @@ def swapTokens(
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256, uint256):
     raise "Not Implemented"
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256, uint256):
     raise "Not Implemented"
 
 
