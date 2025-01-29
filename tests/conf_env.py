@@ -11,7 +11,6 @@ from boa.environment import Env
 import os
 
 
-
 FORKS = {
     "mainnet": {
         "rpc_url": f"https://eth-mainnet.g.alchemy.com/v2/{os.environ.get('WEB3_ALCHEMY_API_KEY')}",
@@ -102,7 +101,7 @@ def fork(pytestconfig):
     return pytestconfig.getoption("fork")
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def set_etherscan(fork):
     config = FORKS[fork] if fork in FORKS else FORKS["mainnet"]
     api_key = config["etherscan_api_key"]
@@ -170,7 +169,7 @@ def anvil(free_port):
 
 
 @pytest.fixture(scope="session")
-def env(fork, pytestconfig, anvil):
+def env(fork, pytestconfig, anvil, set_etherscan):
     # Get optional settings
     rpc_override = pytestconfig.getoption("rpc")
     force_anvil = pytestconfig.getoption("anvil")
