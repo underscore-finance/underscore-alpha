@@ -29,7 +29,8 @@ interface CryptoLegacyPool:
 interface CurveAddressProvider:
     def get_address(_id: uint256) -> address: view
 
-interface LegoRegistry:
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 flag PoolType:
@@ -76,7 +77,7 @@ event UniswapV2LegoIdSet:
 legoId: public(uint256)
 preferredPools: public(DynArray[address, MAX_POOLS])
 
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 CURVE_META_REGISTRY: public(immutable(address))
 CURVE_REGISTRIES: public(immutable(CurveRegistries))
 
@@ -92,9 +93,9 @@ MAX_POOLS: constant(uint256) = 50
 
 
 @deploy
-def __init__(_curveAddressProvider: address, _legoRegistry: address):
-    assert empty(address) not in [_curveAddressProvider, _legoRegistry] # dev: invalid addrs
-    LEGO_REGISTRY = _legoRegistry
+def __init__(_curveAddressProvider: address, _addyRegistry: address):
+    assert empty(address) not in [_curveAddressProvider, _addyRegistry] # dev: invalid addrs
+    ADDY_REGISTRY = _addyRegistry
 
     CURVE_META_REGISTRY = staticcall CurveAddressProvider(_curveAddressProvider).get_address(META_REGISTRY_ID)
     CURVE_REGISTRIES = CurveRegistries(
@@ -267,7 +268,7 @@ def swapTokens(
 
 @external
 def setPreferredPools(_pools: DynArray[address, MAX_POOLS]) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     pools: DynArray[address, MAX_POOLS] = []
     for i: uint256 in range(len(_pools), bound=MAX_POOLS):
@@ -304,7 +305,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -322,7 +323,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
 @external
 def setLegoId(_legoId: uint256) -> bool:
-    assert msg.sender == LEGO_REGISTRY # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
     log UniswapV2LegoIdSet(_legoId)

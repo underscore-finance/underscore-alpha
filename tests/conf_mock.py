@@ -106,16 +106,16 @@ def mock_weth():
 
 
 @pytest.fixture(scope="session")
-def mock_lego_alpha(alpha_token, alpha_token_erc4626_vault, lego_registry, governor):
-    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, lego_registry, name="mock_lego_alpha")
+def mock_lego_alpha(alpha_token, alpha_token_erc4626_vault, lego_registry, addy_registry_deploy, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, addy_registry_deploy, name="mock_lego_alpha")
     legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego_registry, governor):
-    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault_another, lego_registry, name="mock_lego_alpha_another")
+def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego_registry, addy_registry_deploy, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault_another, addy_registry_deploy, name="mock_lego_alpha_another")
     legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
@@ -125,8 +125,8 @@ def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego
 
 
 @pytest.fixture(scope="session")
-def mock_lego_bravo(bravo_token, bravo_token_erc4626_vault, lego_registry, governor):
-    addr = boa.load("contracts/mock/MockLego.vy", bravo_token, bravo_token_erc4626_vault, lego_registry, name="mock_lego_bravo")
+def mock_lego_bravo(bravo_token, bravo_token_erc4626_vault, addy_registry_deploy, lego_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", bravo_token, bravo_token_erc4626_vault, addy_registry_deploy, name="mock_lego_bravo")
     legoId = lego_registry.registerNewLego(addr, "Mock Lego Bravo", sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr

@@ -14,7 +14,8 @@ interface AeroSlipStreamRouter:
 interface AeroSlipStreamPool:
     def liquidity() -> uint128: view
 
-interface LegoRegistry:
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 struct ExactInputSingleParams:
@@ -46,7 +47,7 @@ event AeroSlipStreamLegoIdSet:
 
 legoId: public(uint256)
 
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 AERO_SLIPSTREAM_FACTORY: public(immutable(address))
 AERO_SLIPSTREAM_ROUTER: public(immutable(address))
 
@@ -54,11 +55,11 @@ TICK_SPACING: constant(int24[5]) = [1, 50, 100, 200, 2000]
 
 
 @deploy
-def __init__(_aeroFactory: address, _aeroRouter: address, _legoRegistry: address):
-    assert empty(address) not in [_aeroFactory, _aeroRouter, _legoRegistry] # dev: invalid addrs
+def __init__(_aeroFactory: address, _aeroRouter: address, _addyRegistry: address):
+    assert empty(address) not in [_aeroFactory, _aeroRouter, _addyRegistry] # dev: invalid addrs
     AERO_SLIPSTREAM_FACTORY = _aeroFactory
     AERO_SLIPSTREAM_ROUTER = _aeroRouter
-    LEGO_REGISTRY = _legoRegistry
+    ADDY_REGISTRY = _addyRegistry
 
 
 @view
@@ -168,7 +169,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -186,7 +187,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
 @external
 def setLegoId(_legoId: uint256) -> bool:
-    assert msg.sender == LEGO_REGISTRY # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
     log AeroSlipStreamLegoIdSet(_legoId)

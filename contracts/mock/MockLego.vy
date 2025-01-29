@@ -10,7 +10,8 @@ interface Erc4626Interface:
     def deposit(_assetAmount: uint256, _recipient: address) -> uint256: nonpayable
     def asset() -> address: view
 
-interface LegoRegistry:
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 event MockLegoDeposit:
@@ -45,13 +46,13 @@ mockVault: public(address)
 
 legoId: public(uint256)
 
-LEGO_REGISTRY: immutable(address)
+ADDY_REGISTRY: immutable(address)
 
 
 @deploy
-def __init__(_mockAsset: address, _mockVault: address, _legoRegistry: address):
-    assert empty(address) not in [_mockAsset, _mockVault, _legoRegistry] # dev: invalid addrs
-    LEGO_REGISTRY = _legoRegistry
+def __init__(_mockAsset: address, _mockVault: address, _addyRegistry: address):
+    assert empty(address) not in [_mockAsset, _mockVault, _addyRegistry] # dev: invalid addrs
+    ADDY_REGISTRY = _addyRegistry
 
     self.mockAsset = _mockAsset
     self.mockVault = _mockVault
@@ -143,6 +144,27 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue
 
 
+########
+# Swap #
+########
+
+
+@external
+def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256, uint256):
+    # THIS IS A TOTAL HACK
+
+    # transfer tokens to this contract
+    tokenInAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
+    assert tokenInAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, tokenInAmount, default_return_value=True) # dev: transfer failed
+
+    # make sure equivalent amount of `_tokenOut` is in contract before doing this 
+    assert staticcall IERC20(_tokenOut).balanceOf(self) >= tokenInAmount # dev: need equivalent amount of `_tokenOut`
+    assert extcall IERC20(_tokenOut).transfer(msg.sender, tokenInAmount, default_return_value=True) # dev: transfer failed
+
+    return tokenInAmount, tokenInAmount, 0, 0
+
+
 #################
 # Recover Funds #
 #################
@@ -150,7 +172,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -168,25 +190,8 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
 @external
 def setLegoId(_legoId: uint256) -> bool:
-    assert msg.sender == LEGO_REGISTRY # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
     log MockLegoIdSet(_legoId)
     return True
-
-
-@external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256, uint256):
-    # THIS IS A TOTAL HACK
-
-    # transfer tokens to this contract
-    tokenInAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
-    assert tokenInAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, tokenInAmount, default_return_value=True) # dev: transfer failed
-
-    # make sure equivalent amount of `_tokenOut` is in contract before doing this 
-    assert staticcall IERC20(_tokenOut).balanceOf(self) >= tokenInAmount # dev: need equivalent amount of `_tokenOut`
-    assert extcall IERC20(_tokenOut).transfer(msg.sender, tokenInAmount, default_return_value=True) # dev: transfer failed
-
-    return tokenInAmount, tokenInAmount, 0, 0
-    

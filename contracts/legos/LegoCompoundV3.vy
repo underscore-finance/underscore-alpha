@@ -13,7 +13,8 @@ interface CompoundV3:
 interface CompoundV3Configurator:
     def factory(_cometAsset: address) -> address: view
 
-interface LegoRegistry:
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 event CompoundV3Deposit:
@@ -45,14 +46,14 @@ event CompoundV3LegoIdSet:
 legoId: public(uint256)
 
 COMPOUND_V3_CONFIGURATOR: public(immutable(address))
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 
 
 @deploy
-def __init__(_configurator: address, _legoRegistry: address):
-    assert empty(address) not in [_configurator, _legoRegistry] # dev: invalid addrs
+def __init__(_configurator: address, _addyRegistry: address):
+    assert empty(address) not in [_configurator, _addyRegistry] # dev: invalid addrs
     COMPOUND_V3_CONFIGURATOR = _configurator
-    LEGO_REGISTRY = _legoRegistry
+    ADDY_REGISTRY = _addyRegistry
 
 
 @view
@@ -168,7 +169,7 @@ def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAm
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -186,7 +187,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
 @external
 def setLegoId(_legoId: uint256) -> bool:
-    assert msg.sender == LEGO_REGISTRY # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
     log CompoundV3LegoIdSet(_legoId)

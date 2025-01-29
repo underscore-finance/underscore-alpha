@@ -11,7 +11,8 @@ interface UniV2Router:
 interface UniV2Factory:
     def getPair(_tokenA: address, _tokenB: address) -> address: view
 
-interface LegoRegistry:
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 event UniswapV2Swap:
@@ -33,7 +34,7 @@ event UniswapV2LegoIdSet:
 
 legoId: public(uint256)
 
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 UNISWAP_V2_FACTORY: public(immutable(address))
 UNISWAP_V2_ROUTER: public(immutable(address))
 
@@ -41,11 +42,11 @@ MAX_ASSETS: constant(uint256) = 5
 
 
 @deploy
-def __init__(_uniswapV2Factory: address, _uniswapV2Router: address, _legoRegistry: address):
-    assert empty(address) not in [_uniswapV2Factory, _uniswapV2Router, _legoRegistry] # dev: invalid addrs
+def __init__(_uniswapV2Factory: address, _uniswapV2Router: address, _addyRegistry: address):
+    assert empty(address) not in [_uniswapV2Factory, _uniswapV2Router, _addyRegistry] # dev: invalid addrs
     UNISWAP_V2_FACTORY = _uniswapV2Factory
     UNISWAP_V2_ROUTER = _uniswapV2Router
-    LEGO_REGISTRY = _legoRegistry
+    ADDY_REGISTRY = _addyRegistry
 
 
 @view
@@ -126,7 +127,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -144,7 +145,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
 @external
 def setLegoId(_legoId: uint256) -> bool:
-    assert msg.sender == LEGO_REGISTRY # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
     log UniswapV2LegoIdSet(_legoId)

@@ -130,6 +130,6 @@ def test_curve_preferred_pool(
     log = filter_logs(lego_curve, "PreferredPoolsSet")[0]
     assert log.numPools == 1
 
-    fromSwapAmount, toAmount = bob_ai_wallet.swapTokens(lego_curve.legoId(), fromAsset.address, toToken.address, MAX_UINT256, 0, sender=bob_agent)
+    fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_curve.legoId(), fromAsset.address, toToken.address, MAX_UINT256, 0, sender=bob_agent)
     assert fromSwapAmount != 0
     assert toAmount != 0

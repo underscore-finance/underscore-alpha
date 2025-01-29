@@ -14,7 +14,8 @@ interface UniV3SwapRouter:
 interface UniV3Pool:
     def liquidity() -> uint128: view
 
-interface LegoRegistry:
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 struct ExactInputSingleParams:
@@ -45,7 +46,7 @@ event UniswapV3LegoIdSet:
 
 legoId: public(uint256)
 
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 UNISWAP_V3_FACTORY: public(immutable(address))
 UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
 
@@ -53,11 +54,11 @@ FEE_TIERS: constant(uint24[4]) = [100, 500, 3000, 10000] # 0.01%, 0.05%, 0.3%, 1
 
 
 @deploy
-def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _legoRegistry: address):
-    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _legoRegistry] # dev: invalid addrs
+def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _addyRegistry: address):
+    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _addyRegistry] # dev: invalid addrs
     UNISWAP_V3_FACTORY = _uniswapV3Factory
     UNISWAP_V3_SWAP_ROUTER = _uniswapV3SwapRouter
-    LEGO_REGISTRY = _legoRegistry
+    ADDY_REGISTRY = _addyRegistry
 
 
 @view
@@ -166,7 +167,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -184,7 +185,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
 @external
 def setLegoId(_legoId: uint256) -> bool:
-    assert msg.sender == LEGO_REGISTRY # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
     log UniswapV3LegoIdSet(_legoId)

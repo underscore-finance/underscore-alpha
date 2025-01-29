@@ -11,7 +11,8 @@ interface AeroRouter:
 interface AeroFactory:
     def getPool(_tokenA: address, _tokenB: address, _isStable: bool) -> address: view
 
-interface LegoRegistry:
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 struct Route:
@@ -39,7 +40,7 @@ event AerodromeLegoIdSet:
 
 legoId: public(uint256)
 
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 AERODROME_FACTORY: public(immutable(address))
 AERODROME_ROUTER: public(immutable(address))
 
@@ -47,11 +48,11 @@ MAX_ASSETS: constant(uint256) = 5
 
 
 @deploy
-def __init__(_aerodromeFactory: address, _aerodromeRouter: address, _legoRegistry: address):
-    assert empty(address) not in [_aerodromeFactory, _aerodromeRouter, _legoRegistry] # dev: invalid addrs
+def __init__(_aerodromeFactory: address, _aerodromeRouter: address, _addyRegistry: address):
+    assert empty(address) not in [_aerodromeFactory, _aerodromeRouter, _addyRegistry] # dev: invalid addrs
     AERODROME_FACTORY = _aerodromeFactory
     AERODROME_ROUTER = _aerodromeRouter
-    LEGO_REGISTRY = _legoRegistry
+    ADDY_REGISTRY = _addyRegistry
 
 
 @view
@@ -151,7 +152,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall LegoRegistry(LEGO_REGISTRY).governor() # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -169,7 +170,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
 @external
 def setLegoId(_legoId: uint256) -> bool:
-    assert msg.sender == LEGO_REGISTRY # dev: no perms
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
     assert self.legoId == 0 # dev: already set
     self.legoId = _legoId
     log AerodromeLegoIdSet(_legoId)
