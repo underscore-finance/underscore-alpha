@@ -14,13 +14,13 @@ def new_lego_registry(governor, addy_registry, lego_registry):
 
 
 @pytest.fixture(scope="module")
-def new_lego(alpha_token, alpha_token_erc4626_vault, new_lego_registry):
-    return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, new_lego_registry, name="new_lego")
+def new_lego(alpha_token, alpha_token_erc4626_vault, addy_registry_deploy):
+    return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, addy_registry_deploy, name="new_lego")
 
 
 @pytest.fixture(scope="module")
-def new_lego_b(alpha_token, alpha_token_erc4626_vault, new_lego_registry):
-    return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, new_lego_registry, name="new_lego_b")
+def new_lego_b(alpha_token, alpha_token_erc4626_vault, addy_registry_deploy):
+    return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, addy_registry_deploy, name="new_lego_b")
 
 
 #########
