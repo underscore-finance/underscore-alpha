@@ -14,8 +14,8 @@ def addy_registry_deploy(governor):
 
 @pytest.fixture(scope="session", autouse=True)
 def addy_registry(addy_registry_deploy, lego_registry, agent_factory, agent_prices, governor):
-    assert addy_registry_deploy.registerNewAddy(lego_registry, "Lego Registry", sender=governor) != 0
     assert addy_registry_deploy.registerNewAddy(agent_factory, "Agent Factory", sender=governor) != 0
+    assert addy_registry_deploy.registerNewAddy(lego_registry, "Lego Registry", sender=governor) != 0
     assert addy_registry_deploy.registerNewAddy(agent_prices, "Agent Prices", sender=governor) != 0
     return addy_registry_deploy
 
