@@ -11,7 +11,6 @@ from api.services.auth import requires_user_auth, user_auth, requires_agent_auth
 from api.services.dependencies import get_undy
 from fastapi import Depends
 from api.models import User
-from utils.undy import UndyContracts
 from fastapi import HTTPException
 
 # Router for login
@@ -56,6 +55,7 @@ async def verify_message_access(
 ):
     undy = get_undy()
     wallet_contract = undy.get_agentic_wallet(agentic_wallet)
+    print(wallet_contract.owner())
     if user_wallet and wallet_contract.owner() != user_wallet:
         raise HTTPException(status_code=403, detail="User does not own the agentic wallet")
     if agent_wallet and not wallet_contract.agentSettings(agent_wallet).isActive:
@@ -67,12 +67,15 @@ async def get_messages(
     agent_id: UUID = Query(default=None),
     limit: int = Query(default=50, le=100),  # max 100 messages per request
     before: Optional[datetime] = None,  # timestamp of oldest message in current view
+    after: Optional[datetime] = None,  # timestamp of newest message in current view
 ):
     query = Message.filter(agentic_wallet=wallet).order_by("-created_at")
     if agent_id:
         query = query.filter(agent_id=agent_id)
     if before:
         query = query.filter(created_at__lt=before)
+    if after:
+        query = query.filter(created_at__gt=after)
     return await query.limit(limit)
 
 
@@ -158,7 +161,7 @@ async def get_user_message_count(wallet: str, user: User = Depends(user_auth)):
     await verify_message_access(wallet, None, user.wallet_address)
     counter = await UserMessageCounter.get_or_none(agentic_wallet=wallet)
     if not counter:
-        raise HTTPException(status_code=404, detail="Counter not found")
+        return MessageCountResponse(message_count=0, last_message_at=datetime.now())
     return counter
 
 

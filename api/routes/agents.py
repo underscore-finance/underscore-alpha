@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from tortoise.expressions import Q
 from api.models import Agent, Agent_Pydantic, User
 from typing import List
 from pydantic import BaseModel
@@ -116,3 +117,11 @@ async def get_agent(agent_id: str):
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return await Agent_Pydantic.from_tortoise_orm(agent)
+
+
+@router.post("/public/by-wallet", response_model=List[AgentPublic])
+async def get_agents_by_wallet(wallet_addresses: List[str]):
+    """
+    Get all agents by wallet addresses.
+    """
+    return await Agent.filter(wallet_address__in=wallet_addresses)
