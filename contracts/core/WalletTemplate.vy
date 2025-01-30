@@ -60,6 +60,10 @@ struct Signature:
     signer: address
     expiration: uint256
 
+struct ReserveAsset:
+    asset: address
+    amount: uint256
+
 struct ActionInstruction:
     action: ActionType
     legoId: uint256
@@ -228,6 +232,10 @@ event AllowedActionsModified:
     canSwap: bool
     canConvert: bool
 
+event ReserveAssetSet:
+    asset: indexed(address)
+    amount: uint256
+
 # settings
 owner: public(address) # owner of the wallet
 protocolSub: public(ProtocolSub) # subscription info
@@ -347,6 +355,20 @@ def _getAddys() -> MainAddys:
         agentPrices=staticcall AddyRegistry(addyRegistry).getAddy(AGENT_PRICES_ID),
         priceDesk=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_DESK_ID),
     )
+
+
+@view
+@internal
+def _getAllowedTxAmount(_asset: address, _amount: uint256) -> uint256:
+    wantedAmount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(self))
+    reservedAmount: uint256 = self.reserveAssets[_asset]
+
+    amount: uint256 = 0
+    if wantedAmount > reservedAmount:
+        amount = wantedAmount - reservedAmount
+
+    assert amount != 0 # dev: nothing to transfer
+    return amount
 
 
 ################
@@ -534,9 +556,8 @@ def _depositTokens(
     assert legoAddr != empty(address) # dev: invalid lego
 
     # finalize amount
-    wantedAmount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(self))
-    assert wantedAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_asset).approve(legoAddr, wantedAmount, default_return_value=True) # dev: approval failed
+    amount: uint256 = self._getAllowedTxAmount(_asset, _amount)
+    assert extcall IERC20(_asset).approve(legoAddr, amount, default_return_value=True) # dev: approval failed
 
     # deposit into lego partner
     assetAmountDeposited: uint256 = 0
@@ -544,7 +565,7 @@ def _depositTokens(
     vaultTokenAmountReceived: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue = extcall LegoPartner(legoAddr).depositTokens(_asset, wantedAmount, _vault, self)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue = extcall LegoPartner(legoAddr).depositTokens(_asset, amount, _vault, self)
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     log AgenticDeposit(_signer, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
@@ -625,7 +646,7 @@ def _withdrawTokens(
     # finalize amount, this will look at vault token balance (not always 1:1 with underlying asset)
     withdrawAmount: uint256 = _amount
     if _vaultToken != empty(address):
-        withdrawAmount = min(_amount, staticcall IERC20(_vaultToken).balanceOf(self))
+        withdrawAmount = self._getAllowedTxAmount(_vaultToken, _amount)
 
         # some vault tokens require max value approval (comp v3)
         assert extcall IERC20(_vaultToken).approve(legoAddr, max_value(uint256), default_return_value=True) # dev: approval failed
@@ -819,8 +840,7 @@ def _swapTokens(
     assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
 
     # finalize amount
-    swapAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(self))
-    assert swapAmount != 0 # dev: nothing to swap
+    swapAmount: uint256 = self._getAllowedTxAmount(_tokenIn, _amountIn)
     assert extcall IERC20(_tokenIn).approve(legoAddr, swapAmount, default_return_value=True) # dev: approval failed
 
     # swap assets via lego partner
@@ -910,9 +930,9 @@ def _transferFunds(
     amount: uint256 = 0
     if _asset == empty(address):
         amount = min(_amount, self.balance)
+        assert amount != 0 # dev: nothing to transfer
     else:
-        amount = min(_amount, staticcall IERC20(_asset).balanceOf(self))
-    assert amount != 0 # dev: nothing to transfer
+        amount = self._getAllowedTxAmount(_asset, _amount)
 
     # transfer funds
     if _asset == empty(address):
@@ -1545,6 +1565,36 @@ def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empt
 @internal
 def _hasAllowedActionsSet(_actions: AllowedActions) -> bool:
     return _actions.canDeposit or _actions.canWithdraw or _actions.canRebalance or _actions.canTransfer or _actions.canSwap or _actions.canConvert
+
+
+##################
+# reserve assets #
+##################
+
+
+@nonreentrant
+@external
+def setReserveAsset(_asset: address, _amount: uint256) -> bool:
+    assert msg.sender == self.owner # dev: no perms
+    assert _asset != empty(address) # dev: invalid asset
+    self.reserveAssets[_asset] = _amount
+    log ReserveAssetSet(_asset, _amount)
+    return True
+
+
+@nonreentrant
+@external
+def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
+    assert msg.sender == self.owner # dev: no perms
+    assert len(_assets) != 0 # dev: invalid array length
+    for i: uint256 in range(len(_assets), bound=MAX_ASSETS):
+        asset: address = _assets[i].asset
+        amount: uint256 = _assets[i].amount
+        assert asset != empty(address) # dev: invalid asset
+        self.reserveAssets[asset] = amount
+        log ReserveAssetSet(asset, amount)
+
+    return True
 
 
 ###########

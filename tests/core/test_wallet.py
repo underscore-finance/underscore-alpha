@@ -253,7 +253,7 @@ def test_withdrawal_operations(ai_wallet, owner, agent, mock_lego_alpha, alpha_t
     with boa.reverts("agent not allowed"):
         ai_wallet.withdrawTokens(55, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=agent)
 
-    with boa.reverts("nothing to withdraw"):
+    with boa.reverts("nothing to transfer"):
         ai_wallet.withdrawTokens(lego_id, alpha_token, 0, alpha_token_erc4626_vault, sender=owner)
 
 
