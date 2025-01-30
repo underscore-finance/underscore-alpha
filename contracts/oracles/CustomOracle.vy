@@ -30,7 +30,7 @@ def __init__(_addyRegistry: address):
 
 @view
 @external
-def getPrice(_asset: address, _oracleRegistry: address = empty(address)) -> uint256:
+def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> uint256:
     return self.price[_asset]
 
 

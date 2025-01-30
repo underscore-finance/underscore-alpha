@@ -44,7 +44,6 @@ ADDY_REGISTRY: public(immutable(address))
 PYTH: constant(address) = 0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a
 
 NORMALIZED_DECIMALS: constant(uint256) = 18
-STALE_TIME: constant(uint256) = 60 * 60 * 24 # 1 day
 MAX_PRICE_UPDATES: constant(uint256) = 15
 
 
@@ -67,7 +66,7 @@ def __default__():
 
 @view
 @external
-def getPrice(_asset: address, _oracleRegistry: address = empty(address)) -> uint256:
+def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> uint256:
     feedId: bytes32 = self.feedConfig[_asset]
     if feedId == empty(bytes32):
         return 0
@@ -82,7 +81,7 @@ def getPrice(_asset: address, _oracleRegistry: address = empty(address)) -> uint
 
     # price is too stale
     publishTime: uint256 = convert(priceData.publishTime, uint256)
-    if block.timestamp - publishTime > STALE_TIME:
+    if _staleTime != 0 and block.timestamp - publishTime > _staleTime:
         return 0
 
     price: uint256 = convert(priceData.price, uint256)

@@ -48,7 +48,6 @@ ETH_USD: constant(address) = 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70
 BTC_USD: constant(address) = 0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F
 
 NORMALIZED_DECIMALS: constant(uint256) = 18
-STALE_TIME: constant(uint256) = 60 * 60 * 24 # 1 day
 
 
 @deploy
@@ -69,9 +68,9 @@ def __init__(_addyRegistry: address):
 
 @view
 @external
-def getPrice(_asset: address, _oracleRegistry: address = empty(address)) -> uint256:
+def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> uint256:
     config: ChainlinkConfig = self.feedConfig[_asset]
-    return self._getPrice(config.feed, config.decimals, config.needsEthToUsd, config.needsBtcToUsd)
+    return self._getPrice(config.feed, config.decimals, config.needsEthToUsd, config.needsBtcToUsd, _staleTime)
 
 
 @view
@@ -81,24 +80,25 @@ def _getPrice(
     _decimals: uint256,
     _needsEthToUsd: bool,
     _needsBtcToUsd: bool,
+    _staleTime: uint256,
 ) -> uint256:
     if _feed == empty(address):
         return 0
 
-    price: uint256 = self._getChainlinkData(_feed, _decimals)
+    price: uint256 = self._getChainlinkData(_feed, _decimals, _staleTime)
     if price == 0:
         return 0
 
     # if price needs ETH -> USD conversion
     if _needsEthToUsd:
         ethConfig: ChainlinkConfig = self.feedConfig[ETH]
-        ethUsdPrice: uint256 = self._getChainlinkData(ethConfig.feed, ethConfig.decimals)
+        ethUsdPrice: uint256 = self._getChainlinkData(ethConfig.feed, ethConfig.decimals, _staleTime)
         price = price * ethUsdPrice // (10 ** NORMALIZED_DECIMALS)
 
     # if price needs BTC -> USD conversion
     elif _needsBtcToUsd:
         btcConfig: ChainlinkConfig = self.feedConfig[BTC]
-        btcUsdPrice: uint256 = self._getChainlinkData(btcConfig.feed, btcConfig.decimals)
+        btcUsdPrice: uint256 = self._getChainlinkData(btcConfig.feed, btcConfig.decimals, _staleTime)
         price = price * btcUsdPrice // (10 ** NORMALIZED_DECIMALS)
 
     return price
@@ -106,13 +106,13 @@ def _getPrice(
 
 @view
 @external
-def getChainlinkData(_feed: address, _decimals: uint256) -> uint256:
-    return self._getChainlinkData(_feed, _decimals)
+def getChainlinkData(_feed: address, _decimals: uint256, _staleTime: uint256 = 0) -> uint256:
+    return self._getChainlinkData(_feed, _decimals, _staleTime)
 
 
 @view
 @internal
-def _getChainlinkData(_feed: address, _decimals: uint256 = 0) -> uint256:
+def _getChainlinkData(_feed: address, _decimals: uint256, _staleTime: uint256) -> uint256:
     oracle: ChainlinkRound = staticcall ChainlinkFeed(_feed).latestRoundData()
 
     # NOTE: choosing to fail gracefully in Underscore
@@ -126,7 +126,7 @@ def _getChainlinkData(_feed: address, _decimals: uint256 = 0) -> uint256:
         return 0
 
     # price is too stale
-    if block.timestamp - oracle.updatedAt > STALE_TIME:
+    if _staleTime != 0 and block.timestamp - oracle.updatedAt > _staleTime:
         return 0
 
     # handle decimal normalization
@@ -184,7 +184,7 @@ def _isValidChainlinkFeed(
         return False
     if _needsEthToUsd and _needsBtcToUsd:
         return False
-    return self._getPrice(_feed, _decimals, _needsEthToUsd, _needsBtcToUsd) != 0
+    return self._getPrice(_feed, _decimals, _needsEthToUsd, _needsBtcToUsd, 0) != 0
 
 
 @external

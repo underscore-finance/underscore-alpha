@@ -34,6 +34,9 @@ event OraclePartnerAddrDisabled:
 event PriorityOraclePartnerIdsModified:
     numIds: uint256
 
+event StaleTimeSet:
+    staleTime: uint256
+
 event OracleRegistryActivated:
     isActivated: bool
 
@@ -42,8 +45,9 @@ oraclePartnerInfo: public(HashMap[uint256, OraclePartnerInfo])
 oraclePartnerAddrToId: public(HashMap[address, uint256])
 numOraclePartners: public(uint256)
 
-# priority oracle partners
+# custom config
 priorityOraclePartnerIds: public(DynArray[uint256, MAX_PRIORITY_PARTNERS])
+staleTime: public(uint256)
 
 # config
 ADDY_REGISTRY: public(immutable(address))
@@ -51,6 +55,8 @@ isActivated: public(bool)
 
 ETH: constant(address) = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
 MAX_PRIORITY_PARTNERS: constant(uint256) = 10
+MIN_STALE_TIME: constant(uint256) = 60 * 5 # 5 minutes
+MAX_STALE_TIME: constant(uint256) = 60 * 60 * 24 * 3 # 3 days
 
 
 @deploy
@@ -80,6 +86,7 @@ def getPrice(_asset: address) -> uint256:
 @internal
 def _getPrice(_asset: address) -> uint256:
     price: uint256 = 0
+    staleTime: uint256 = self.staleTime
     alreadyLooked: DynArray[uint256, MAX_PRIORITY_PARTNERS] = []
 
     # go thru priority partners first
@@ -89,7 +96,7 @@ def _getPrice(_asset: address) -> uint256:
         oraclePartner: address = self.oraclePartnerInfo[pid].addr
         if oraclePartner == empty(address):
             continue
-        price = staticcall OraclePartner(oraclePartner).getPrice(_asset, self)
+        price = staticcall OraclePartner(oraclePartner).getPrice(_asset, staleTime, self)
         if price != 0:
             break
         alreadyLooked.append(pid)
@@ -103,7 +110,7 @@ def _getPrice(_asset: address) -> uint256:
             oraclePartner: address = self.oraclePartnerInfo[id].addr
             if oraclePartner == empty(address):
                 continue
-            price = staticcall OraclePartner(oraclePartner).getPrice(_asset, self)
+            price = staticcall OraclePartner(oraclePartner).getPrice(_asset, staleTime, self)
             if price != 0:
                 break
 
@@ -356,6 +363,36 @@ def setPriorityOraclePartnerIds(_priorityIds: DynArray[uint256, MAX_PRIORITY_PAR
 
     self.priorityOraclePartnerIds = priorityIds
     log PriorityOraclePartnerIdsModified(len(priorityIds))
+    return True
+
+
+##############
+# Stale Time #
+##############
+
+
+@view
+@external
+def isValidStaleTime(_staleTime: uint256) -> bool:
+    return self._isValidStaleTime(_staleTime)
+
+
+@view
+@internal
+def _isValidStaleTime(_staleTime: uint256) -> bool:
+    return _staleTime >= MIN_STALE_TIME and _staleTime <= MAX_STALE_TIME
+
+
+@external
+def setStaleTime(_staleTime: uint256) -> bool:
+    assert self.isActivated # dev: not activated
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+
+    if not self._isValidStaleTime(_staleTime):
+        return False
+
+    self.staleTime = _staleTime
+    log StaleTimeSet(_staleTime)
     return True
 
 
