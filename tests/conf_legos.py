@@ -78,7 +78,7 @@ def getRegistry(mock_registry):
 @pytest.fixture(scope="session")
 def lego_aave_v3(getRegistry, fork, mock_aave_v3_pool, lego_registry, addy_registry_deploy, governor):
     pool = getRegistry("aave_v3", fork, mock_aave_v3_pool)
-    addr = boa.load("contracts/legos/LegoAaveV3.vy", pool, addy_registry_deploy, name="lego_aave_v3")
+    addr = boa.load("contracts/legos/yield/LegoAaveV3.vy", pool, addy_registry_deploy, name="lego_aave_v3")
     assert lego_registry.registerNewLego(addr, "Aave V3", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -86,7 +86,7 @@ def lego_aave_v3(getRegistry, fork, mock_aave_v3_pool, lego_registry, addy_regis
 @pytest.fixture(scope="session")
 def lego_fluid(getRegistry, fork, lego_registry, addy_registry_deploy, governor):
     registry = getRegistry("fluid", fork)
-    addr = boa.load("contracts/legos/LegoFluid.vy", registry, addy_registry_deploy, name="lego_fluid")
+    addr = boa.load("contracts/legos/yield/LegoFluid.vy", registry, addy_registry_deploy, name="lego_fluid")
     assert lego_registry.registerNewLego(addr, "Fluid", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -94,7 +94,7 @@ def lego_fluid(getRegistry, fork, lego_registry, addy_registry_deploy, governor)
 @pytest.fixture(scope="session")
 def lego_moonwell(getRegistry, fork, lego_registry, addy_registry_deploy, governor):
     registry = getRegistry("moonwell", fork)
-    addr = boa.load("contracts/legos/LegoMoonwell.vy", registry, addy_registry_deploy, name="lego_moonwell")
+    addr = boa.load("contracts/legos/yield/LegoMoonwell.vy", registry, addy_registry_deploy, name="lego_moonwell")
     assert lego_registry.registerNewLego(addr, "Moonwell", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -102,7 +102,7 @@ def lego_moonwell(getRegistry, fork, lego_registry, addy_registry_deploy, govern
 @pytest.fixture(scope="session")
 def lego_compound_v3(getRegistry, fork, lego_registry, addy_registry_deploy, governor):
     registry = getRegistry("compound_v3", fork)
-    addr = boa.load("contracts/legos/LegoCompoundV3.vy", registry, addy_registry_deploy, name="lego_compound_v3")
+    addr = boa.load("contracts/legos/yield/LegoCompoundV3.vy", registry, addy_registry_deploy, name="lego_compound_v3")
     assert lego_registry.registerNewLego(addr, "Compound V3", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -117,7 +117,7 @@ def lego_morpho(fork, lego_registry, addy_registry_deploy, governor, mock_regist
         factory = boa.from_etherscan(registries[0], name="morpho_factory")
         factory_legacy = boa.from_etherscan(registries[1], name="morpho_factory_legacy")
 
-    addr = boa.load("contracts/legos/LegoMorpho.vy", factory, factory_legacy, addy_registry_deploy, name="lego_morpho")
+    addr = boa.load("contracts/legos/yield/LegoMorpho.vy", factory, factory_legacy, addy_registry_deploy, name="lego_morpho")
     assert lego_registry.registerNewLego(addr, "Morpho", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -132,7 +132,7 @@ def lego_euler(fork, lego_registry, addy_registry_deploy, governor, mock_registr
         evault_factory = boa.from_etherscan(registries[0], name="euler_evault_factory")
         earn_factory = boa.from_etherscan(registries[1], name="euler_earn_factory")
 
-    addr = boa.load("contracts/legos/LegoEuler.vy", evault_factory, earn_factory, addy_registry_deploy, name="lego_euler")
+    addr = boa.load("contracts/legos/yield/LegoEuler.vy", evault_factory, earn_factory, addy_registry_deploy, name="lego_euler")
     assert lego_registry.registerNewLego(addr, "Euler", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -140,7 +140,7 @@ def lego_euler(fork, lego_registry, addy_registry_deploy, governor, mock_registr
 @pytest.fixture(scope="session")
 def lego_sky(getRegistry, fork, lego_registry, addy_registry_deploy, governor):
     pool = getRegistry("sky", fork)
-    addr = boa.load("contracts/legos/LegoSky.vy", pool, addy_registry_deploy, name="lego_sky")
+    addr = boa.load("contracts/legos/yield/LegoSky.vy", pool, addy_registry_deploy, name="lego_sky")
     assert lego_registry.registerNewLego(addr, "Sky", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -153,7 +153,7 @@ def lego_uniswap_v3(fork, lego_registry, addy_registry_deploy, governor):
 
     factory = boa.from_etherscan(registries[0], name="uniswap_v3_factory")
     swap_router = boa.from_etherscan(registries[1], name="uniswap_v3_swap_router")
-    addr = boa.load("contracts/legos/LegoUniswapV3.vy", factory, swap_router, addy_registry_deploy, name="lego_uniswap_v3")
+    addr = boa.load("contracts/legos/dexes/LegoUniswapV3.vy", factory, swap_router, addy_registry_deploy, name="lego_uniswap_v3")
     assert lego_registry.registerNewLego(addr, "Uniswap V3", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -166,7 +166,7 @@ def lego_uniswap_v2(fork, lego_registry, addy_registry_deploy, governor):
 
     factory = boa.from_etherscan(registries[0], name="uniswap_v2_factory")
     swap_router = boa.from_etherscan(registries[1], name="uniswap_v2_swap_router")
-    addr = boa.load("contracts/legos/LegoUniswapV2.vy", factory, swap_router, addy_registry_deploy, name="lego_uniswap_v2")
+    addr = boa.load("contracts/legos/dexes/LegoUniswapV2.vy", factory, swap_router, addy_registry_deploy, name="lego_uniswap_v2")
     assert lego_registry.registerNewLego(addr, "Uniswap V2", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -179,7 +179,7 @@ def lego_aero_classic(fork, lego_registry, addy_registry_deploy, governor):
 
     factory = boa.from_etherscan(registries[0], name="aero_classic_factory")
     swap_router = boa.from_etherscan(registries[1], name="aero_classic_swap_router")
-    addr = boa.load("contracts/legos/LegoAeroClassic.vy", factory, swap_router, addy_registry_deploy, name="lego_aero_classic")
+    addr = boa.load("contracts/legos/dexes/LegoAeroClassic.vy", factory, swap_router, addy_registry_deploy, name="lego_aero_classic")
     assert lego_registry.registerNewLego(addr, "aero_classic", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -192,7 +192,7 @@ def lego_aero_slipstream(fork, lego_registry, addy_registry_deploy, governor):
 
     factory = boa.from_etherscan(registries[0], name="aero_slipstream_factory")
     swap_router = boa.from_etherscan(registries[1], name="aero_slipstream_swap_router")
-    addr = boa.load("contracts/legos/LegoAeroSlipstream.vy", factory, swap_router, addy_registry_deploy, name="lego_aero_slipstream")
+    addr = boa.load("contracts/legos/dexes/LegoAeroSlipstream.vy", factory, swap_router, addy_registry_deploy, name="lego_aero_slipstream")
     assert lego_registry.registerNewLego(addr, "aero_slipstream", sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -203,6 +203,6 @@ def lego_curve(fork, lego_registry, addy_registry_deploy, governor):
     if registry == ZERO_ADDRESS:
         pytest.skip("asset not relevant on this fork")
     factory = boa.from_etherscan(registry, name="curve_factory")
-    addr = boa.load("contracts/legos/LegoCurve.vy", factory, addy_registry_deploy, name="lego_curve")
+    addr = boa.load("contracts/legos/dexes/LegoCurve.vy", factory, addy_registry_deploy, name="lego_curve")
     assert lego_registry.registerNewLego(addr, "Curve", sender=governor) != 0 # dev: invalid lego id
     return addr
