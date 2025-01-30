@@ -3,11 +3,16 @@
 from ethereum.ercs import IERC20
 import interfaces.LegoInterface as LegoPartner
 
-interface AgentPrices:
+interface PriceSheets:
     def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> TransactionCost: view
     def agentSubPriceData(_agent: address) -> SubscriptionInfo: view
     def protocolSubPriceData() -> SubscriptionInfo: view
     def protocolRecipient() -> address: view
+
+interface OracleRegistry:
+    def getAssetAmount(_asset: address, _usdValue: uint256) -> uint256: view
+    def getUsdValue(_asset: address, _amount: uint256) -> uint256: view
+    def getEthUsdValue(_amount: uint256) -> uint256: view
 
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
@@ -39,8 +44,8 @@ struct AgentInfo:
 struct MainAddys:
     addyRegistry: address
     legoRegistry: address
-    agentPrices: address
-    priceDesk: address
+    priceSheets: address
+    oracleRegistry: address
 
 struct ProtocolSub:
     installBlock: uint256
@@ -256,8 +261,8 @@ MAX_INSTRUCTIONS: constant(uint256) = 20
 
 # registry ids
 LEGO_REGISTRY_ID: constant(uint256) = 2
-AGENT_PRICES_ID: constant(uint256) = 3
-PRICE_DESK_ID: constant(uint256) = 4
+PRICE_SHEETS_ID: constant(uint256) = 3
+ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 # eip-712
 usedSignatures: public(HashMap[Bytes[65], bool])
@@ -306,11 +311,11 @@ def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _ini
     self.wethAddr = _wethAddr
     self.owner = _owner
 
-    agentPrices: address = staticcall AddyRegistry(_addyRegistry).getAddy(AGENT_PRICES_ID)
+    priceSheets: address = staticcall AddyRegistry(_addyRegistry).getAddy(PRICE_SHEETS_ID)
 
     # initial agent setup
     if _initialAgent != empty(address):
-        subInfo: SubscriptionInfo = staticcall AgentPrices(agentPrices).agentSubPriceData(_initialAgent)
+        subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).agentSubPriceData(_initialAgent)
         paidThroughBlock: uint256 = 0
         if subInfo.usdValue != 0:
             paidThroughBlock = block.number + subInfo.trialPeriod
@@ -326,7 +331,7 @@ def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _ini
     # protocol subscription
     protocolSub: ProtocolSub = empty(ProtocolSub)
     protocolSub.installBlock = block.number
-    subInfo: SubscriptionInfo = staticcall AgentPrices(agentPrices).protocolSubPriceData()
+    subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).protocolSubPriceData()
     if subInfo.usdValue != 0:
         protocolSub.paidThroughBlock = block.number + subInfo.trialPeriod
     self.protocolSub = protocolSub
@@ -352,8 +357,8 @@ def _getAddys() -> MainAddys:
     return MainAddys(
         addyRegistry=addyRegistry,
         legoRegistry=staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID),
-        agentPrices=staticcall AddyRegistry(addyRegistry).getAddy(AGENT_PRICES_ID),
-        priceDesk=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_DESK_ID),
+        priceSheets=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_SHEETS_ID),
+        oracleRegistry=staticcall AddyRegistry(addyRegistry).getAddy(ORACLE_REGISTRY_ID),
     )
 
 
@@ -456,12 +461,12 @@ def _checkPermissionsAndSubscriptions(
     _action: ActionType,
     _assets: DynArray[address, MAX_ASSETS],
     _legoIds: DynArray[uint256, MAX_LEGOS],
-    _agentPrices: address,
-    _priceDesk: address,
+    _priceSheets: address,
+    _oracleRegistry: address,
 ) -> bool:
 
     # protocol subscription
-    self._checkProtocolSubscription(_agentPrices, _priceDesk)
+    self._checkProtocolSubscription(_priceSheets, _oracleRegistry)
 
     # if signer is owner, no need to check agent permissions
     if _signer == _owner:
@@ -470,7 +475,7 @@ def _checkPermissionsAndSubscriptions(
     # agent permissions / subscription
     agentInfo: AgentInfo = self.agentSettings[_signer]
     assert self._canAgentAccess(agentInfo, _action, _assets, _legoIds) # dev: agent not allowed
-    self._checkAgentSubscription(_signer, agentInfo, _agentPrices, _priceDesk)
+    self._checkAgentSubscription(_signer, agentInfo, _priceSheets, _oracleRegistry)
     return True
 
 
@@ -504,7 +509,7 @@ def depositTokens(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnDeposit(_legoId, _asset, _amount, _vault, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.DEPOSIT, [_asset], [_legoId], addys.agentPrices, addys.priceDesk)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.DEPOSIT, [_asset], [_legoId], addys.priceSheets, addys.oracleRegistry)
 
     # deposit tokens
     assetAmountDeposited: uint256 = 0
@@ -513,7 +518,7 @@ def depositTokens(
     usdValue: uint256 = 0
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = self._depositTokens(signer, _legoId, _asset, _amount, _vault, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, usdValue, addys.agentPrices)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, usdValue, addys.priceSheets)
     return assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue
 
 
@@ -618,7 +623,7 @@ def withdrawTokens(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnWithdrawal(_legoId, _asset, _amount, _vaultToken, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.WITHDRAWAL, [_asset], [_legoId], addys.agentPrices, addys.priceDesk)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.WITHDRAWAL, [_asset], [_legoId], addys.priceSheets, addys.oracleRegistry)
 
     # withdraw from lego partner
     assetAmountReceived: uint256 = 0
@@ -626,7 +631,7 @@ def withdrawTokens(
     usdValue: uint256 = 0
     assetAmountReceived, vaultTokenAmountBurned, usdValue = self._withdrawTokens(signer, _legoId, _asset, _amount, _vaultToken, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.agentPrices)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.priceSheets)
     return assetAmountReceived, vaultTokenAmountBurned, usdValue
 
 
@@ -719,7 +724,7 @@ def rebalance(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnRebalance(_fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.REBALANCE, [_asset], [_fromLegoId, _toLegoId], addys.agentPrices, addys.priceDesk)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.REBALANCE, [_asset], [_fromLegoId, _toLegoId], addys.priceSheets, addys.oracleRegistry)
 
     # rebalance
     assetAmountDeposited: uint256 = 0
@@ -728,7 +733,7 @@ def rebalance(
     usdValue: uint256 = 0
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = self._rebalance(signer, _fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.REBALANCE, usdValue, addys.agentPrices)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.REBALANCE, usdValue, addys.priceSheets)
     return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue
 
 
@@ -812,7 +817,7 @@ def swapTokens(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnSwap(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId], addys.agentPrices, addys.priceDesk)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId], addys.priceSheets, addys.oracleRegistry)
 
     # swap
     actualSwapAmount: uint256 = 0
@@ -820,7 +825,7 @@ def swapTokens(
     usdValue: uint256 = 0
     actualSwapAmount, toAmount, usdValue = self._swapTokens(signer, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.SWAP, usdValue, addys.agentPrices)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.SWAP, usdValue, addys.priceSheets)
     return actualSwapAmount, toAmount, usdValue
 
 
@@ -901,14 +906,14 @@ def transferFunds(
     # check permissions / subscription data
     owner: address = self.owner
     signer: address = self._getSignerOnTransfer(_recipient, _amount, _asset, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.TRANSFER, [_asset], [], addys.agentPrices, addys.priceDesk)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.TRANSFER, [_asset], [], addys.priceSheets, addys.oracleRegistry)
 
     # transfer funds
     amount: uint256 = 0
     usdValue: uint256 = 0
-    amount, usdValue = self._transferFunds(signer, _recipient, _amount, _asset, owner, isSignerAgent, addys.priceDesk)
+    amount, usdValue = self._transferFunds(signer, _recipient, _amount, _asset, owner, isSignerAgent, addys.oracleRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.agentPrices)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets)
     return amount, usdValue
 
 
@@ -920,27 +925,27 @@ def _transferFunds(
     _asset: address,
     _owner: address,
     _isSignerAgent: bool,
-    _priceDesk: address,
+    _oracleRegistry: address,
 ) -> (uint256, uint256):
     # validate recipient
     if _recipient != _owner:
         assert self.isRecipientAllowed[_recipient] # dev: recipient not allowed
 
-    # finalize amount
     amount: uint256 = 0
+    usdValue: uint256 = 0
+
+    # handle eth
     if _asset == empty(address):
         amount = min(_amount, self.balance)
         assert amount != 0 # dev: nothing to transfer
+        send(_recipient, amount)
+        usdValue = staticcall OracleRegistry(_oracleRegistry).getEthUsdValue(amount)
+
+    # erc20 tokens
     else:
         amount = self._getAllowedTxAmount(_asset, _amount)
-
-    # transfer funds
-    if _asset == empty(address):
-        send(_recipient, amount)
-    else:
         assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
-
-    usdValue: uint256 = 0 # TODO: implement, use `_priceDesk` to get price desk and calc usd value
+        usdValue = staticcall OracleRegistry(_oracleRegistry).getUsdValue(_asset, amount)
 
     log WalletFundsTransferred(_signer, _recipient, _asset, amount, usdValue, msg.sender, _isSignerAgent)
     return amount, usdValue
@@ -1006,7 +1011,7 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
     addys: MainAddys = self._getAddys()
 
     # protocol subscription
-    self._checkProtocolSubscription(addys.agentPrices, addys.priceDesk)
+    self._checkProtocolSubscription(addys.priceSheets, addys.oracleRegistry)
 
     owner: address = self.owner
     signer: address = msg.sender
@@ -1020,7 +1025,7 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         isSignerAgent = True
         agentInfo = self.agentSettings[signer]
         assert agentInfo.isActive # dev: agent not active
-        self._checkAgentSubscription(signer, agentInfo, addys.agentPrices, addys.priceDesk)
+        self._checkAgentSubscription(signer, agentInfo, addys.priceSheets, addys.oracleRegistry)
 
     # init vars
     aggCostData: TransactionCost = empty(TransactionCost)
@@ -1037,31 +1042,31 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         if instruction.action == ActionType.DEPOSIT:
             assert self._canAgentAccess(agentInfo, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
             naValueA, naAddyA, naValueB, usdValue = self._depositTokens(signer, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent, addys.legoRegistry)
-            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.DEPOSIT, usdValue, addys.agentPrices)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.DEPOSIT, usdValue, addys.priceSheets)
 
         # withdraw
         elif instruction.action == ActionType.WITHDRAWAL:
             assert self._canAgentAccess(agentInfo, ActionType.WITHDRAWAL, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
             naValueA, naValueB, usdValue = self._withdrawTokens(signer, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent, addys.legoRegistry)
-            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.agentPrices)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.priceSheets)
 
         # rebalance
         elif instruction.action == ActionType.REBALANCE:
             assert self._canAgentAccess(agentInfo, ActionType.REBALANCE, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: agent not allowed
             naValueA, naAddyA, naValueB, usdValue = self._rebalance(signer, instruction.legoId, instruction.altLegoId, instruction.asset, instruction.amount, instruction.vault, instruction.altVault, isSignerAgent, addys.legoRegistry)
-            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.REBALANCE, usdValue, addys.agentPrices)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.REBALANCE, usdValue, addys.priceSheets)
 
         # swap
         elif instruction.action == ActionType.SWAP:
             assert self._canAgentAccess(agentInfo, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
             naValueA, naValueB, usdValue = self._swapTokens(signer, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, isSignerAgent, addys.legoRegistry)
-            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.SWAP, usdValue, addys.agentPrices)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.SWAP, usdValue, addys.priceSheets)
 
         # transfer
         elif instruction.action == ActionType.TRANSFER:
             assert self._canAgentAccess(agentInfo, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, usdValue = self._transferFunds(signer, instruction.recipient, instruction.amount, instruction.asset, owner, isSignerAgent, addys.priceDesk)
-            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.agentPrices)
+            naValueA, usdValue = self._transferFunds(signer, instruction.recipient, instruction.amount, instruction.asset, owner, isSignerAgent, addys.oracleRegistry)
+            aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets)
 
     self._handleBatchTransactionFees(signer, isSignerAgent, aggCostData)
     return True
@@ -1099,7 +1104,7 @@ def convertEthToWeth(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnEthToWeth(_amount, _depositLegoId, _depositVault, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.CONVERSION, [weth], [_depositLegoId], addys.agentPrices, addys.priceDesk)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.CONVERSION, [weth], [_depositLegoId], addys.priceSheets, addys.oracleRegistry)
 
     # convert eth to weth
     amount: uint256 = min(_amount, self.balance)
@@ -1113,7 +1118,7 @@ def convertEthToWeth(
     if _depositLegoId != 0:
         depositUsdValue: uint256 = 0
         amount, vaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(signer, _depositLegoId, weth, amount, _depositVault, isSignerAgent, addys.legoRegistry)
-        self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, depositUsdValue, addys.agentPrices)
+        self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, depositUsdValue, addys.priceSheets)
 
     return amount, vaultToken, vaultTokenAmountReceived
 
@@ -1161,7 +1166,7 @@ def convertWethToEth(
     # check permissions / subscription data
     owner: address = self.owner
     signer: address = self._getSignerOnWethToEth(_amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.CONVERSION, [weth], [_withdrawLegoId], addys.agentPrices, addys.priceDesk)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.CONVERSION, [weth], [_withdrawLegoId], addys.priceSheets, addys.oracleRegistry)
 
     # withdraw weth from lego partner (if applicable)
     amount: uint256 = _amount
@@ -1169,7 +1174,7 @@ def convertWethToEth(
     if _withdrawLegoId != 0:
         _na: uint256 = 0
         amount, _na, usdValue = self._withdrawTokens(signer, _withdrawLegoId, weth, _amount, _withdrawVaultToken, isSignerAgent, addys.legoRegistry)
-        self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.agentPrices)
+        self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.priceSheets)
 
     # convert weth to eth
     amount = min(amount, staticcall IERC20(weth).balanceOf(self))
@@ -1179,8 +1184,8 @@ def convertWethToEth(
 
     # transfer eth to recipient (if applicable)
     if _recipient != empty(address):
-        amount, usdValue = self._transferFunds(signer, _recipient, amount, empty(address), owner, isSignerAgent, addys.priceDesk)
-        self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.agentPrices)
+        amount, usdValue = self._transferFunds(signer, _recipient, amount, empty(address), owner, isSignerAgent, addys.oracleRegistry)
+        self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets)
             
     return amount
 
@@ -1216,11 +1221,11 @@ def _handleTransactionFee(
     _isSignerAgent: bool,
     _action: ActionType,
     _usdValue: uint256,
-    _agentPrices: address,
+    _priceSheets: address,
 ):
     if not _isSignerAgent or _usdValue == 0:
         return
-    cost: TransactionCost = staticcall AgentPrices(_agentPrices).getTransactionCost(_agent, _action, _usdValue)
+    cost: TransactionCost = staticcall PriceSheets(_priceSheets).getTransactionCost(_agent, _action, _usdValue)
     didPay: bool = self._payAgentAndProtocolFees(_agent, cost)
     if didPay:
         log TransactionFeePaid(_agent, _action, _usdValue, cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue)
@@ -1260,13 +1265,13 @@ def _aggregateBatchTxCostData(
     _isSignerAgent: bool,
     _action: ActionType,
     _usdValue: uint256,
-    _agentPrices: address,
+    _priceSheets: address,
 ) -> TransactionCost:
     if not _isSignerAgent or _usdValue == 0:
         return _aggCostData
 
     aggCostData: TransactionCost = _aggCostData
-    txCost: TransactionCost = staticcall AgentPrices(_agentPrices).getTransactionCost(_agent, _action, _usdValue)
+    txCost: TransactionCost = staticcall PriceSheets(_priceSheets).getTransactionCost(_agent, _action, _usdValue)
 
     # agent asset
     if aggCostData.agentAsset == empty(address) and txCost.agentAsset != empty(address):
@@ -1293,9 +1298,9 @@ def _aggregateBatchTxCostData(
 
 
 @internal
-def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _agentPrices: address, _priceDesk: address):
+def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _priceSheets: address, _oracleRegistry: address):
     agentInfo: AgentInfo = _agentInfo
-    subData: SubscriptionInfo = staticcall AgentPrices(_agentPrices).agentSubPriceData(_agent)
+    subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).agentSubPriceData(_agent)
     didChange: bool = False
 
     # subscription was added (since last checked)
@@ -1310,7 +1315,7 @@ def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _agentPrices
 
     # check if subscription needs to be paid
     if agentInfo.paidThroughBlock != 0 and block.number > agentInfo.paidThroughBlock:
-        assetAmount: uint256 = 0 # TODO: convert usd value to asset amount (using subData.usdValue)
+        assetAmount: uint256 = staticcall OracleRegistry(_oracleRegistry).getAssetAmount(subData.asset, subData.usdValue)
 
         # if something fails with price feed, allow transaction through.
         # it's on agent developer to make sure price feed is working, so they can get paid
@@ -1326,9 +1331,9 @@ def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _agentPrices
 
 
 @internal
-def _checkProtocolSubscription(_agentPrices: address, _priceDesk: address):
+def _checkProtocolSubscription(_priceSheets: address, _oracleRegistry: address):
     userStatus: ProtocolSub = self.protocolSub
-    subData: SubscriptionInfo = staticcall AgentPrices(_agentPrices).protocolSubPriceData()
+    subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).protocolSubPriceData()
     didChange: bool = False
 
     # subscription was added (since last checked)
@@ -1343,12 +1348,12 @@ def _checkProtocolSubscription(_agentPrices: address, _priceDesk: address):
 
     # check if subscription needs to be paid
     if userStatus.paidThroughBlock != 0 and block.number > userStatus.paidThroughBlock:
-        assetAmount: uint256 = 0 # TODO: convert usd value to asset amount (using subData.usdValue)
+        assetAmount: uint256 = staticcall OracleRegistry(_oracleRegistry).getAssetAmount(subData.asset, subData.usdValue)
 
         # if something fails with price feed, allow transaction through.
         # it's on protocol developer to make sure price feed is working, so they can get paid
         if assetAmount != 0:
-            recipient: address = staticcall AgentPrices(_agentPrices).protocolRecipient()
+            recipient: address = staticcall PriceSheets(_priceSheets).protocolRecipient()
             assert extcall IERC20(subData.asset).transfer(recipient, assetAmount, default_return_value=True) # dev: protocol subscription payment failed
             userStatus.paidThroughBlock = block.number + subData.payPeriod
             log ProtocolSubscriptionPaid(recipient, subData.asset, assetAmount, subData.usdValue, userStatus.paidThroughBlock)
@@ -1401,8 +1406,8 @@ def addOrModifyAgent(
     agentInfo.allowedAssets, agentInfo.allowedLegoIds = self._sanitizeAgentInputData(_allowedAssets, _allowedLegoIds)
 
     # get subscription info
-    agentPrices: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_PRICES_ID)
-    subInfo: SubscriptionInfo = staticcall AgentPrices(agentPrices).agentSubPriceData(_agent)
+    priceSheets: address = staticcall AddyRegistry(self.addyRegistry).getAddy(PRICE_SHEETS_ID)
+    subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).agentSubPriceData(_agent)
     
     isNewAgent: bool = (agentInfo.installBlock == 0)
     if isNewAgent:

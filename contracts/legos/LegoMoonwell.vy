@@ -17,6 +17,9 @@ interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256) -> uint256: view
+
 event MoonwellDeposit:
     sender: indexed(address)
     asset: indexed(address)
@@ -72,13 +75,22 @@ def _validateAssetAndVault(_asset: address, _vault: address):
     assert staticcall CompoundV2(_vault).underlying() == _asset # dev: invalid asset
 
 
+@view
+@internal
+def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) -> uint256:
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    return staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount)
+
+
 ###########
 # Deposit #
 ###########
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, address, uint256, uint256, uint256):
     self._validateAssetAndVault(_asset, _vault)
 
     # pre balances
@@ -110,7 +122,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
         assert extcall IERC20(_asset).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
 
     actualDepositAmount: uint256 = depositAmount - refundAssetAmount
-    usdValue: uint256 = 0 # TODO: add usd value (_asset, actualDepositAmount)
+    usdValue: uint256 = self._getUsdValue(_asset, actualDepositAmount, _oracleRegistry)
 
     log MoonwellDeposit(msg.sender, _asset, _vault, actualDepositAmount, usdValue, vaultTokenAmountReceived, _recipient)
     return actualDepositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount, usdValue
@@ -122,7 +134,7 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     self._validateAssetAndVault(_asset, _vaultToken)
 
     # pre balances
@@ -142,8 +154,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     assetAmountReceived: uint256 = newLegoBalance - preLegoBalance
     assert assetAmountReceived != 0 # dev: no asset amount received
     assert extcall IERC20(_asset).transfer(_recipient, assetAmountReceived, default_return_value=True) # dev: transfer failed
-
-    usdValue: uint256 = 0 # TODO: add usd value (_asset, assetAmountReceived)
+    usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
 
     # refund if full withdrawal didn't happen
     currentLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
@@ -163,7 +174,7 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 
 
 @external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address) -> (uint256, uint256, uint256, uint256):
+def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     raise "Not Implemented"
 
 
@@ -193,7 +204,8 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 @external
 def setLegoId(_legoId: uint256) -> bool:
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
-    assert self.legoId == 0 # dev: already set
+    prevLegoId: uint256 = self.legoId
+    assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
     log MoonwellLegoIdSet(_legoId)
     return True

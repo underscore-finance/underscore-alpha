@@ -15,6 +15,9 @@ interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256) -> uint256: view
+
 struct Route:
     from_: address
     to: address 
@@ -61,6 +64,23 @@ def getRegistries() -> DynArray[address, 10]:
     return [AERODROME_FACTORY, AERODROME_ROUTER]
 
 
+@view
+@internal
+def _getUsdValue(
+    _tokenIn: address,
+    _tokenInAmount: uint256,
+    _tokenOut: address,
+    _tokenOutAmount: uint256,
+    _oracleRegistry: address,
+) -> uint256:
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    tokenInUsdValue: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenIn, _tokenInAmount)
+    tokenOutUsdValue: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenOut, _tokenOutAmount)
+    return max(tokenInUsdValue, tokenOutUsdValue)
+
+
 ########
 # Swap #
 ########
@@ -85,6 +105,7 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256, 
     _recipient: address,
+    _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
     factory: address = AERODROME_FACTORY
     isStable: bool = self._getBestPoolData(_tokenIn, _tokenOut, factory)
@@ -121,10 +142,7 @@ def swapTokens(
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
 
     actualSwapAmount: uint256 = fromAmount - refundAssetAmount
-
-    # TODO: add usd value
-    # use the maximum of the two: either (_tokenIn, actualSwapAmount) or (_tokenOut, toAmount)
-    usdValue: uint256 = 0 
+    usdValue: uint256 = self._getUsdValue(_tokenIn, actualSwapAmount, _tokenOut, toAmount, _oracleRegistry)
 
     log AerodromeSwap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, usdValue, _recipient)
     return actualSwapAmount, toAmount, refundAssetAmount, usdValue
@@ -136,12 +154,12 @@ def swapTokens(
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address) -> (uint256, address, uint256, uint256, uint256):
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, address, uint256, uint256, uint256):
     raise "Not Implemented"
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address) -> (uint256, uint256, uint256, uint256):
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     raise "Not Implemented"
 
 
@@ -171,7 +189,8 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 @external
 def setLegoId(_legoId: uint256) -> bool:
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2) # dev: no perms
-    assert self.legoId == 0 # dev: already set
+    prevLegoId: uint256 = self.legoId
+    assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
     log AerodromeLegoIdSet(_legoId)
     return True

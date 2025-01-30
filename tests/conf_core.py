@@ -13,10 +13,11 @@ def addy_registry_deploy(governor):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def addy_registry(addy_registry_deploy, lego_registry, agent_factory, agent_prices, governor):
-    assert addy_registry_deploy.registerNewAddy(agent_factory, "Agent Factory", sender=governor) != 0
-    assert addy_registry_deploy.registerNewAddy(lego_registry, "Lego Registry", sender=governor) != 0
-    assert addy_registry_deploy.registerNewAddy(agent_prices, "Agent Prices", sender=governor) != 0
+def addy_registry(addy_registry_deploy, lego_registry, agent_factory, price_sheets, oracle_registry, governor):
+    assert addy_registry_deploy.registerNewAddy(agent_factory, "Agent Factory", sender=governor) != 0 # 1
+    assert addy_registry_deploy.registerNewAddy(lego_registry, "Lego Registry", sender=governor) != 0 # 2
+    assert addy_registry_deploy.registerNewAddy(price_sheets, "Price Sheets", sender=governor) != 0 # 3
+    assert addy_registry_deploy.registerNewAddy(oracle_registry, "Oracle Registry", sender=governor) != 0 # 4
     return addy_registry_deploy
 
 
@@ -33,8 +34,13 @@ def agent_factory(addy_registry_deploy, weth, wallet_template, governor):
 
 
 @pytest.fixture(scope="session")
-def agent_prices(addy_registry_deploy):
-    return boa.load("contracts/core/AgentPrices.vy", addy_registry_deploy, name="agent_prices")
+def price_sheets(addy_registry_deploy):
+    return boa.load("contracts/core/PriceSheets.vy", addy_registry_deploy, name="price_sheets")
+
+
+@pytest.fixture(scope="session")
+def oracle_registry(addy_registry_deploy):
+    return boa.load("contracts/core/OracleRegistry.vy", addy_registry_deploy, name="oracle_registry")
 
 
 # other

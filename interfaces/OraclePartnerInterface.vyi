@@ -1,0 +1,22 @@
+# @version 0.4.0
+
+@view
+@external
+def getPrice(_asset: address, _oracleRegistry: address = empty(address)) -> uint256:
+    ...
+
+@view
+@external
+def hasPriceFeed(_asset: address) -> bool:
+    ...
+
+# config
+
+@view
+@external
+def oraclePartnerId() -> uint256:
+    ...
+
+@external
+def setOraclePartnerId(_oracleId: uint256) -> bool:
+    ...
