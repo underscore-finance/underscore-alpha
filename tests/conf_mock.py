@@ -94,6 +94,21 @@ def bravo_token_erc4626_vault(bravo_token):
     return boa.load("contracts/mock/MockErc4626Vault.vy", bravo_token, name="bravo_erc4626_vault")
 
 
+# mock asset: charlie token (6 decimals)
+
+
+@pytest.fixture(scope="session")
+def charlie_token(governor):
+    return boa.load("contracts/mock/MockErc20.vy", governor, "Charlie Token", "CHARLIE", 6, 10_000_000, name="charlie_token")
+
+
+@pytest.fixture(scope="session")
+def charlie_token_whale(env, charlie_token, governor):
+    whale = env.generate_address("charlie_token_whale")
+    charlie_token.mint(whale, 1_000_000 * (10 ** charlie_token.decimals()), sender=governor)
+    return whale
+
+
 # mock asset: weth
 
 

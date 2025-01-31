@@ -123,12 +123,6 @@ def _getPrice(_asset: address) -> uint256:
 @view
 @external
 def getUsdValue(_asset: address, _amount: uint256) -> uint256:
-    return self._getUsdValue(_asset, _amount)
-
-
-@view
-@internal
-def _getUsdValue(_asset: address, _amount: uint256) -> uint256:
     if _amount == 0 or _asset == empty(address):
         return 0
     price: uint256 = self._getPrice(_asset)
@@ -141,12 +135,6 @@ def _getUsdValue(_asset: address, _amount: uint256) -> uint256:
 @view
 @external
 def getAssetAmount(_asset: address, _usdValue: uint256) -> uint256:
-    return self._getAssetAmount(_asset, _usdValue)
-
-
-@view
-@internal
-def _getAssetAmount(_asset: address, _usdValue: uint256) -> uint256:
     if _usdValue == 0 or _asset == empty(address):
         return 0
     price: uint256 = self._getPrice(_asset)
@@ -172,13 +160,20 @@ def hasPriceFeed(_asset: address) -> bool:
 @view
 @external
 def getEthUsdValue(_amount: uint256) -> uint256:
-    return self._getUsdValue(ETH, _amount)
+    if _amount == 0:
+        return 0
+    return self._getPrice(ETH) * _amount // (10 ** 18)
 
 
 @view
 @external
 def getEthAmount(_usdValue: uint256) -> uint256:
-    return self._getAssetAmount(ETH, _usdValue)
+    if _usdValue == 0:
+        return 0
+    price: uint256 = self._getPrice(ETH)
+    if price == 0:
+        return 0
+    return _usdValue * (10 ** 18) // price
 
 
 ###########################

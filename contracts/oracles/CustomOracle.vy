@@ -7,12 +7,16 @@ interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
+struct CustomOracleData:
+    price: uint256
+    publishTime: uint256
+
 event CustomPriceSet:
     asset: indexed(address)
     price: uint256
 
 # config
-price: public(HashMap[address, uint256])
+priceData: public(HashMap[address, CustomOracleData])
 oraclePartnerId: public(uint256)
 ADDY_REGISTRY: public(immutable(address))
 
@@ -31,13 +35,19 @@ def __init__(_addyRegistry: address):
 @view
 @external
 def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> uint256:
-    return self.price[_asset]
+    priceData: CustomOracleData = self.priceData[_asset]
+
+    # price is too stale
+    if _staleTime != 0 and block.timestamp - priceData.publishTime > _staleTime:
+        return 0
+
+    return priceData.price
 
 
 @view
 @external
 def hasPriceFeed(_asset: address) -> bool:
-    return self.price[_asset] != 0
+    return self.priceData[_asset].price != 0
 
 
 #####################
@@ -48,7 +58,10 @@ def hasPriceFeed(_asset: address) -> bool:
 @external
 def setPrice(_asset: address, _price: uint256):
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
-    self.price[_asset] = _price
+    self.priceData[_asset] = CustomOracleData(
+        price=_price,
+        publishTime=block.timestamp,
+    )
     log CustomPriceSet(_asset, _price)
 
 
