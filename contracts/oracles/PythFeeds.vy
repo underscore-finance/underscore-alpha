@@ -210,8 +210,9 @@ def recoverEthBalance(_recipient: address) -> bool:
 
 
 @external
-def setOraclePartnerId(_oracleId: uint256):
+def setOraclePartnerId(_oracleId: uint256) -> bool:
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4) # dev: no perms
     prevId: uint256 = self.oraclePartnerId
     assert prevId == 0 or prevId == _oracleId # dev: invalid oracle id
     self.oraclePartnerId = _oracleId
+    return True

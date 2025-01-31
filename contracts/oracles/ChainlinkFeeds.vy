@@ -56,9 +56,9 @@ def __init__(_addyRegistry: address):
     ADDY_REGISTRY = _addyRegistry
 
     # set default feeds
-    self._setChainlinkFeed(ETH, ETH_USD, False, False)
-    self._setChainlinkFeed(WETH, ETH_USD, False, False)
-    self._setChainlinkFeed(BTC, BTC_USD, False, False)
+    assert self._setChainlinkFeed(ETH, ETH_USD, False, False)
+    assert self._setChainlinkFeed(WETH, ETH_USD, False, False)
+    assert self._setChainlinkFeed(BTC, BTC_USD, False, False)
 
 
 #############
@@ -240,8 +240,9 @@ def disableChainlinkPriceFeed(_asset: address) -> bool:
 
 
 @external
-def setOraclePartnerId(_oracleId: uint256):
+def setOraclePartnerId(_oracleId: uint256) -> bool:
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4) # dev: no perms
     prevId: uint256 = self.oraclePartnerId
     assert prevId == 0 or prevId == _oracleId # dev: invalid oracle id
     self.oraclePartnerId = _oracleId
+    return True
