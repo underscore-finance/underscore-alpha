@@ -76,29 +76,30 @@ def __init__(_addyRegistry: address):
 
 @view
 @external
-def getPrice(_asset: address) -> uint256:
+def getPrice(_asset: address, _shouldRaise: bool = False) -> uint256:
     if _asset == empty(address):
         return 0
-    return self._getPrice(_asset)
+    return self._getPrice(_asset, _shouldRaise)
 
 
 @view
 @internal
-def _getPrice(_asset: address) -> uint256:
+def _getPrice(_asset: address, _shouldRaise: bool = False) -> uint256:
     price: uint256 = 0
-    staleTime: uint256 = self.staleTime
+    hasFeedConfig: bool = False
     alreadyLooked: DynArray[uint256, MAX_PRIORITY_PARTNERS] = []
+    staleTime: uint256 = self.staleTime
 
     # go thru priority partners first
     priorityIds: DynArray[uint256, MAX_PRIORITY_PARTNERS] = self.priorityOraclePartnerIds
     for i: uint256 in range(len(priorityIds), bound=MAX_PRIORITY_PARTNERS):
         pid: uint256 = priorityIds[i]
-        oraclePartner: address = self.oraclePartnerInfo[pid].addr
-        if oraclePartner == empty(address):
-            continue
-        price = staticcall OraclePartner(oraclePartner).getPrice(_asset, staleTime, self)
+        hasFeed: bool = False
+        price, hasFeed = self._getPriceFromOraclePartner(pid, _asset, staleTime)
         if price != 0:
             break
+        if hasFeed:
+            hasFeedConfig = True
         alreadyLooked.append(pid)
 
     # go thru rest of oracle partners
@@ -107,14 +108,27 @@ def _getPrice(_asset: address) -> uint256:
         for id: uint256 in range(1, numSources, bound=max_value(uint256)):
             if id in alreadyLooked:
                 continue
-            oraclePartner: address = self.oraclePartnerInfo[id].addr
-            if oraclePartner == empty(address):
-                continue
-            price = staticcall OraclePartner(oraclePartner).getPrice(_asset, staleTime, self)
+            hasFeed: bool = False
+            price, hasFeed = self._getPriceFromOraclePartner(id, _asset, staleTime)
             if price != 0:
                 break
+            if hasFeed:
+                hasFeedConfig = True
+
+    # raise exception if feed exists but no price
+    if price == 0 and hasFeedConfig and _shouldRaise:
+        raise "has price config, no price"
 
     return price
+
+
+@view
+@internal
+def _getPriceFromOraclePartner(_pid: uint256, _asset: address, _staleTime: uint256) -> (uint256, bool):
+    oraclePartner: address = self.oraclePartnerInfo[_pid].addr
+    if oraclePartner == empty(address):
+        return 0, False
+    return staticcall OraclePartner(oraclePartner).getPriceAndHasFeed(_asset, _staleTime, self)
 
 
 # other utils
@@ -122,10 +136,10 @@ def _getPrice(_asset: address) -> uint256:
 
 @view
 @external
-def getUsdValue(_asset: address, _amount: uint256) -> uint256:
+def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256:
     if _amount == 0 or _asset == empty(address):
         return 0
-    price: uint256 = self._getPrice(_asset)
+    price: uint256 = self._getPrice(_asset, _shouldRaise)
     if price == 0:
         return 0
     decimals: uint256 = convert(staticcall IERC20Detailed(_asset).decimals(), uint256)
@@ -134,10 +148,10 @@ def getUsdValue(_asset: address, _amount: uint256) -> uint256:
 
 @view
 @external
-def getAssetAmount(_asset: address, _usdValue: uint256) -> uint256:
+def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256:
     if _usdValue == 0 or _asset == empty(address):
         return 0
-    price: uint256 = self._getPrice(_asset)
+    price: uint256 = self._getPrice(_asset, _shouldRaise)
     if price == 0:
         return 0
     decimals: uint256 = convert(staticcall IERC20Detailed(_asset).decimals(), uint256)
@@ -159,18 +173,18 @@ def hasPriceFeed(_asset: address) -> bool:
 
 @view
 @external
-def getEthUsdValue(_amount: uint256) -> uint256:
+def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256:
     if _amount == 0:
         return 0
-    return self._getPrice(ETH) * _amount // (10 ** 18)
+    return self._getPrice(ETH, _shouldRaise) * _amount // (10 ** 18)
 
 
 @view
 @external
-def getEthAmount(_usdValue: uint256) -> uint256:
+def getEthAmount(_usdValue: uint256, _shouldRaise: bool = False) -> uint256:
     if _usdValue == 0:
         return 0
-    price: uint256 = self._getPrice(ETH)
+    price: uint256 = self._getPrice(ETH, _shouldRaise)
     if price == 0:
         return 0
     return _usdValue * (10 ** 18) // price

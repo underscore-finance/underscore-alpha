@@ -10,9 +10,9 @@ interface PriceSheets:
     def protocolRecipient() -> address: view
 
 interface OracleRegistry:
-    def getAssetAmount(_asset: address, _usdValue: uint256) -> uint256: view
-    def getUsdValue(_asset: address, _amount: uint256) -> uint256: view
-    def getEthUsdValue(_amount: uint256) -> uint256: view
+    def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256: view
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+    def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view

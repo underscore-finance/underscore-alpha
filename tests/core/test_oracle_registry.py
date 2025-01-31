@@ -340,6 +340,10 @@ def test_stale_time_price_impact(new_oracle_registry, new_oracle, governor, alph
     # Price should now be stale and return 0
     assert new_oracle_registry.getPrice(alpha_token) == 0
 
+    # should raise
+    with boa.reverts("has price config, no price"):
+        new_oracle_registry.getPrice(alpha_token, True)
+
     # Update price
     new_oracle.setPrice(alpha_token, 200, sender=governor)
     assert new_oracle_registry.getPrice(alpha_token) == 200

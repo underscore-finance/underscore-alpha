@@ -70,10 +70,24 @@ def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address 
     feedId: bytes32 = self.feedConfig[_asset]
     if feedId == empty(bytes32):
         return 0
+    return self._getPrice(feedId, _staleTime)
+
+
+@view
+@external
+def getPriceAndHasFeed(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> (uint256, bool):
+    feedId: bytes32 = self.feedConfig[_asset]
+    if feedId == empty(bytes32):
+        return 0, False
+    return self._getPrice(feedId, _staleTime), True
+
+
+@view
+@internal
+def _getPrice(_feedId: bytes32, _staleTime: uint256) -> uint256:
+    priceData: PythPrice = staticcall PythNetwork(PYTH).getPriceUnsafe(_feedId)
 
     # NOTE: choosing to fail gracefully in Underscore
-
-    priceData: PythPrice = staticcall PythNetwork(PYTH).getPriceUnsafe(feedId)
 
     # no price
     if priceData.price <= 0:

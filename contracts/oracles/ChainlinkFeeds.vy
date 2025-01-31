@@ -51,14 +51,15 @@ NORMALIZED_DECIMALS: constant(uint256) = 18
 
 
 @deploy
-def __init__(_addyRegistry: address):
+def __init__(_addyRegistry: address, _shouldSetDefaultFeeds: bool):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
     ADDY_REGISTRY = _addyRegistry
 
     # set default feeds
-    assert self._setChainlinkFeed(ETH, ETH_USD, False, False)
-    assert self._setChainlinkFeed(WETH, ETH_USD, False, False)
-    assert self._setChainlinkFeed(BTC, BTC_USD, False, False)
+    if _shouldSetDefaultFeeds:
+        assert self._setChainlinkFeed(ETH, ETH_USD, False, False)
+        assert self._setChainlinkFeed(WETH, ETH_USD, False, False)
+        assert self._setChainlinkFeed(BTC, BTC_USD, False, False)
 
 
 #############
@@ -70,7 +71,18 @@ def __init__(_addyRegistry: address):
 @external
 def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> uint256:
     config: ChainlinkConfig = self.feedConfig[_asset]
+    if config.feed == empty(address):
+        return 0
     return self._getPrice(config.feed, config.decimals, config.needsEthToUsd, config.needsBtcToUsd, _staleTime)
+
+
+@view
+@external
+def getPriceAndHasFeed(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> (uint256, bool):
+    config: ChainlinkConfig = self.feedConfig[_asset]
+    if config.feed == empty(address):
+        return 0, False
+    return self._getPrice(config.feed, config.decimals, config.needsEthToUsd, config.needsBtcToUsd, _staleTime), True
 
 
 @view
@@ -82,9 +94,6 @@ def _getPrice(
     _needsBtcToUsd: bool,
     _staleTime: uint256,
 ) -> uint256:
-    if _feed == empty(address):
-        return 0
-
     price: uint256 = self._getChainlinkData(_feed, _decimals, _staleTime)
     if price == 0:
         return 0

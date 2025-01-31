@@ -36,12 +36,29 @@ def __init__(_addyRegistry: address):
 @external
 def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> uint256:
     priceData: CustomOracleData = self.priceData[_asset]
+    if priceData.price == 0:
+        return 0
+    return self._getPrice(priceData, _staleTime)
+
+
+@view
+@external
+def getPriceAndHasFeed(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> (uint256, bool):
+    priceData: CustomOracleData = self.priceData[_asset]
+    if priceData.price == 0:
+        return 0, False
+    return self._getPrice(priceData, _staleTime), True
+
+
+@view
+@internal
+def _getPrice(_priceData: CustomOracleData, _staleTime: uint256) -> uint256:
 
     # price is too stale
-    if _staleTime != 0 and block.timestamp - priceData.publishTime > _staleTime:
+    if _staleTime != 0 and block.timestamp - _priceData.publishTime > _staleTime:
         return 0
 
-    return priceData.price
+    return _priceData.price
 
 
 @view

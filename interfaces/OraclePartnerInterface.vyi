@@ -7,6 +7,11 @@ def getPrice(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address 
 
 @view
 @external
+def getPriceAndHasFeed(_asset: address, _staleTime: uint256 = 0, _oracleRegistry: address = empty(address)) -> (uint256, bool):
+    ...
+
+@view
+@external
 def hasPriceFeed(_asset: address) -> bool:
     ...
 

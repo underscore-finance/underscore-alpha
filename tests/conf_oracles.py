@@ -6,8 +6,8 @@ import boa
 
 
 @pytest.fixture(scope="session")
-def oracle_chainlink(oracle_registry, addy_registry_deploy, governor):
-    addr = boa.load("contracts/oracles/ChainlinkFeeds.vy", addy_registry_deploy, name="oracle_chainlink")
+def oracle_chainlink(oracle_registry, addy_registry_deploy, governor, fork):
+    addr = boa.load("contracts/oracles/ChainlinkFeeds.vy", addy_registry_deploy, fork == "base", name="oracle_chainlink")
     assert oracle_registry.registerNewOraclePartner(addr, "Chainlink", sender=governor) != 0 # dev: invalid oracle id
     return addr
 

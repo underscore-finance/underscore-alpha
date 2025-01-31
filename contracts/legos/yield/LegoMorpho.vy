@@ -18,7 +18,7 @@ interface AddyRegistry:
     def governor() -> address: view
 
 interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256) -> uint256: view
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 event MorphoDeposit:
     sender: indexed(address)
