@@ -5,7 +5,11 @@ interface LegoRegistry:
     def numLegos() -> uint256: view
 
 interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
+
+interface OracleRegistry:
+    def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256: view
 
 flag ActionType:
     DEPOSIT
@@ -274,8 +278,8 @@ def _getTransactionFeeData(_action: ActionType, _usdValue: uint256, _priceSheet:
     feeUsdValue: uint256 = _usdValue * fee // HUNDRED_PERCENT
     assetAmount: uint256 = 0 
     if feeUsdValue != 0:
-        # assetAmount = 
-        pass # TODO: convert feeUsdValue to agent asset amount
+        oracleRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+        assetAmount = staticcall OracleRegistry(oracleRegistry).getAssetAmount(_priceSheet.asset, feeUsdValue, False)
 
     return _priceSheet.asset, assetAmount, feeUsdValue
 
