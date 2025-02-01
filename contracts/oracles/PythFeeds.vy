@@ -100,16 +100,20 @@ def _getPrice(_feedId: bytes32, _staleTime: uint256) -> uint256:
 
     price: uint256 = convert(priceData.price, uint256)
     confidence: uint256 = convert(priceData.confidence, uint256)
+    scale: uint256 = 10 ** NORMALIZED_DECIMALS
+    exponent: uint256 = 0
 
     # negative exponent: multiply by 10^(18-|exponent|)
     if priceData.exponent < 0:
-        price = price * (10 ** NORMALIZED_DECIMALS) // (10 ** convert(-priceData.exponent, uint256))
-        confidence = confidence * (10 ** NORMALIZED_DECIMALS) // (10 ** convert(-priceData.exponent, uint256))
+        exponent = convert(-priceData.exponent, uint256)
+        price = price * scale // (10 ** exponent)
+        confidence = confidence * scale // (10 ** exponent)
 
     # positive exponent: multiply by 10^(18+exponent)
     else:
-        price = price * (10 ** (NORMALIZED_DECIMALS + convert(priceData.exponent, uint256)))
-        confidence = confidence * (10 ** (NORMALIZED_DECIMALS + convert(priceData.exponent, uint256)))
+        exponent = convert(priceData.exponent, uint256)
+        price = price * scale * (10 ** exponent)
+        confidence = confidence * scale * (10 ** exponent)
 
     # invalid price
     if confidence >= price:
