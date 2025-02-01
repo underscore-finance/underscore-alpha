@@ -3,6 +3,7 @@ import boa
 
 from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256
 from conf_utils import filter_logs
+from contracts.core import OracleRegistry
 
 
 @pytest.fixture(scope="module")
@@ -11,6 +12,19 @@ def new_price_sheets(governor, addy_registry, price_sheets):
     price_sheets_id = addy_registry.getAddyId(price_sheets.address)
     assert addy_registry.updateAddy(price_sheets_id, r.address, sender=governor)
     return r
+
+
+@pytest.fixture(scope="module")
+def current_oracle_registry(addy_registry):
+    oracle_registry_addr = addy_registry.getAddy(4)
+    return OracleRegistry.at(oracle_registry_addr)
+
+
+@pytest.fixture(scope="module")
+def new_oracle(current_oracle_registry, addy_registry, governor):
+    addr = boa.load("contracts/oracles/CustomOracle.vy", addy_registry, name="new_oracle")
+    assert current_oracle_registry.registerNewOraclePartner(addr, "Custom Oracle", sender=governor) != 0 # dev: invalid oracle id
+    return addr
 
 
 #########
@@ -235,12 +249,12 @@ def test_transaction_price_validation(new_price_sheets, alpha_token):
     )
 
 
-def test_agent_transaction_price(new_price_sheets, governor, bob_agent, oracle_custom, alpha_token, oracle_registry):
+def test_agent_transaction_price(new_price_sheets, governor, bob_agent, new_oracle, alpha_token, current_oracle_registry):
     """Test agent transaction price management"""
 
     # set price on alpha_token
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
+    new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
+    assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
     # Set valid price sheet
     assert new_price_sheets.setAgentTxPriceSheet(
@@ -308,12 +322,12 @@ def test_agent_transaction_price(new_price_sheets, governor, bob_agent, oracle_c
     assert sheet.depositFee == 0
 
 
-def test_protocol_transaction_price(new_price_sheets, governor, oracle_custom, alpha_token, oracle_registry):
+def test_protocol_transaction_price(new_price_sheets, governor, new_oracle, alpha_token, current_oracle_registry):
     """Test protocol transaction price management"""
 
     # set price on alpha_token
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
+    new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
+    assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
     # Set valid price sheet
     assert new_price_sheets.setProtocolTxPriceSheet(
@@ -378,12 +392,12 @@ def test_protocol_transaction_price(new_price_sheets, governor, oracle_custom, a
     assert sheet.depositFee == 0
 
 
-def test_combined_transaction_costs(new_price_sheets, governor, bob_agent, oracle_custom, alpha_token, oracle_registry):
+def test_combined_transaction_costs(new_price_sheets, governor, bob_agent, new_oracle, alpha_token, current_oracle_registry):
     """Test combined transaction costs (protocol + agent fees)"""
 
     # Setup prices
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
+    new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
+    assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
     # Set protocol price sheet
     assert new_price_sheets.setProtocolTxPriceSheet(
@@ -506,12 +520,12 @@ def test_deactivated_state(new_price_sheets, governor, bob_agent, alpha_token, s
         new_price_sheets.removeProtocolTxPriceSheet(sender=governor)
 
 
-def test_edge_cases(new_price_sheets, governor, bob_agent, alpha_token, oracle_custom, oracle_registry, sally):
+def test_edge_cases(new_price_sheets, governor, bob_agent, alpha_token, new_oracle, current_oracle_registry, sally):
     """Test edge cases and boundary conditions"""
     
     # Setup price
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
+    new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
+    assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
     # Test maximum fees
     assert new_price_sheets.setAgentTxPriceSheet(
@@ -554,11 +568,11 @@ def test_edge_cases(new_price_sheets, governor, bob_agent, alpha_token, oracle_c
     )
 
 
-def test_transaction_fee_edge_cases(new_price_sheets, governor, bob_agent, alpha_token, oracle_custom, oracle_registry):
+def test_transaction_fee_edge_cases(new_price_sheets, governor, bob_agent, alpha_token, new_oracle, current_oracle_registry):
     """Test edge cases in transaction fee calculations"""
     
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
+    new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
+    assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
     # Set price sheet with minimum possible fees
     assert new_price_sheets.setAgentTxPriceSheet(
@@ -573,7 +587,7 @@ def test_transaction_fee_edge_cases(new_price_sheets, governor, bob_agent, alpha
     )
       
     # Test with oracle returning zero price
-    oracle_custom.setPrice(alpha_token.address, 0, sender=governor)
+    new_oracle.setPrice(alpha_token.address, 0, sender=governor)
     cost = new_price_sheets.getAgentTransactionFeeData(
         bob_agent,
         DEPOSIT_UINT256,

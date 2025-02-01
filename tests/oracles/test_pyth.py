@@ -6,6 +6,15 @@ from conf_utils import filter_logs
 from conf_tokens import TOKENS
 
 
+@pytest.fixture(scope="session")
+def new_oracle_pyth(addy_registry, mock_pyth, fork):
+    if fork == "base":
+        pyth = "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a"
+    else:
+        pyth = mock_pyth
+    return boa.load("contracts/oracles/PythFeeds.vy", addy_registry, pyth, name="new_oracle_pyth")
+
+
 ##############
 # Pyth Tests #
 ##############
@@ -13,7 +22,7 @@ from conf_tokens import TOKENS
 
 @pytest.base
 def test_set_pyth_feed(
-    oracle_pyth,
+    new_oracle_pyth,
     bob,
     governor,
     fork,
@@ -23,49 +32,49 @@ def test_set_pyth_feed(
 
     # no perms
     with boa.reverts("no perms"):
-        oracle_pyth.setPythFeed(usdc, data_feed_id, sender=bob)
+        new_oracle_pyth.setPythFeed(usdc, data_feed_id, sender=bob)
 
     # set feed
-    oracle_pyth.setPythFeed(usdc, data_feed_id, sender=governor)
+    new_oracle_pyth.setPythFeed(usdc, data_feed_id, sender=governor)
 
-    log = filter_logs(oracle_pyth, 'PythFeedAdded')[0]
+    log = filter_logs(new_oracle_pyth, 'PythFeedAdded')[0]
     assert log.asset == usdc
     assert log.feedId == data_feed_id
 
-    assert oracle_pyth.feedConfig(usdc) == data_feed_id
-    assert int(1.02 * 10 ** 18) > oracle_pyth.getPrice(usdc) > int(0.98 * 10 ** 18)
+    assert new_oracle_pyth.feedConfig(usdc) == data_feed_id
+    assert int(1.02 * 10 ** 18) > new_oracle_pyth.getPrice(usdc) > int(0.98 * 10 ** 18)
 
 
 @pytest.base
 def test_disable_pyth_feed(
-    oracle_pyth,
+    new_oracle_pyth,
     governor,
     fork,
 ):
     usdc = TOKENS["usdc"][fork]
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
-    oracle_pyth.setPythFeed(usdc, data_feed_id, sender=governor)
-    assert oracle_pyth.getPrice(usdc) != 0
+    new_oracle_pyth.setPythFeed(usdc, data_feed_id, sender=governor)
+    assert new_oracle_pyth.getPrice(usdc) != 0
 
     # disable feed
-    assert oracle_pyth.disablePythPriceFeed(usdc, sender=governor)
+    assert new_oracle_pyth.disablePythPriceFeed(usdc, sender=governor)
 
-    log = filter_logs(oracle_pyth, 'PythFeedDisabled')[0]
+    log = filter_logs(new_oracle_pyth, 'PythFeedDisabled')[0]
     assert log.asset == usdc
 
-    assert oracle_pyth.feedConfig(usdc) == bytes.fromhex("00" * 32)
-    assert oracle_pyth.getPrice(usdc) == 0
+    assert new_oracle_pyth.feedConfig(usdc) == bytes.fromhex("00" * 32)
+    assert new_oracle_pyth.getPrice(usdc) == 0
 
 
 def test_local_update_prices(
-    oracle_pyth,
+    new_oracle_pyth,
     mock_pyth,
     alpha_token,
     governor,
 ):
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
-    oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
-    assert oracle_pyth.getPrice(alpha_token) != 0
+    new_oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
+    assert new_oracle_pyth.getPrice(alpha_token) != 0
 
     # get payload
     publish_time = boa.env.evm.patch.timestamp + 1
@@ -80,23 +89,23 @@ def test_local_update_prices(
 
     # no balance
     with boa.reverts():
-        oracle_pyth.updatePythPrices([payload], sender=governor)
+        new_oracle_pyth.updatePythPrices([payload], sender=governor)
 
     # add eth balance
     assert boa.env.get_balance(mock_pyth.address) == 0
-    boa.env.set_balance(oracle_pyth.address, 10 ** 18)
-    assert boa.env.get_balance(oracle_pyth.address) > exp_fee
-    pre_pyth_prices_bal = boa.env.get_balance(oracle_pyth.address)
+    boa.env.set_balance(new_oracle_pyth.address, 10 ** 18)
+    assert boa.env.get_balance(new_oracle_pyth.address) > exp_fee
+    pre_pyth_prices_bal = boa.env.get_balance(new_oracle_pyth.address)
 
     # success
-    oracle_pyth.updatePythPrices([payload], sender=governor)
+    new_oracle_pyth.updatePythPrices([payload], sender=governor)
 
-    log = filter_logs(oracle_pyth, 'PythPriceUpdated')[0]
+    log = filter_logs(new_oracle_pyth, 'PythPriceUpdated')[0]
     assert log.payload == payload
     assert log.feeAmount == exp_fee
     assert log.caller == governor
 
-    assert boa.env.get_balance(oracle_pyth.address) == pre_pyth_prices_bal - exp_fee
+    assert boa.env.get_balance(new_oracle_pyth.address) == pre_pyth_prices_bal - exp_fee
     assert boa.env.get_balance(mock_pyth.address) == exp_fee
 
     # check mock pyth
@@ -106,36 +115,36 @@ def test_local_update_prices(
     assert price_data.price.expo == -8
     assert price_data.price.publishTime == publish_time
 
-    assert int(0.98 * 10 ** 18) > oracle_pyth.getPrice(alpha_token) > int(0.97 * 10 ** 18)
+    assert int(0.98 * 10 ** 18) > new_oracle_pyth.getPrice(alpha_token) > int(0.97 * 10 ** 18)
 
 
 def test_pyth_recover_eth(
-    oracle_pyth,
+    new_oracle_pyth,
     bob,
     governor,
 ):
     # no balance
-    assert not oracle_pyth.recoverEthBalance(bob, sender=governor)
+    assert not new_oracle_pyth.recoverEthBalance(bob, sender=governor)
 
     # Add ETH balance to contract
     initial_balance = 10 ** 18  # 1 ETH
-    boa.env.set_balance(oracle_pyth.address, initial_balance)
-    assert boa.env.get_balance(oracle_pyth.address) == initial_balance
+    boa.env.set_balance(new_oracle_pyth.address, initial_balance)
+    assert boa.env.get_balance(new_oracle_pyth.address) == initial_balance
 
     # No perms check
     with boa.reverts():
-        oracle_pyth.recoverEthBalance(bob, sender=bob)
+        new_oracle_pyth.recoverEthBalance(bob, sender=bob)
 
     # Invalid recipient check
-    assert not oracle_pyth.recoverEthBalance(ZERO_ADDRESS, sender=governor)
+    assert not new_oracle_pyth.recoverEthBalance(ZERO_ADDRESS, sender=governor)
 
     # Success case
     pre_bob_balance = boa.env.get_balance(bob)
-    oracle_pyth.recoverEthBalance(bob, sender=governor)
-    log = filter_logs(oracle_pyth, 'EthRecoveredFromPyth')[0]
+    new_oracle_pyth.recoverEthBalance(bob, sender=governor)
+    log = filter_logs(new_oracle_pyth, 'EthRecoveredFromPyth')[0]
 
     # Check balances
-    assert boa.env.get_balance(oracle_pyth.address) == 0
+    assert boa.env.get_balance(new_oracle_pyth.address) == 0
     assert boa.env.get_balance(bob) == pre_bob_balance + initial_balance
 
     # Check event
@@ -156,7 +165,7 @@ def test_pyth_recover_eth(
     ]
 )
 def test_get_price(
-    oracle_pyth,
+    new_oracle_pyth,
     mock_pyth,
     alpha_token,
     governor,
@@ -166,7 +175,7 @@ def test_get_price(
     expected_price
 ):
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
-    oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
+    new_oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
 
     # get payload
     publish_time = boa.env.evm.patch.timestamp + 1
@@ -179,16 +188,16 @@ def test_get_price(
     )
 
     # add eth balance
-    boa.env.set_balance(oracle_pyth.address, 10 ** 18)
+    boa.env.set_balance(new_oracle_pyth.address, 10 ** 18)
 
     # success update price
-    oracle_pyth.updatePythPrices([payload], sender=governor)
+    new_oracle_pyth.updatePythPrices([payload], sender=governor)
 
-    assert oracle_pyth.getPrice(alpha_token) == expected_price
+    assert new_oracle_pyth.getPrice(alpha_token) == expected_price
 
 
 def test_get_price_stale(
-    oracle_pyth,
+    new_oracle_pyth,
     mock_pyth,
     alpha_token,
     governor,
@@ -196,8 +205,8 @@ def test_get_price_stale(
     boa.env.evm.patch.timestamp += MONTH_IN_SECONDS
 
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
-    oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
-    assert oracle_pyth.getPrice(alpha_token) != 0
+    new_oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
+    assert new_oracle_pyth.getPrice(alpha_token) != 0
 
     # get payload
     publish_time = boa.env.evm.patch.timestamp - 3601 # 1 hour and 1 second ago, > stale time (3600s)
@@ -210,17 +219,17 @@ def test_get_price_stale(
     )
 
     # add eth balance
-    boa.env.set_balance(oracle_pyth.address, 10 ** 18)
+    boa.env.set_balance(new_oracle_pyth.address, 10 ** 18)
 
     # success update price
-    oracle_pyth.updatePythPrices([payload], sender=governor)
+    new_oracle_pyth.updatePythPrices([payload], sender=governor)
 
     # price should be 0 due to staleness
-    assert oracle_pyth.getPrice(alpha_token, 3600) == 0
+    assert new_oracle_pyth.getPrice(alpha_token, 3600) == 0
 
 
 def test_get_price_and_has_feed(
-    oracle_pyth,
+    new_oracle_pyth,
     mock_pyth,
     alpha_token,
     governor,
@@ -228,12 +237,12 @@ def test_get_price_and_has_feed(
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
 
     # no feed set
-    price, has_feed = oracle_pyth.getPriceAndHasFeed(alpha_token)
+    price, has_feed = new_oracle_pyth.getPriceAndHasFeed(alpha_token)
     assert price == 0
     assert not has_feed
 
     # set feed
-    oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
+    new_oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
 
     # get payload
     publish_time = boa.env.evm.patch.timestamp + 1
@@ -246,42 +255,42 @@ def test_get_price_and_has_feed(
     )
 
     # add eth balance
-    boa.env.set_balance(oracle_pyth.address, 10 ** 18)
+    boa.env.set_balance(new_oracle_pyth.address, 10 ** 18)
 
     # success update price
-    oracle_pyth.updatePythPrices([payload], sender=governor)
+    new_oracle_pyth.updatePythPrices([payload], sender=governor)
 
     # has feed set
-    price, has_feed = oracle_pyth.getPriceAndHasFeed(alpha_token)
+    price, has_feed = new_oracle_pyth.getPriceAndHasFeed(alpha_token)
     assert price != 0
     assert has_feed
 
 
 def test_has_price_feed(
-    oracle_pyth,
+    new_oracle_pyth,
     alpha_token,
     governor,
 ):
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
 
     # no feed set
-    assert not oracle_pyth.hasPriceFeed(alpha_token)
+    assert not new_oracle_pyth.hasPriceFeed(alpha_token)
 
     # set feed
-    oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
+    new_oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
 
     # has feed set
-    assert oracle_pyth.hasPriceFeed(alpha_token)
+    assert new_oracle_pyth.hasPriceFeed(alpha_token)
 
 
 def test_update_pyth_prices_insufficient_balance(
-    oracle_pyth,
+    new_oracle_pyth,
     mock_pyth,
     alpha_token,
     governor,
 ):
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
-    oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
+    new_oracle_pyth.setPythFeed(alpha_token, data_feed_id, sender=governor)
 
     # get payload
     publish_time = boa.env.evm.patch.timestamp + 1
@@ -293,32 +302,32 @@ def test_update_pyth_prices_insufficient_balance(
         publish_time,
     )
 
-    boa.env.set_balance(oracle_pyth.address, 1)
+    boa.env.set_balance(new_oracle_pyth.address, 1)
 
     # no balance
     with boa.reverts("insufficient balance"):
-        oracle_pyth.updatePythPrices([payload], sender=governor)
+        new_oracle_pyth.updatePythPrices([payload], sender=governor)
 
 
 def test_is_valid_pyth_feed(
-    oracle_pyth,
+    new_oracle_pyth,
     alpha_token,
 ):
     data_feed_id = bytes.fromhex("eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a")
     invalid_feed_id = bytes.fromhex("f" * 64)
 
     # valid feed
-    assert oracle_pyth.isValidPythFeed(alpha_token, data_feed_id)
+    assert new_oracle_pyth.isValidPythFeed(alpha_token, data_feed_id)
 
     # invalid feed id
-    assert not oracle_pyth.isValidPythFeed(alpha_token, invalid_feed_id)
+    assert not new_oracle_pyth.isValidPythFeed(alpha_token, invalid_feed_id)
 
     # invalid asset
-    assert not oracle_pyth.isValidPythFeed(ZERO_ADDRESS, data_feed_id)
+    assert not new_oracle_pyth.isValidPythFeed(ZERO_ADDRESS, data_feed_id)
 
 
 def test_set_pyth_feed_invalid(
-    oracle_pyth,
+    new_oracle_pyth,
     bob,
     governor,
     alpha_token,
@@ -326,49 +335,49 @@ def test_set_pyth_feed_invalid(
     invalid_feed_id = bytes.fromhex("f" * 64)
 
     # invalid feed id
-    assert not oracle_pyth.setPythFeed(alpha_token, invalid_feed_id, sender=governor)
-    assert oracle_pyth.feedConfig(alpha_token) == bytes.fromhex("00" * 32)
+    assert not new_oracle_pyth.setPythFeed(alpha_token, invalid_feed_id, sender=governor)
+    assert new_oracle_pyth.feedConfig(alpha_token) == bytes.fromhex("00" * 32)
 
     # invalid asset
-    assert not oracle_pyth.setPythFeed(ZERO_ADDRESS, invalid_feed_id, sender=governor)
-    assert oracle_pyth.feedConfig(ZERO_ADDRESS) == bytes.fromhex("00" * 32)
+    assert not new_oracle_pyth.setPythFeed(ZERO_ADDRESS, invalid_feed_id, sender=governor)
+    assert new_oracle_pyth.feedConfig(ZERO_ADDRESS) == bytes.fromhex("00" * 32)
 
 
 def test_disable_pyth_feed_invalid(
-    oracle_pyth,
+    new_oracle_pyth,
     governor,
     alpha_token,
 ):
     # no feed set
-    assert not oracle_pyth.disablePythPriceFeed(alpha_token, sender=governor)
+    assert not new_oracle_pyth.disablePythPriceFeed(alpha_token, sender=governor)
 
     # already disabled
-    oracle_pyth.disablePythPriceFeed(alpha_token, sender=governor)
-    assert not oracle_pyth.disablePythPriceFeed(alpha_token, sender=governor)
+    new_oracle_pyth.disablePythPriceFeed(alpha_token, sender=governor)
+    assert not new_oracle_pyth.disablePythPriceFeed(alpha_token, sender=governor)
 
 
 def test_is_valid_eth_recovery(
-    oracle_pyth,
+    new_oracle_pyth,
     bob,
 ):
     # invalid balance
-    assert not oracle_pyth.isValidEthRecovery(bob)
+    assert not new_oracle_pyth.isValidEthRecovery(bob)
 
     # valid recovery
-    boa.env.set_balance(oracle_pyth.address, 10 ** 18)
-    assert oracle_pyth.isValidEthRecovery(bob)
+    boa.env.set_balance(new_oracle_pyth.address, 10 ** 18)
+    assert new_oracle_pyth.isValidEthRecovery(bob)
 
     # invalid recipient
-    assert not oracle_pyth.isValidEthRecovery(ZERO_ADDRESS)
+    assert not new_oracle_pyth.isValidEthRecovery(ZERO_ADDRESS)
 
 
 def test_recover_eth_balance_invalid(
-    oracle_pyth,
+    new_oracle_pyth,
     bob,
     governor,
 ):
     # Invalid recipient check
-    assert not oracle_pyth.recoverEthBalance(ZERO_ADDRESS, sender=governor)
+    assert not new_oracle_pyth.recoverEthBalance(ZERO_ADDRESS, sender=governor)
 
     # no balance
-    assert not oracle_pyth.recoverEthBalance(bob, sender=governor)
+    assert not new_oracle_pyth.recoverEthBalance(bob, sender=governor)
