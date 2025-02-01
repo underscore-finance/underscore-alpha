@@ -13,8 +13,12 @@ def oracle_chainlink(oracle_registry, addy_registry, governor, fork):
 
 
 @pytest.fixture(scope="session")
-def oracle_pyth(oracle_registry, addy_registry, governor):
-    addr = boa.load("contracts/oracles/PythFeeds.vy", addy_registry, name="oracle_pyth")
+def oracle_pyth(oracle_registry, addy_registry, governor, mock_pyth, fork):
+    if fork == "base":
+        pyth = "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a"
+    else:
+        pyth = mock_pyth
+    addr = boa.load("contracts/oracles/PythFeeds.vy", addy_registry, pyth, name="oracle_pyth")
     assert oracle_registry.registerNewOraclePartner(addr, "Pyth", sender=governor) != 0 # dev: invalid oracle id
     return addr
 

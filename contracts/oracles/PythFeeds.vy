@@ -41,16 +41,17 @@ oraclePartnerId: public(uint256)
 ADDY_REGISTRY: public(immutable(address))
 
 # Base L2
-PYTH: constant(address) = 0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a
+PYTH: public(immutable(address))
 
 NORMALIZED_DECIMALS: constant(uint256) = 18
 MAX_PRICE_UPDATES: constant(uint256) = 15
 
 
 @deploy
-def __init__(_addyRegistry: address):
-    assert _addyRegistry != empty(address) # dev: invalid addy registry
+def __init__(_addyRegistry: address, _pyth: address):
+    assert empty(address) not in [_addyRegistry, _pyth] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
+    PYTH = _pyth
 
 
 @payable
@@ -144,6 +145,7 @@ def updatePythPrices(_payloads: DynArray[Bytes[2048], MAX_PRICE_UPDATES]):
     for i: uint256 in range(len(_payloads), bound=MAX_PRICE_UPDATES):
         p: Bytes[2048] = _payloads[i]
         feeAmount: uint256 = staticcall PythNetwork(PYTH).getUpdateFee(p)
+        assert self.balance >= feeAmount # dev: insufficient balance
         extcall PythNetwork(PYTH).updatePriceFeeds(p, value=feeAmount)
         log PythPriceUpdated(p, feeAmount, msg.sender)
 
