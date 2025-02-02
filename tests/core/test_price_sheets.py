@@ -252,6 +252,8 @@ def test_transaction_price_validation(new_price_sheets, alpha_token):
 def test_agent_transaction_price(new_price_sheets, governor, bob_agent, new_oracle, alpha_token, current_oracle_registry):
     """Test agent transaction price management"""
 
+    new_price_sheets.setAgentTxPricingEnabled(True, sender=governor)
+
     # set price on alpha_token
     new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
     assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
@@ -394,6 +396,8 @@ def test_protocol_transaction_price(new_price_sheets, governor, new_oracle, alph
 
 def test_combined_transaction_costs(new_price_sheets, governor, bob_agent, new_oracle, alpha_token, current_oracle_registry):
     """Test combined transaction costs (protocol + agent fees)"""
+
+    new_price_sheets.setAgentTxPricingEnabled(True, sender=governor)
 
     # Setup prices
     new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
@@ -571,6 +575,8 @@ def test_edge_cases(new_price_sheets, governor, bob_agent, alpha_token, new_orac
 def test_transaction_fee_edge_cases(new_price_sheets, governor, bob_agent, alpha_token, new_oracle, current_oracle_registry):
     """Test edge cases in transaction fee calculations"""
     
+    new_price_sheets.setAgentTxPricingEnabled(True, sender=governor)
+
     new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
     assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
@@ -729,3 +735,161 @@ def test_price_sheet_state_transitions(new_price_sheets, governor, bob_agent, al
     assert sheet.rebalanceFee == 0
     assert sheet.transferFee == 0
     assert sheet.swapFee == 0
+
+
+def test_agent_tx_pricing_enable_disable(new_price_sheets, governor, bob_agent, new_oracle, alpha_token, sally):
+    """Test enabling and disabling agent transaction pricing"""
+
+    new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
+
+    # Only governor can enable/disable
+    with boa.reverts("no perms"):
+        new_price_sheets.setAgentTxPricingEnabled(True, sender=sally)
+    
+    # No change if already in desired state
+    with boa.reverts("no change"):
+        new_price_sheets.setAgentTxPricingEnabled(False, sender=governor)
+    
+    # Enable agent tx pricing
+    assert new_price_sheets.setAgentTxPricingEnabled(True, sender=governor)
+    log = filter_logs(new_price_sheets, "AgentTxPricingEnabled")[0]
+    assert log.isEnabled == True
+    assert new_price_sheets.isAgentTxPricingEnabled()
+    
+    # Set agent price sheet
+    assert new_price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100,    # depositFee
+        200,    # withdrawalFee
+        300,    # rebalanceFee
+        400,    # transferFee
+        500,    # swapFee
+        sender=governor
+    )
+    
+    # Verify fees are returned when enabled
+    cost = new_price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000)
+    assert cost[0] == alpha_token.address
+    assert cost[1] > 0  # Should have non-zero fee
+    
+    # Disable agent tx pricing
+    assert new_price_sheets.setAgentTxPricingEnabled(False, sender=governor)
+    log = filter_logs(new_price_sheets, "AgentTxPricingEnabled")[0]
+    assert log.isEnabled == False
+    assert not new_price_sheets.isAgentTxPricingEnabled()
+    
+    # Verify no fees are returned when disabled
+    cost = new_price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000)
+    assert cost[0] == ZERO_ADDRESS
+    assert cost[1] == 0  # Should have zero fee
+
+
+def test_agent_sub_pricing_enable_disable(new_price_sheets, governor, bob_agent, alpha_token, sally):
+    """Test enabling and disabling agent subscription pricing"""
+    
+    # Only governor can enable/disable
+    with boa.reverts("no perms"):
+        new_price_sheets.setAgentSubPricingEnabled(True, sender=sally)
+    
+    # No change if already in desired state
+    with boa.reverts("no change"):
+        new_price_sheets.setAgentSubPricingEnabled(False, sender=governor)
+    
+    # Enable agent subscription pricing
+    assert new_price_sheets.setAgentSubPricingEnabled(True, sender=governor)
+    log = filter_logs(new_price_sheets, "AgentSubPricingEnabled")[0]
+    assert log.isEnabled == True
+    assert new_price_sheets.isAgentSubPricingEnabled()
+    
+    # Set agent subscription price
+    assert new_price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000,   # usdValue
+        43_200, # trialPeriod
+        302_400,# payPeriod
+        sender=governor
+    )
+    
+    # Verify subscription info is returned when enabled
+    info = new_price_sheets.getAgentSubPriceData(bob_agent)
+    assert info.asset == alpha_token.address
+    assert info.usdValue == 1000
+    
+    # Disable agent subscription pricing
+    assert new_price_sheets.setAgentSubPricingEnabled(False, sender=governor)
+    log = filter_logs(new_price_sheets, "AgentSubPricingEnabled")[0]
+    assert log.isEnabled == False
+    assert not new_price_sheets.isAgentSubPricingEnabled()
+    
+    # Verify no subscription info is returned when disabled
+    info = new_price_sheets.getAgentSubPriceData(bob_agent)
+    assert info.asset == ZERO_ADDRESS
+    assert info.usdValue == 0
+
+
+def test_agent_pricing_combined_states(new_price_sheets, governor, bob_agent, alpha_token, new_oracle, current_oracle_registry):
+    """Test interaction between transaction and subscription pricing states"""
+    
+    new_oracle.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
+    assert current_oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
+    
+    # Enable both pricing types
+    new_price_sheets.setAgentTxPricingEnabled(True, sender=governor)
+    new_price_sheets.setAgentSubPricingEnabled(True, sender=governor)
+    
+    # Set both price types
+    assert new_price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100,    # depositFee
+        200,    # withdrawalFee
+        300,    # rebalanceFee
+        400,    # transferFee
+        500,    # swapFee
+        sender=governor
+    )
+    
+    assert new_price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000,   # usdValue
+        43_200, # trialPeriod
+        302_400,# payPeriod
+        sender=governor
+    )
+    
+    # Verify both types of pricing are active
+    cost = new_price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
+    assert cost[0] == alpha_token.address
+    assert cost[1] > 0
+    
+    info = new_price_sheets.getAgentSubPriceData(bob_agent)
+    assert info.asset == alpha_token.address
+    assert info.usdValue == 1000
+    
+    # Disable transaction pricing only
+    new_price_sheets.setAgentTxPricingEnabled(False, sender=governor)
+    
+    # Verify only subscription pricing remains active
+    cost = new_price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
+    assert cost[0] == ZERO_ADDRESS
+    assert cost[1] == 0
+    
+    info = new_price_sheets.getAgentSubPriceData(bob_agent)
+    assert info.asset == alpha_token.address
+    assert info.usdValue == 1000
+    
+    # Disable subscription pricing only
+    new_price_sheets.setAgentTxPricingEnabled(True, sender=governor)
+    new_price_sheets.setAgentSubPricingEnabled(False, sender=governor)
+    
+    # Verify only transaction pricing remains active
+    cost = new_price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
+    assert cost[0] == alpha_token.address
+    assert cost[1] > 0
+    
+    info = new_price_sheets.getAgentSubPriceData(bob_agent)
+    assert info.asset == ZERO_ADDRESS
+    assert info.usdValue == 0

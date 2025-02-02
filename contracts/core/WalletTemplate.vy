@@ -5,7 +5,7 @@ import interfaces.LegoInterface as LegoPartner
 
 interface PriceSheets:
     def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> TransactionCost: view
-    def agentSubPriceData(_agent: address) -> SubscriptionInfo: view
+    def getAgentSubPriceData(_agent: address) -> SubscriptionInfo: view
     def protocolSubPriceData() -> SubscriptionInfo: view
     def protocolRecipient() -> address: view
 
@@ -315,7 +315,7 @@ def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _ini
 
     # initial agent setup
     if _initialAgent != empty(address):
-        subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).agentSubPriceData(_initialAgent)
+        subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).getAgentSubPriceData(_initialAgent)
         paidThroughBlock: uint256 = 0
         if subInfo.usdValue != 0:
             paidThroughBlock = block.number + subInfo.trialPeriod
@@ -1300,7 +1300,7 @@ def _aggregateBatchTxCostData(
 @internal
 def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _priceSheets: address, _oracleRegistry: address):
     agentInfo: AgentInfo = _agentInfo
-    subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).agentSubPriceData(_agent)
+    subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).getAgentSubPriceData(_agent)
     didChange: bool = False
 
     # subscription was added (since last checked)
@@ -1407,7 +1407,7 @@ def addOrModifyAgent(
 
     # get subscription info
     priceSheets: address = staticcall AddyRegistry(self.addyRegistry).getAddy(PRICE_SHEETS_ID)
-    subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).agentSubPriceData(_agent)
+    subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).getAgentSubPriceData(_agent)
     
     isNewAgent: bool = (agentInfo.installBlock == 0)
     if isNewAgent:

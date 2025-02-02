@@ -67,6 +67,9 @@ event ProtocolSubPriceRemoved:
     trialPeriod: uint256
     payPeriod: uint256
 
+event AgentSubPricingEnabled:
+    isEnabled: bool
+
 event AgentTxPriceSheetSet:
     agent: indexed(address)
     asset: indexed(address)
@@ -101,6 +104,9 @@ event ProtocolTxPriceSheetRemoved:
     transferFee: uint256
     swapFee: uint256
 
+event AgentTxPricingEnabled:
+    isEnabled: bool
+
 event ProtocolRecipientSet:
     recipient: indexed(address)
 
@@ -113,7 +119,9 @@ protocolTxPriceData: public(TxPriceSheet) # protocol transaction pricing
 protocolSubPriceData: public(SubscriptionInfo) # protocol subscription pricing
 
 # agent pricing
+isAgentTxPricingEnabled: public(bool)
 agentTxPriceData: public(HashMap[address, TxPriceSheet]) # agent -> transaction pricing
+isAgentSubPricingEnabled: public(bool)
 agentSubPriceData: public(HashMap[address, SubscriptionInfo]) # agent -> subscription pricing
 
 # config
@@ -139,6 +147,14 @@ def __init__(_addyRegistry: address):
 #####################
 # Subscription Fees #
 #####################
+
+
+@view
+@external
+def getAgentSubPriceData(_agent: address) -> SubscriptionInfo:
+    if not self.isAgentSubPricingEnabled:
+        return empty(SubscriptionInfo)
+    return self.agentSubPriceData[_agent]
 
 
 # set sub price
@@ -239,6 +255,19 @@ def removeProtocolSubPrice() -> bool:
     return True
 
 
+# enable / disable sub pricing
+
+
+@external
+def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
+    assert self.isActivated # dev: not active
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert _isEnabled != self.isAgentSubPricingEnabled # dev: no change
+    self.isAgentSubPricingEnabled = _isEnabled
+    log AgentSubPricingEnabled(_isEnabled)
+    return True
+
+
 ####################
 # Transaction Fees #
 ####################
@@ -248,7 +277,8 @@ def removeProtocolSubPrice() -> bool:
 @external
 def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> TransactionCost:
     cost: TransactionCost = empty(TransactionCost)
-    cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue = self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent])
+    if self.isAgentTxPricingEnabled:
+        cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue = self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent])
     cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue = self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData)
     if cost.protocolAsset != empty(address):
         cost.protocolRecipient = self.protocolRecipient
@@ -258,6 +288,8 @@ def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256)
 @view
 @external
 def getAgentTransactionFeeData(_agent: address, _action: ActionType, _usdValue: uint256) -> (address, uint256, uint256):
+    if not self.isAgentTxPricingEnabled:
+        return empty(address), 0, 0
     return self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent])
 
 
@@ -422,6 +454,19 @@ def removeProtocolTxPriceSheet() -> bool:
 
     self.protocolTxPriceData = empty(TxPriceSheet)
     log ProtocolTxPriceSheetRemoved(prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee)
+    return True
+
+
+# enable / disable agent tx pricing
+
+
+@external
+def setAgentTxPricingEnabled(_isEnabled: bool) -> bool:
+    assert self.isActivated # dev: not active
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert _isEnabled != self.isAgentTxPricingEnabled # dev: no change
+    self.isAgentTxPricingEnabled = _isEnabled
+    log AgentTxPricingEnabled(_isEnabled)
     return True
 
 
