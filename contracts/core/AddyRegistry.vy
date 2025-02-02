@@ -58,6 +58,12 @@ def __init__(_governor: address):
 @view
 @external
 def isValidNewAddy(_addy: address) -> bool:
+    """
+    @notice Check if an address can be registered as a new core contract
+    @dev Validates address is non-zero, is a contract, and hasn't been registered before
+    @param _addy The address to validate
+    @return True if address can be registered as new core contract, False otherwise
+    """
     return self._isValidNewAddy(_addy)
 
 
@@ -71,6 +77,13 @@ def _isValidNewAddy(_addy: address) -> bool:
 
 @external
 def registerNewAddy(_addy: address, _description: String[64]) -> uint256:
+    """
+    @notice Register a new core contract address in the registry
+    @dev Only callable by governor when registry is activated
+    @param _addy The address of the contract to register
+    @param _description A brief description of the contract's functionality
+    @return The assigned ID if registration successful, 0 if failed
+    """
     assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
 
@@ -101,6 +114,13 @@ def registerNewAddy(_addy: address, _description: String[64]) -> uint256:
 @view
 @external
 def isValidAddyUpdate(_addyId: uint256, _newAddy: address) -> bool:
+    """
+    @notice Check if a core contract update operation would be valid
+    @dev Validates ID exists and new address is valid
+    @param _addyId The ID of the contract to update
+    @param _newAddy The proposed new address for the contract
+    @return True if update would be valid, False otherwise
+    """
     return self._isValidAddyUpdate(_addyId, _newAddy, self.addyInfo[_addyId].addr)
 
 
@@ -116,6 +136,13 @@ def _isValidAddyUpdate(_addyId: uint256, _newAddy: address, _prevAddy: address) 
 
 @external
 def updateAddy(_addyId: uint256, _newAddy: address) -> bool:
+    """
+    @notice Update the address of an existing core contract
+    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @param _addyId The ID of the contract to update
+    @param _newAddy The new address for the contract
+    @return True if update successful, False otherwise
+    """
     assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
 
@@ -148,6 +175,12 @@ def updateAddy(_addyId: uint256, _newAddy: address) -> bool:
 @view
 @external
 def isValidAddyDisable(_addyId: uint256) -> bool:
+    """
+    @notice Check if a core contract can be disabled
+    @dev Validates ID exists and has a non-empty address
+    @param _addyId The ID of the contract to check
+    @return True if contract can be disabled, False otherwise
+    """
     return self._isValidAddyDisable(_addyId, self.addyInfo[_addyId].addr)
 
 
@@ -161,6 +194,12 @@ def _isValidAddyDisable(_addyId: uint256, _prevAddy: address) -> bool:
 
 @external
 def disableAddy(_addyId: uint256) -> bool:
+    """
+    @notice Disable a core contract by setting its address to empty
+    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @param _addyId The ID of the contract to disable
+    @return True if disable successful, False otherwise
+    """
     assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
 
@@ -192,12 +231,24 @@ def disableAddy(_addyId: uint256) -> bool:
 @view
 @external
 def isValidAddy(_addy: address) -> bool:
+    """
+    @notice Check if an address is a registered core contract
+    @dev Returns true if address has a non-zero ID
+    @param _addy The address to check
+    @return True if address is a registered core contract, False otherwise
+    """
     return self.addyToId[_addy] != 0
 
 
 @view
 @external
 def isValidAddyId(_addyId: uint256) -> bool:
+    """
+    @notice Check if a core contract ID is valid
+    @dev ID must be non-zero and less than total number of contracts
+    @param _addyId The ID to check
+    @return True if ID is valid, False otherwise
+    """
     return self._isValidAddyId(_addyId)
 
 
@@ -213,24 +264,48 @@ def _isValidAddyId(_addyId: uint256) -> bool:
 @view
 @external
 def getAddyId(_addy: address) -> uint256:
+    """
+    @notice Get the ID of a core contract from its address
+    @dev Returns 0 if address is not registered
+    @param _addy The address to query
+    @return The ID associated with the address
+    """
     return self.addyToId[_addy]
 
 
 @view
 @external
 def getAddy(_addyId: uint256) -> address:
+    """
+    @notice Get the address of a core contract from its ID
+    @dev Returns empty address if ID is invalid or contract is disabled
+    @param _addyId The ID to query
+    @return The address associated with the ID
+    """
     return self.addyInfo[_addyId].addr
 
 
 @view
 @external
 def getAddyInfo(_addyId: uint256) -> AddyInfo:
+    """
+    @notice Get all information about a core contract
+    @dev Returns complete AddyInfo struct including address, version, timestamp and description
+    @param _addyId The ID to query
+    @return AddyInfo struct containing all contract information
+    """
     return self.addyInfo[_addyId]
 
 
 @view
 @external
 def getAddyDescription(_addyId: uint256) -> String[64]:
+    """
+    @notice Get the description of a core contract
+    @dev Returns empty string if ID is invalid
+    @param _addyId The ID to query
+    @return The description associated with the ID
+    """
     return self.addyInfo[_addyId].description
 
 
@@ -240,12 +315,22 @@ def getAddyDescription(_addyId: uint256) -> String[64]:
 @view
 @external
 def getNumAddys() -> uint256:
+    """
+    @notice Get the total number of registered core contracts
+    @dev Returns number of contracts minus 1 since indexing starts at 1
+    @return The total number of registered core contracts
+    """
     return self.numAddys - 1
 
 
 @view
 @external
 def getLastAddy() -> address:
+    """
+    @notice Get the address of the most recently registered core contract
+    @dev Returns the address at index (numAddys - 1)
+    @return The address of the last registered contract
+    """
     lastIndex: uint256 = self.numAddys - 1
     return self.addyInfo[lastIndex].addr
 
@@ -253,6 +338,11 @@ def getLastAddy() -> address:
 @view
 @external
 def getLastAddyId() -> uint256:
+    """
+    @notice Get the ID of the most recently registered core contract
+    @dev Returns numAddys - 1 since indexing starts at 1
+    @return The ID of the last registered contract
+    """
     return self.numAddys - 1
 
 
@@ -264,6 +354,12 @@ def getLastAddyId() -> uint256:
 @view
 @external 
 def isValidGovernor(_newGovernor: address) -> bool:
+    """
+    @notice Check if an address can be set as the new governor
+    @dev Address must be a contract and different from current governor
+    @param _newGovernor The address to validate
+    @return True if address can be set as governor, False otherwise
+    """
     return self._isValidGovernor(_newGovernor)
 
 
@@ -277,6 +373,12 @@ def _isValidGovernor(_newGovernor: address) -> bool:
 
 @external
 def setGovernor(_newGovernor: address) -> bool:
+    """
+    @notice Set a new governor address
+    @dev Only callable by current governor when registry is activated
+    @param _newGovernor The address to set as governor
+    @return True if governor was set successfully, False otherwise
+    """
     assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
     if not self._isValidGovernor(_newGovernor):
@@ -293,6 +395,11 @@ def setGovernor(_newGovernor: address) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
+    """
+    @notice Activate or deactivate the address registry
+    @dev Only callable by governor. When deactivated, most functions cannot be called.
+    @param _shouldActivate True to activate, False to deactivate
+    """
     assert msg.sender == self.governor # dev: no perms
     self.isActivated = _shouldActivate
     log AddyRegistryActivated(_shouldActivate)
