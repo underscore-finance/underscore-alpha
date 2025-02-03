@@ -1207,12 +1207,9 @@ def _getSignerOnWethToEth(
     return _sig.signer
 
 
-###############
-# Agent Costs #
-###############
-
-
-# transaction fees
+#####################
+# Transaction Costs #
+#####################
 
 
 @internal
@@ -1294,74 +1291,131 @@ def _aggregateBatchTxCostData(
     return aggCostData
 
 
-# subscription fees
+#####################
+# Subscription Fees #
+#####################
+
+
+# agent subscription
+
+
+@view
+@external
+def getAgentSubscriptionStatus(_agent: address) -> (uint256, uint256, bool):
+    addys: MainAddys = self._getAddys()
+    subData: SubscriptionInfo = staticcall PriceSheets(addys.priceSheets).getAgentSubPriceData(_agent)
+    return self._updateSubscriptionInfo(self.agentSettings[_agent].paidThroughBlock, subData, addys.oracleRegistry)
 
 
 @internal
 def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _priceSheets: address, _oracleRegistry: address):
     agentInfo: AgentInfo = _agentInfo
     subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).getAgentSubPriceData(_agent)
+    
+    paymentAmount: uint256 = 0
     didChange: bool = False
+    paymentAmount, agentInfo.paidThroughBlock, didChange = self._updateSubscriptionInfo(agentInfo.paidThroughBlock, subData, _oracleRegistry)
 
-    # subscription was added (since last checked)
-    if agentInfo.paidThroughBlock == 0 and subData.usdValue != 0:
-        agentInfo.paidThroughBlock = block.number + subData.trialPeriod
-        didChange = True
-
-    # subscription was removed (since last checked)
-    elif agentInfo.paidThroughBlock != 0 and subData.usdValue == 0:
-        agentInfo.paidThroughBlock = 0
-        didChange = True
-
-    # check if subscription needs to be paid
-    if agentInfo.paidThroughBlock != 0 and block.number > agentInfo.paidThroughBlock:
-        assetAmount: uint256 = staticcall OracleRegistry(_oracleRegistry).getAssetAmount(subData.asset, subData.usdValue)
-
-        # if something fails with price feed, allow transaction through.
-        # it's on agent developer to make sure price feed is working, so they can get paid
-        if assetAmount != 0:
-            assert extcall IERC20(subData.asset).transfer(_agent, assetAmount, default_return_value=True) # dev: agent subscription payment failed
-            agentInfo.paidThroughBlock = block.number + subData.payPeriod
-            log AgentSubscriptionPaid(_agent, subData.asset, assetAmount, subData.usdValue, agentInfo.paidThroughBlock)
-            didChange = True
+    # make payment
+    if paymentAmount != 0:
+        assert staticcall IERC20(subData.asset).balanceOf(self) >= paymentAmount # dev: insufficient balance for agent payment
+        assert extcall IERC20(subData.asset).transfer(_agent, paymentAmount, default_return_value=True) # dev: agent subscription payment failed
+        log AgentSubscriptionPaid(_agent, subData.asset, paymentAmount, subData.usdValue, agentInfo.paidThroughBlock)
 
     # save data
     if didChange:
         self.agentSettings[_agent] = agentInfo
 
 
+# protocol subscription
+
+
+@view
+@external
+def getProtocolSubscriptionStatus() -> (uint256, uint256, bool):
+    addys: MainAddys = self._getAddys()
+    subData: SubscriptionInfo = staticcall PriceSheets(addys.priceSheets).protocolSubPriceData()
+    return self._updateSubscriptionInfo(self.protocolSub.paidThroughBlock, subData, addys.oracleRegistry)
+
+
 @internal
 def _checkProtocolSubscription(_priceSheets: address, _oracleRegistry: address):
     userStatus: ProtocolSub = self.protocolSub
     subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).protocolSubPriceData()
+
+    paymentAmount: uint256 = 0
     didChange: bool = False
+    paymentAmount, userStatus.paidThroughBlock, didChange = self._updateSubscriptionInfo(userStatus.paidThroughBlock, subData, _oracleRegistry)
 
-    # subscription was added (since last checked)
-    if userStatus.paidThroughBlock == 0 and subData.usdValue != 0:
-        userStatus.paidThroughBlock = block.number + subData.trialPeriod
-        didChange = True
-
-    # subscription was removed (since last checked)
-    elif userStatus.paidThroughBlock != 0 and subData.usdValue == 0:
-        userStatus.paidThroughBlock = 0
-        didChange = True
-
-    # check if subscription needs to be paid
-    if userStatus.paidThroughBlock != 0 and block.number > userStatus.paidThroughBlock:
-        assetAmount: uint256 = staticcall OracleRegistry(_oracleRegistry).getAssetAmount(subData.asset, subData.usdValue)
-
-        # if something fails with price feed, allow transaction through.
-        # it's on protocol developer to make sure price feed is working, so they can get paid
-        if assetAmount != 0:
-            recipient: address = staticcall PriceSheets(_priceSheets).protocolRecipient()
-            assert extcall IERC20(subData.asset).transfer(recipient, assetAmount, default_return_value=True) # dev: protocol subscription payment failed
-            userStatus.paidThroughBlock = block.number + subData.payPeriod
-            log ProtocolSubscriptionPaid(recipient, subData.asset, assetAmount, subData.usdValue, userStatus.paidThroughBlock)
-            didChange = True
+    # make payment
+    if paymentAmount != 0:
+        recipient: address = staticcall PriceSheets(_priceSheets).protocolRecipient()
+        assert staticcall IERC20(subData.asset).balanceOf(self) >= paymentAmount # dev: insufficient balance for protocol payment
+        assert extcall IERC20(subData.asset).transfer(recipient, paymentAmount, default_return_value=True) # dev: protocol subscription payment failed
+        log ProtocolSubscriptionPaid(recipient, subData.asset, paymentAmount, subData.usdValue, userStatus.paidThroughBlock)
 
     # save data
     if didChange:
         self.protocolSub = userStatus
+
+
+# shared utils
+
+
+@view
+@internal
+def _updateSubscriptionInfo(_paidThroughBlock: uint256, _subData: SubscriptionInfo, _oracleRegistry: address) -> (uint256, uint256,bool):
+    paymentAmount: uint256 = 0
+    paidThroughBlock: uint256 = _paidThroughBlock
+    didChange: bool = False
+
+    # subscription was added (since last checked)
+    if paidThroughBlock == 0 and _subData.usdValue != 0:
+        paidThroughBlock = block.number + _subData.trialPeriod
+        didChange = True
+
+    # subscription was removed (since last checked)
+    elif paidThroughBlock != 0 and _subData.usdValue == 0:
+        paidThroughBlock = 0
+        didChange = True
+
+    # check if subscription needs to be paid
+    if paidThroughBlock != 0 and block.number > paidThroughBlock:
+        paymentAmount = staticcall OracleRegistry(_oracleRegistry).getAssetAmount(_subData.asset, _subData.usdValue)
+
+        # if something fails with price feed, allow transaction through.
+        # it's on agent developer to make sure price feed is working, so they can get paid
+        if paymentAmount != 0:
+            paidThroughBlock = block.number + _subData.payPeriod
+            didChange = True
+
+    return paymentAmount, paidThroughBlock, didChange
+
+
+@view
+@external
+def canMakeSubscriptionPayments(_agent: address) -> (bool, bool):
+    addys: MainAddys = self._getAddys()
+    na1: uint256 = 0
+    na2: bool = False
+
+    # agent subscription
+    canPayAgent: bool = True
+    agentSubData: SubscriptionInfo = staticcall PriceSheets(addys.priceSheets).getAgentSubPriceData(_agent)
+    agentPaymentAmount: uint256 = 0
+    agentPaymentAmount, na1, na2 = self._updateSubscriptionInfo(self.agentSettings[_agent].paidThroughBlock, agentSubData, addys.oracleRegistry)
+    if agentSubData.asset != empty(address) and agentPaymentAmount != 0:
+        canPayAgent = staticcall IERC20(agentSubData.asset).balanceOf(self) >= agentPaymentAmount
+
+    # protocol subscription
+    canPayProtocol: bool = True
+    protocolSubData: SubscriptionInfo = staticcall PriceSheets(addys.priceSheets).protocolSubPriceData()
+    protocolPaymentAmount: uint256 = 0
+    protocolPaymentAmount, na1, na2 = self._updateSubscriptionInfo(self.protocolSub.paidThroughBlock, protocolSubData, addys.oracleRegistry)
+    if protocolSubData.asset != empty(address) and protocolPaymentAmount != 0:
+        canPayProtocol = staticcall IERC20(protocolSubData.asset).balanceOf(self) >= protocolPaymentAmount
+
+    return canPayAgent, canPayProtocol
 
 
 ##################
