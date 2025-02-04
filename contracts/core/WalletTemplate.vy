@@ -1212,6 +1212,23 @@ def _getSignerOnWethToEth(
 #####################
 
 
+@view
+@external
+def hasEnoughForTxFees(_agent: address, _action: ActionType, _usdValue: uint256) -> bool:
+    addys: MainAddys = self._getAddys()
+    cost: TransactionCost = staticcall PriceSheets(addys.priceSheets).getTransactionCost(_agent, _action, _usdValue)
+
+    hasEnoughForAgent: bool = True
+    if cost.agentAsset != empty(address) and cost.agentAssetAmount != 0:
+        hasEnoughForAgent = staticcall IERC20(cost.agentAsset).balanceOf(self) >= cost.agentAssetAmount
+
+    hasEnoughForProtocol: bool = True
+    if cost.protocolAsset != empty(address) and cost.protocolAssetAmount != 0:
+        hasEnoughForProtocol = staticcall IERC20(cost.protocolAsset).balanceOf(self) >= cost.protocolAssetAmount
+
+    return hasEnoughForAgent and hasEnoughForProtocol
+
+
 @internal
 def _handleTransactionFee(
     _agent: address,
@@ -1243,11 +1260,13 @@ def _payAgentAndProtocolFees(_agent: address, _cost: TransactionCost) -> bool:
 
     # transfer agent fees
     if _cost.agentAsset != empty(address) and _cost.agentAssetAmount != 0:
+        assert staticcall IERC20(_cost.agentAsset).balanceOf(self) >= _cost.agentAssetAmount # dev: insufficient balance for agent tx fee payment
         assert extcall IERC20(_cost.agentAsset).transfer(_agent, _cost.agentAssetAmount, default_return_value=True) # dev: agent tx fee transfer failed
         didPay = True
 
     # transfer protocol fees
     if _cost.protocolRecipient != empty(address) and _cost.protocolAsset != empty(address) and _cost.protocolAssetAmount != 0:
+        assert staticcall IERC20(_cost.protocolAsset).balanceOf(self) >= _cost.protocolAssetAmount # dev: insufficient balance for protocol tx fee payment
         assert extcall IERC20(_cost.protocolAsset).transfer(_cost.protocolRecipient, _cost.protocolAssetAmount, default_return_value=True) # dev: protocol tx fee transfer failed
         didPay = True
 
