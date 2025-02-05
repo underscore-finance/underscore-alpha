@@ -6,13 +6,17 @@ from conf_utils import filter_logs
 
 
 @pytest.fixture(scope="module")
-def new_lego(alpha_token, alpha_token_erc4626_vault, addy_registry):
-    return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, addy_registry, name="new_lego")
+def new_lego(alpha_token, alpha_token_erc4626_vault, addy_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", addy_registry, name="new_lego")
+    assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault, sender=governor)
+    return addr
 
 
 @pytest.fixture(scope="module")
-def new_lego_b(alpha_token, alpha_token_erc4626_vault, addy_registry):
-    return boa.load("contracts/mock/MockLego.vy", alpha_token, alpha_token_erc4626_vault, addy_registry, name="new_lego_b")
+def new_lego_b(alpha_token, alpha_token_erc4626_vault, addy_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", addy_registry, name="new_lego_b")
+    assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault, sender=governor)
+    return addr
 
 
 #########

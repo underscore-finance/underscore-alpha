@@ -64,7 +64,7 @@ def setup_assets(lego_morpho, governor, alpha_token, fork, getVaultToken):
             if token == ZERO_ADDRESS:
                 continue
         vault_token = getVaultToken(token_str)
-        assert lego_morpho.addSupportedAsset(token, vault_token, sender=governor)
+        assert lego_morpho.addAssetOpportunity(token, vault_token, sender=governor)
 
 
 #########

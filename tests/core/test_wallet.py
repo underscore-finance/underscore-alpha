@@ -474,13 +474,14 @@ def test_batch_actions(ai_wallet, owner, agent, mock_lego_alpha, alpha_token, mo
 
 
 @pytest.base
-def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale):
+def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale, governor):
     eth_amount = 5 * EIGHTEEN_DECIMALS
     boa.env.set_balance(ai_wallet.address, eth_amount)
 
     lego_id = lego_aave_v3.legoId()
     vault_token = boa.from_etherscan("0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7", name="base_weth_aave_v3_vault")
     weth, _ = getTokenAndWhale("weth")
+    assert lego_aave_v3.addAssetOpportunity(weth, sender=governor)
 
     assert ai_wallet.wethAddr() == weth.address
     assert ai_wallet.canAgentAccess(agent, CONVERSION_UINT256, [weth.address], [lego_id])
@@ -502,13 +503,14 @@ def test_eth_to_weth_deposit(ai_wallet, agent, lego_aave_v3, getTokenAndWhale):
 
 
 @pytest.base
-def test_payable_eth_to_weth_deposit(owner, ai_wallet, lego_aave_v3, getTokenAndWhale):
+def test_payable_eth_to_weth_deposit(owner, ai_wallet, lego_aave_v3, getTokenAndWhale, governor):
     eth_amount = 5 * EIGHTEEN_DECIMALS
     boa.env.set_balance(owner, eth_amount + EIGHTEEN_DECIMALS)
 
     lego_id = lego_aave_v3.legoId()
     vault_token = boa.from_etherscan("0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7", name="base_weth_aave_v3_vault")
     weth, _ = getTokenAndWhale("weth")
+    assert lego_aave_v3.addAssetOpportunity(weth, sender=governor)
 
     # Test ETH to WETH conversion by owner, and payable
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived = ai_wallet.convertEthToWeth(
@@ -534,12 +536,14 @@ def test_weth_to_eth_withdraw(
     lego_aave_v3,
     _test,
     owner,
+    governor,
 ):
     # setup
     lego_id = lego_aave_v3.legoId()
     vault_token = boa.from_etherscan("0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7", name="base_weth_aave_v3_vault")
     asset, whale = getTokenAndWhale("weth")
     asset.transfer(ai_wallet.address, 5 * (10 ** asset.decimals()), sender=whale)
+    assert lego_aave_v3.addAssetOpportunity(asset, sender=governor)
 
     deposit_amount, _, vault_tokens_received, usd_value = ai_wallet.depositTokens(
         lego_id, asset, MAX_UINT256, vault_token, sender=agent)
@@ -568,7 +572,7 @@ def test_weth_to_eth_withdraw(
 
 
 @pytest.base
-def test_eth_weth_conversion_edge_cases(ai_wallet, owner, agent, lego_aave_v3, getTokenAndWhale, sally):
+def test_eth_weth_conversion_edge_cases(ai_wallet, owner, agent, lego_aave_v3, getTokenAndWhale, sally, governor):
     """Test edge cases for ETH/WETH conversion operations"""
     eth_amount = 5 * EIGHTEEN_DECIMALS
     boa.env.set_balance(ai_wallet.address, eth_amount)
@@ -576,6 +580,7 @@ def test_eth_weth_conversion_edge_cases(ai_wallet, owner, agent, lego_aave_v3, g
     lego_id = lego_aave_v3.legoId()
     vault_token = boa.from_etherscan("0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7", name="base_weth_aave_v3_vault")
     weth, weth_whale = getTokenAndWhale("weth")
+    assert lego_aave_v3.addAssetOpportunity(weth, sender=governor)
 
     assert ai_wallet.wethAddr() == weth.address
     assert ai_wallet.canAgentAccess(agent, CONVERSION_UINT256, [weth.address], [lego_id])
@@ -630,6 +635,8 @@ def test_eth_weth_conversion_with_fees(ai_wallet, owner, agent, lego_aave_v3, ge
 
     lego_id = lego_aave_v3.legoId()
     vault_token = boa.from_etherscan("0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7", name="base_weth_aave_v3_vault")
+    weth, _ = getTokenAndWhale("weth")
+    assert lego_aave_v3.addAssetOpportunity(weth, sender=governor)
 
     usdc, usdc_whale = getTokenAndWhale("usdc")
     usdc.transfer(ai_wallet, 1000 * (10 ** usdc.decimals()), sender=usdc_whale)

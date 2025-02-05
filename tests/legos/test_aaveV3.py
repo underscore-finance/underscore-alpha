@@ -68,7 +68,7 @@ def setup_assets(lego_aave_v3, governor, alpha_token, fork):
             token = TOKENS[token_str][fork]
             if token == ZERO_ADDRESS:
                 continue
-        assert lego_aave_v3.addSupportedAsset(token, sender=governor)
+        assert lego_aave_v3.addAssetOpportunity(token, sender=governor)
 
 
 #########
