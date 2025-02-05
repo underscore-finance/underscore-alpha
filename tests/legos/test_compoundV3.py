@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from constants import ZERO_ADDRESS
-from conf_tokens import TEST_AMOUNTS
+from conf_tokens import TEST_AMOUNTS, TOKENS
 
 
 VAULT_TOKENS = {
@@ -45,10 +45,25 @@ def getVaultToken(fork, alpha_token_comp_vault):
     yield getVaultToken
 
 
+@pytest.fixture(scope="module", autouse=True)
+def setup_assets(lego_compound_v3, governor, alpha_token, fork, getVaultToken):
+    for token_str in TEST_ASSETS:
+        if token_str == "alpha":
+            if fork == "local":
+                token = alpha_token
+            else:
+                continue
+        else:
+            token = TOKENS[token_str][fork]
+            if token == ZERO_ADDRESS:
+                continue
+        vault_token = getVaultToken(token_str)
+        assert lego_compound_v3.addAssetOpportunity(token, vault_token, sender=governor)
+
+
 #########
 # Tests #
 #########
-
 
 
 @pytest.mark.parametrize("token_str", TEST_ASSETS)

@@ -151,7 +151,13 @@ def depositTokens(
 
 
 @external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
+def withdrawTokens(
+    _asset: address,
+    _amount: uint256,
+    _vaultToken: address,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
     assert self.indexOfAssetOpportunity[_asset][_vaultToken] != 0 # dev: asset + vault not supported
 
@@ -194,39 +200,6 @@ def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAm
 ##################
 # Asset Registry #
 ##################
-
-
-# view
-
-
-@view
-@external
-def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    if numOpportunities == 0:
-        return []
-    opportunities: DynArray[address, MAX_VAULTS] = []
-    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
-        opportunities.append(self.assetOpportunities[_asset][i])
-    return opportunities
-
-
-@view
-@external
-def getAssets() -> DynArray[address, MAX_ASSETS]:
-    numAssets: uint256 = self.numAssets
-    if numAssets == 0:
-        return []
-    assets: DynArray[address, MAX_ASSETS] = []
-    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
-        assets.append(self.assets[i])
-    return assets
-
-
-@view
-@external
-def getUnderlyingAsset(_vaultToken: address) -> address:
-    return self.vaultToAsset[_vaultToken]
 
 
 # settings
@@ -335,6 +308,39 @@ def _removeAsset(_asset: address):
         lastAsset: address = self.assets[lastIndex]
         self.assets[targetIndex] = lastAsset
         self.indexOfAsset[lastAsset] = targetIndex
+
+
+# view
+
+
+@view
+@external
+def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
+    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
+    if numOpportunities == 0:
+        return []
+    opportunities: DynArray[address, MAX_VAULTS] = []
+    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
+        opportunities.append(self.assetOpportunities[_asset][i])
+    return opportunities
+
+
+@view
+@external
+def getAssets() -> DynArray[address, MAX_ASSETS]:
+    numAssets: uint256 = self.numAssets
+    if numAssets == 0:
+        return []
+    assets: DynArray[address, MAX_ASSETS] = []
+    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
+        assets.append(self.assets[i])
+    return assets
+
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    return self.vaultToAsset[_vaultToken]
 
 
 #################
