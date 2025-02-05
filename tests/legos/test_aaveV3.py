@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from constants import ZERO_ADDRESS
-from conf_tokens import TEST_AMOUNTS
+from conf_tokens import TEST_AMOUNTS, TOKENS
 
 
 VAULT_TOKENS = {
@@ -54,6 +54,21 @@ def getVaultToken(fork, mock_aave_v3_pool):
         return boa.from_etherscan(vault_token, name=_token_str + "_vault_token")
 
     yield getVaultToken
+
+
+@pytest.fixture(scope="module", autouse=True)
+def setup_assets(lego_aave_v3, governor, alpha_token, fork):
+    for token_str in TEST_ASSETS:
+        if token_str == "alpha":
+            if fork == "local":
+                token = alpha_token
+            else:
+                continue
+        else:
+            token = TOKENS[token_str][fork]
+            if token == ZERO_ADDRESS:
+                continue
+        assert lego_aave_v3.addSupportedAsset(token, sender=governor)
 
 
 #########

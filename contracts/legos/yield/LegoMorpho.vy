@@ -38,6 +38,14 @@ event MorphoWithdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
+event SupportedAssetAdded:
+    asset: indexed(address)
+    vaultToken: indexed(address)
+
+event SupportedAssetRemoved:
+    asset: indexed(address)
+    vaultToken: indexed(address)
+
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -46,8 +54,17 @@ event FundsRecovered:
 event MorphoLegoIdSet:
     legoId: uint256
 
-legoId: public(uint256)
+event MorphoActivated:
+    isActivated: bool
 
+# supported assets
+assetOpportunities: public(HashMap[address, HashMap[uint256, address]]) # asset -> index -> vault token
+indexOfAssetOpportunity: public(HashMap[address, HashMap[address, uint256]]) # asset -> vault token -> index
+numAssetOpportunities: public(HashMap[address, uint256]) # asset -> number of opportunities
+
+# config
+legoId: public(uint256)
+isActivated: public(bool)
 META_MORPHO_FACTORY: public(immutable(address))
 META_MORPHO_FACTORY_LEGACY: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
@@ -59,19 +76,13 @@ def __init__(_morphoFactory: address, _morphoFactoryLegacy: address, _addyRegist
     META_MORPHO_FACTORY = _morphoFactory
     META_MORPHO_FACTORY_LEGACY = _morphoFactoryLegacy
     ADDY_REGISTRY = _addyRegistry
+    self.isActivated = True
 
 
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [META_MORPHO_FACTORY, META_MORPHO_FACTORY_LEGACY]
-
-
-@view
-@internal
-def _validateAssetAndVault(_asset: address, _vault: address):
-    assert staticcall MetaMorphoFactory(META_MORPHO_FACTORY).isMetaMorpho(_vault) or staticcall MetaMorphoFactory(META_MORPHO_FACTORY_LEGACY).isMetaMorpho(_vault) # dev: invalid vault
-    assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid asset
 
 
 @view
@@ -89,8 +100,15 @@ def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) ->
 
 
 @external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, address, uint256, uint256, uint256):
-    self._validateAssetAndVault(_asset, _vault)
+def depositTokens(
+    _asset: address,
+    _amount: uint256,
+    _vault: address,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, address, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+    assert self.indexOfAssetOpportunity[_asset][_vault] != 0 # dev: asset + vault not supported
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -102,10 +120,8 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
     # deposit assets into lego partner
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
-    assert extcall IERC20(_asset).approve(_vault, depositAmount, default_return_value=True) # dev: approval failed
     vaultTokenAmountReceived: uint256 = extcall Erc4626Interface(_vault).deposit(depositAmount, _recipient)
     assert vaultTokenAmountReceived != 0 # dev: no vault tokens received
-    assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
 
     # refund if full deposit didn't get through
     currentLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -113,12 +129,11 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
     if currentLegoBalance > preLegoBalance:
         refundAssetAmount = currentLegoBalance - preLegoBalance
         assert extcall IERC20(_asset).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        depositAmount -= refundAssetAmount
 
-    actualDepositAmount: uint256 = depositAmount - refundAssetAmount
-    usdValue: uint256 = self._getUsdValue(_asset, actualDepositAmount, _oracleRegistry)
-
-    log MorphoDeposit(msg.sender, _asset, _vault, actualDepositAmount, usdValue, vaultTokenAmountReceived, _recipient)
-    return actualDepositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount, usdValue
+    usdValue: uint256 = self._getUsdValue(_asset, depositAmount, _oracleRegistry)
+    log MorphoDeposit(msg.sender, _asset, _vault, depositAmount, usdValue, vaultTokenAmountReceived, _recipient)
+    return depositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount, usdValue
 
 
 ############
@@ -128,7 +143,8 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 
 @external
 def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
-    self._validateAssetAndVault(_asset, _vaultToken)
+    assert self.isActivated # dev: not activated
+    assert self.indexOfAssetOpportunity[_asset][_vaultToken] != 0 # dev: asset + vault not supported
 
     # pre balances
     preLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
@@ -139,10 +155,9 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     assert extcall IERC20(_vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     # withdraw assets from lego partner
-    withdrawVaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self))
-    assetAmountReceived: uint256 = extcall Erc4626Interface(_vaultToken).redeem(withdrawVaultTokenAmount, _recipient, self)
+    vaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self))
+    assetAmountReceived: uint256 = extcall Erc4626Interface(_vaultToken).redeem(vaultTokenAmount, _recipient, self)
     assert assetAmountReceived != 0 # dev: no asset amount received
-    usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
 
     # refund if full withdrawal didn't happen
     currentLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
@@ -150,10 +165,11 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
     if currentLegoVaultBalance > preLegoVaultBalance:
         refundVaultTokenAmount = currentLegoVaultBalance - preLegoVaultBalance
         assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
+        vaultTokenAmount -= refundVaultTokenAmount
 
-    vaultTokenAmountBurned: uint256 = withdrawVaultTokenAmount - refundVaultTokenAmount
-    log MorphoWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, usdValue, vaultTokenAmountBurned, _recipient)
-    return assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue
+    usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
+    log MorphoWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, usdValue, vaultTokenAmount, _recipient)
+    return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
 
 
 ###################
@@ -164,6 +180,70 @@ def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _rec
 @external
 def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     raise "Not Implemented"
+
+
+####################
+# Supported Assets #
+####################
+
+
+@external
+def addSupportedAsset(_asset: address, _vault: address) -> bool:
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+
+    assert staticcall MetaMorphoFactory(META_MORPHO_FACTORY).isMetaMorpho(_vault) or staticcall MetaMorphoFactory(META_MORPHO_FACTORY_LEGACY).isMetaMorpho(_vault) # dev: invalid vault
+    assert staticcall Erc4626Interface(_vault).asset() == _asset # dev: invalid asset
+    assert extcall IERC20(_asset).approve(_vault, max_value(uint256), default_return_value=True) # dev: max approval failed
+
+    self._addAsset(_asset, _vault)
+    log SupportedAssetAdded(_asset, _vault)
+    return True
+
+
+@external
+def removeSupportedAsset(_asset: address, _vault: address) -> bool:
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+
+    self._removeAsset(_asset, _vault)
+    assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
+
+    log SupportedAssetRemoved(_asset, _vault)
+    return True
+
+
+# internal
+
+
+@internal
+def _addAsset(_asset: address, _vault: address):
+    assert self.indexOfAssetOpportunity[_asset][_vault] == 0 # dev: asset already supported
+
+    aid: uint256 = self.numAssetOpportunities[_asset]
+    if aid == 0:
+        aid = 1 # not using 0 index
+    self.assetOpportunities[_asset][aid] = _vault
+    self.indexOfAssetOpportunity[_asset][_vault] = aid
+    self.numAssetOpportunities[_asset] = aid + 1
+
+
+@internal
+def _removeAsset(_asset: address, _vault: address):
+    targetIndex: uint256 = self.indexOfAssetOpportunity[_asset][_vault]
+    assert targetIndex != 0 # dev: asset + vault token not found
+
+    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
+    assert numOpportunities > 1 # dev: no opportunities to remove
+
+    # update data
+    lastIndex: uint256 = numOpportunities - 1
+    self.numAssetOpportunities[_asset] = lastIndex
+    self.indexOfAssetOpportunity[_asset][_vault] = 0
+
+    # shift to replace the removed one
+    if targetIndex != lastIndex:
+        lastVaultToken: address = self.assetOpportunities[_asset][lastIndex]
+        self.assetOpportunities[_asset][targetIndex] = lastVaultToken
+        self.indexOfAssetOpportunity[_asset][lastVaultToken] = targetIndex
 
 
 #################
@@ -197,3 +277,10 @@ def setLegoId(_legoId: uint256) -> bool:
     self.legoId = _legoId
     log MorphoLegoIdSet(_legoId)
     return True
+
+
+@external
+def activate(_shouldActivate: bool):
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    self.isActivated = _shouldActivate
+    log MorphoActivated(_shouldActivate)
