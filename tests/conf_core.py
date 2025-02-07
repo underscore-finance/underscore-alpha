@@ -52,10 +52,10 @@ def wallet_template():
 
 
 @pytest.fixture(scope="session")
-def lego_helper(lego_registry, lego_aave_v3, lego_compound_v3, lego_euler, lego_fluid, lego_moonwell, lego_morpho, lego_sky, governor):
+def lego_helper(addy_registry, lego_registry, lego_aave_v3, lego_compound_v3, lego_euler, lego_fluid, lego_moonwell, lego_morpho, lego_sky, governor):
     h = boa.load(
         "contracts/core/LegoHelper.vy",
-        lego_registry,
+        addy_registry,
         lego_aave_v3.legoId(),
         lego_compound_v3.legoId(),
         lego_euler.legoId(),

@@ -8,6 +8,9 @@ interface LegoRegistry:
     def legoInfo(_legoId: uint256) -> LegoInfo: view
     def numLegos() -> uint256: view
 
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
+
 flag LegoType:
     YIELD_OPP
     DEX
@@ -19,7 +22,7 @@ struct LegoInfo:
     description: String[64]
     legoType: LegoType
 
-LEGO_REGISTRY: public(immutable(address))
+ADDY_REGISTRY: public(immutable(address))
 
 # lego ids
 AAVE_V3_ID: public(immutable(uint256))
@@ -32,7 +35,7 @@ SKY_ID: public(immutable(uint256))
 
 @deploy
 def __init__(
-    _legoRegistry: address,
+    _addyRegistry: address,
     _aaveV3Id: uint256,
     _compoundV3Id: uint256,
     _eulerId: uint256,
@@ -41,16 +44,18 @@ def __init__(
     _morphoId: uint256,
     _skyId: uint256,
 ):
-    LEGO_REGISTRY = _legoRegistry
+    assert empty(address) != _addyRegistry # dev: invalid address
+    ADDY_REGISTRY = _addyRegistry
 
     # lego ids
-    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_aaveV3Id) # dev: invalid id
-    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_compoundV3Id) # dev: invalid id
-    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_eulerId) # dev: invalid id
-    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_fluidId) # dev: invalid id
-    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_moonwellId) # dev: invalid id
-    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_morphoId) # dev: invalid id
-    assert staticcall LegoRegistry(_legoRegistry).isValidLegoId(_skyId) # dev: invalid id
+    legoRegistry: address = staticcall AddyRegistry(_addyRegistry).getAddy(2)
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_aaveV3Id) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_compoundV3Id) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_eulerId) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_fluidId) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_moonwellId) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_morphoId) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_skyId) # dev: invalid id
 
     AAVE_V3_ID = _aaveV3Id
     COMPOUND_V3_ID = _compoundV3Id
@@ -69,7 +74,8 @@ def __init__(
 @view
 @external
 def aaveV3() -> address:
-    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(AAVE_V3_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(AAVE_V3_ID)
 
 
 @view
@@ -81,7 +87,8 @@ def aaveV3Id() -> uint256:
 @view
 @external
 def compoundV3() -> address:
-    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(COMPOUND_V3_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(COMPOUND_V3_ID)
 
 
 @view
@@ -93,7 +100,8 @@ def compoundV3Id() -> uint256:
 @view
 @external
 def euler() -> address:
-    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(EULER_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(EULER_ID)
 
 
 @view
@@ -105,7 +113,8 @@ def eulerId() -> uint256:
 @view
 @external
 def fluid() -> address:
-    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(FLUID_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(FLUID_ID)
 
 
 @view
@@ -117,7 +126,8 @@ def fluidId() -> uint256:
 @view
 @external
 def moonwell() -> address:
-    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(MOONWELL_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(MOONWELL_ID)
 
 
 @view
@@ -129,7 +139,8 @@ def moonwellId() -> uint256:
 @view
 @external
 def morpho() -> address:
-    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(MORPHO_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(MORPHO_ID)
 
 
 @view
@@ -141,7 +152,8 @@ def morphoId() -> uint256:
 @view
 @external
 def sky() -> address:
-    return staticcall LegoRegistry(LEGO_REGISTRY).getLegoAddr(SKY_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(SKY_ID)
 
 
 @view
@@ -156,7 +168,7 @@ def skyId() -> uint256:
 @view
 @external
 def getLegoFromVaultToken(_vaultToken: address) -> address:
-    legoRegistry: address = LEGO_REGISTRY
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
     numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
     for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
         legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
@@ -166,3 +178,27 @@ def getLegoFromVaultToken(_vaultToken: address) -> address:
             return legoInfo.addr
     return empty(address)
 
+
+@view
+@external
+def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256) -> (address, uint256, uint256):
+    if _vaultTokenAmount == 0 or _vaultToken == empty(address):
+        return empty(address), 0, 0 # bad inputs
+
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    oracleRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+
+        asset: address = empty(address)
+        underlyingAmount: uint256 = 0
+        usdValue: uint256 = 0
+        asset, underlyingAmount, usdValue = staticcall LegoYield(legoInfo.addr).getUnderlyingData(_vaultToken, _vaultTokenAmount, oracleRegistry)
+        if asset != empty(address):
+            return asset, underlyingAmount, usdValue
+
+    return empty(address), 0, 0
