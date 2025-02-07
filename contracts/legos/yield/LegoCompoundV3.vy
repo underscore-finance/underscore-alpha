@@ -8,10 +8,9 @@ import interfaces.LegoInterface as LegoPartner
 interface CompoundV3:
     def withdrawTo(_recipient: address, _asset: address, _amount: uint256): nonpayable
     def supplyTo(_recipient: address, _asset: address, _amount: uint256): nonpayable
+    def totalSupply() -> uint256: view
+    def totalBorrow() -> uint256: view
     def baseToken() -> address: view
-
-interface CompoundV3Configurator:
-    def factory(_cometAsset: address) -> address: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -19,6 +18,9 @@ interface AddyRegistry:
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface CompoundV3Configurator:
+    def factory(_cometAsset: address) -> address: view
 
 event CompoundV3Deposit:
     sender: indexed(address)
@@ -92,6 +94,135 @@ def getRegistries() -> DynArray[address, 10]:
     return [COMPOUND_V3_CONFIGURATOR]
 
 
+#############
+# Utilities #
+#############
+
+
+# assets and vault tokens
+
+
+@view
+@external
+def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
+    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
+    if numOpportunities == 0:
+        return []
+    opportunities: DynArray[address, MAX_VAULTS] = []
+    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
+        opportunities.append(self.assetOpportunities[_asset][i])
+    return opportunities
+
+
+@view
+@external
+def getAssets() -> DynArray[address, MAX_ASSETS]:
+    numAssets: uint256 = self.numAssets
+    if numAssets == 0:
+        return []
+    assets: DynArray[address, MAX_ASSETS] = []
+    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
+        assets.append(self.assets[i])
+    return assets
+
+
+# underlying asset
+
+
+@view
+@external
+def isVaultToken(_vaultToken: address) -> bool:
+    return self._isVaultToken(_vaultToken)
+
+
+@view
+@internal
+def _isVaultToken(_vaultToken: address) -> bool:
+    if self.vaultToAsset[_vaultToken] != empty(address):
+        return True
+    return self._isValidCometAddr(_vaultToken)
+
+
+@view
+@internal
+def _isValidCometAddr(_cometAddr: address) -> bool:
+    return staticcall CompoundV3Configurator(COMPOUND_V3_CONFIGURATOR).factory(_cometAddr) != empty(address)
+
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    return self._getUnderlyingAsset(_vaultToken)
+
+
+@view
+@internal
+def _getUnderlyingAsset(_vaultToken: address) -> address:
+    asset: address = self.vaultToAsset[_vaultToken]
+    if asset == empty(address) and self._isValidCometAddr(_vaultToken):
+        asset = staticcall CompoundV3(_vaultToken).baseToken()
+    return asset
+
+
+# underlying amount
+
+
+@view
+@external
+def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    if not self._isVaultToken(_vaultToken) or _vaultTokenAmount == 0:
+        return 0 # invalid vault token or amount
+    return self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+
+
+@view
+@internal
+def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    # treated as 1:1
+    return _vaultTokenAmount
+
+
+# usd value
+
+
+@view
+@external
+def getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> uint256:
+    return self._getUsdValueOfVaultToken(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> uint256:
+    asset: address = empty(address)
+    underlyingAmount: uint256 = 0
+    usdValue: uint256 = 0
+    asset, underlyingAmount, usdValue = self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+    return usdValue
+
+
+# all underlying data together
+
+
+@view
+@external
+def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> (address, uint256, uint256):
+    return self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> (address, uint256, uint256):
+    if _vaultTokenAmount == 0 or _vaultToken == empty(address):
+        return empty(address), 0, 0 # bad inputs
+    asset: address = self._getUnderlyingAsset(_vaultToken)
+    if asset == empty(address):
+        return empty(address), 0, 0 # invalid vault token
+    underlyingAmount: uint256 = self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+    usdValue: uint256 = self._getUsdValue(asset, underlyingAmount, _oracleRegistry)
+    return asset, underlyingAmount, usdValue
+
+
 @view
 @internal
 def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) -> uint256:
@@ -99,6 +230,25 @@ def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) ->
     if _oracleRegistry == empty(address):
         oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
     return staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount)
+
+
+# other
+
+
+@view
+@external
+def totalAssets(_vaultToken: address) -> uint256:
+    if not self._isVaultToken(_vaultToken):
+        return 0 # invalid vault token
+    return staticcall CompoundV3(_vaultToken).totalSupply()
+
+
+@view
+@external
+def totalBorrows(_vaultToken: address) -> uint256:
+    if not self._isVaultToken(_vaultToken):
+        return 0 # invalid vault token
+    return staticcall CompoundV3(_vaultToken).totalBorrow()
 
 
 ###########
@@ -215,8 +365,7 @@ def addAssetOpportunity(_asset: address, _vault: address) -> bool:
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     # specific to lego
-    assert staticcall CompoundV3Configurator(COMPOUND_V3_CONFIGURATOR).factory(_vault) != empty(address) # dev: invalid vault
-    assert staticcall CompoundV3(_vault).baseToken() == _asset # dev: invalid asset
+    assert self._getUnderlyingAsset(_vault) == _asset # dev: invalid asset or vault
     assert extcall IERC20(_asset).approve(_vault, max_value(uint256), default_return_value=True) # dev: max approval failed
 
     self._addAssetOpportunity(_asset, _vault)
@@ -313,39 +462,6 @@ def _removeAsset(_asset: address):
         lastAsset: address = self.assets[lastIndex]
         self.assets[targetIndex] = lastAsset
         self.indexOfAsset[lastAsset] = targetIndex
-
-
-# view
-
-
-@view
-@external
-def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    if numOpportunities == 0:
-        return []
-    opportunities: DynArray[address, MAX_VAULTS] = []
-    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
-        opportunities.append(self.assetOpportunities[_asset][i])
-    return opportunities
-
-
-@view
-@external
-def getAssets() -> DynArray[address, MAX_ASSETS]:
-    numAssets: uint256 = self.numAssets
-    if numAssets == 0:
-        return []
-    assets: DynArray[address, MAX_ASSETS] = []
-    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
-        assets.append(self.assets[i])
-    return assets
-
-
-@view
-@external
-def getUnderlyingAsset(_vaultToken: address) -> address:
-    return self.vaultToAsset[_vaultToken]
 
 
 #################
