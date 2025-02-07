@@ -8,6 +8,9 @@ import interfaces.LegoInterface as LegoPartner
 interface CompoundV2:
     def redeem(_ctokenAmount: uint256) -> uint256: nonpayable
     def mint(_amount: uint256) -> uint256: nonpayable
+    def exchangeRateStored() -> uint256: view
+    def totalBorrows() -> uint256: view
+    def totalSupply() -> uint256: view
     def underlying() -> address: view
 
 interface CompoundV2Comptroller:
@@ -93,6 +96,135 @@ def getRegistries() -> DynArray[address, 10]:
     return [MOONWELL_COMPTROLLER]
 
 
+#############
+# Utilities #
+#############
+
+
+# assets and vault tokens
+
+
+@view
+@external
+def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
+    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
+    if numOpportunities == 0:
+        return []
+    opportunities: DynArray[address, MAX_VAULTS] = []
+    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
+        opportunities.append(self.assetOpportunities[_asset][i])
+    return opportunities
+
+
+@view
+@external
+def getAssets() -> DynArray[address, MAX_ASSETS]:
+    numAssets: uint256 = self.numAssets
+    if numAssets == 0:
+        return []
+    assets: DynArray[address, MAX_ASSETS] = []
+    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
+        assets.append(self.assets[i])
+    return assets
+
+
+# underlying asset
+
+
+@view
+@external
+def isVaultToken(_vaultToken: address) -> bool:
+    return self._isVaultToken(_vaultToken)
+
+
+@view
+@internal
+def _isVaultToken(_vaultToken: address) -> bool:
+    if self.vaultToAsset[_vaultToken] != empty(address):
+        return True
+    return self._isValidCToken(_vaultToken)
+
+
+@view
+@internal
+def _isValidCToken(_cToken: address) -> bool:
+    compMarkets: DynArray[address, MAX_MARKETS] = staticcall CompoundV2Comptroller(MOONWELL_COMPTROLLER).getAllMarkets()
+    return _cToken in compMarkets
+
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    return self._getUnderlyingAsset(_vaultToken)
+
+
+@view
+@internal
+def _getUnderlyingAsset(_vaultToken: address) -> address:
+    asset: address = self.vaultToAsset[_vaultToken]
+    if asset == empty(address) and self._isValidCToken(_vaultToken):
+        asset = staticcall CompoundV2(_vaultToken).underlying()
+    return asset
+
+
+# underlying amount
+
+
+@view
+@external
+def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    if not self._isVaultToken(_vaultToken) or _vaultTokenAmount == 0:
+        return 0 # invalid vault token or amount
+    return self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+
+
+@view
+@internal
+def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    return _vaultTokenAmount * staticcall CompoundV2(_vaultToken).exchangeRateStored() // (10 ** 18)
+
+
+# usd value
+
+
+@view
+@external
+def getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> uint256:
+    return self._getUsdValueOfVaultToken(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> uint256:
+    asset: address = empty(address)
+    underlyingAmount: uint256 = 0
+    usdValue: uint256 = 0
+    asset, underlyingAmount, usdValue = self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+    return usdValue
+
+
+# all underlying data together
+
+
+@view
+@external
+def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> (address, uint256, uint256):
+    return self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> (address, uint256, uint256):
+    if _vaultTokenAmount == 0 or _vaultToken == empty(address):
+        return empty(address), 0, 0 # bad inputs
+    asset: address = self._getUnderlyingAsset(_vaultToken)
+    if asset == empty(address):
+        return empty(address), 0, 0 # invalid vault token
+    underlyingAmount: uint256 = self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+    usdValue: uint256 = self._getUsdValue(asset, underlyingAmount, _oracleRegistry)
+    return asset, underlyingAmount, usdValue
+
+
 @view
 @internal
 def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) -> uint256:
@@ -100,6 +232,25 @@ def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) ->
     if _oracleRegistry == empty(address):
         oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
     return staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount)
+
+
+# other
+
+
+@view
+@external
+def totalAssets(_vaultToken: address) -> uint256:
+    if not self._isVaultToken(_vaultToken):
+        return 0 # invalid vault token
+    return staticcall CompoundV2(_vaultToken).totalSupply() * staticcall CompoundV2(_vaultToken).exchangeRateStored() // (10 ** 18)
+
+
+@view
+@external
+def totalBorrows(_vaultToken: address) -> uint256:
+    if not self._isVaultToken(_vaultToken):
+        return 0 # invalid vault token
+    return staticcall CompoundV2(_vaultToken).totalBorrows()
 
 
 ###########
@@ -218,9 +369,7 @@ def addAssetOpportunity(_asset: address, _vault: address) -> bool:
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     # specific to lego
-    compMarkets: DynArray[address, MAX_MARKETS] = staticcall CompoundV2Comptroller(MOONWELL_COMPTROLLER).getAllMarkets()
-    assert _vault in compMarkets # dev: invalid vault
-    assert staticcall CompoundV2(_vault).underlying() == _asset # dev: invalid asset
+    assert self._getUnderlyingAsset(_vault) == _asset # dev: invalid vault and/or asset
     assert extcall IERC20(_asset).approve(_vault, max_value(uint256), default_return_value=True) # dev: max approval failed
 
     self._addAssetOpportunity(_asset, _vault)
@@ -317,39 +466,6 @@ def _removeAsset(_asset: address):
         lastAsset: address = self.assets[lastIndex]
         self.assets[targetIndex] = lastAsset
         self.indexOfAsset[lastAsset] = targetIndex
-
-
-# view
-
-
-@view
-@external
-def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    if numOpportunities == 0:
-        return []
-    opportunities: DynArray[address, MAX_VAULTS] = []
-    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
-        opportunities.append(self.assetOpportunities[_asset][i])
-    return opportunities
-
-
-@view
-@external
-def getAssets() -> DynArray[address, MAX_ASSETS]:
-    numAssets: uint256 = self.numAssets
-    if numAssets == 0:
-        return []
-    assets: DynArray[address, MAX_ASSETS] = []
-    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
-        assets.append(self.assets[i])
-    return assets
-
-
-@view
-@external
-def getUnderlyingAsset(_vaultToken: address) -> address:
-    return self.vaultToAsset[_vaultToken]
 
 
 #################

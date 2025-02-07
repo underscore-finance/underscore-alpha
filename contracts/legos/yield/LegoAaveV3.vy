@@ -5,10 +5,18 @@ implements: LegoPartner
 from ethereum.ercs import IERC20
 import interfaces.LegoInterface as LegoPartner
 
-interface AaveV3Interface:
+interface AaveProtocolDataProvider:
+    def getReserveTokensAddresses(_asset: address) -> (address, address, address): view
+    def getAllATokens() -> DynArray[TokenData, MAX_ATOKENS]: view
+    def getTotalDebt(_asset: address) -> uint256: view
+
+interface AaveV3Pool:
     def supply(_asset: address, _amount: uint256, _onBehalfOf: address, _referralCode: uint16): nonpayable
     def withdraw(_asset: address, _amount: uint256, _to: address): nonpayable
-    def getReserveData(_asset: address) -> AaveReserveDataV3: view
+
+interface AToken:
+    def UNDERLYING_ASSET_ADDRESS() -> address: view
+    def totalSupply() -> uint256: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -17,22 +25,9 @@ interface AddyRegistry:
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
-struct AaveReserveDataV3:
-    configuration: uint256
-    liquidityIndex: uint128
-    currentLiquidityRate: uint128
-    variableBorrowIndex: uint128
-    currentVariableBorrowRate: uint128
-    currentStableBorrowRate: uint128
-    lastUpdateTimestamp: uint40
-    id: uint16
-    aTokenAddress: address
-    stableDebtTokenAddress: address
-    variableDebtTokenAddress: address
-    interestRateStrategyAddress: address
-    accruedToTreasury: uint128
-    unbacked: uint128
-    isolationModeTotalDebt: uint128
+struct TokenData:
+    symbol: String[32]
+    tokenAddress: address
 
 event AaveV3Deposit:
     sender: indexed(address)
@@ -86,16 +81,19 @@ numAssets: public(uint256) # number of assets
 legoId: public(uint256)
 isActivated: public(bool)
 AAVE_V3_POOL: public(immutable(address))
+AAVE_V3_DATA_PROVIDER: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
+MAX_ATOKENS: constant(uint256) = 40
 MAX_VAULTS: constant(uint256) = 15
 MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
-def __init__(_aaveV3: address, _addyRegistry: address):
-    assert empty(address) not in [_aaveV3, _addyRegistry] # dev: invalid addrs
+def __init__(_aaveV3: address, _aaveV3DataProvider: address, _addyRegistry: address):
+    assert empty(address) not in [_aaveV3, _aaveV3DataProvider, _addyRegistry] # dev: invalid addrs
     AAVE_V3_POOL = _aaveV3
+    AAVE_V3_DATA_PROVIDER = _aaveV3DataProvider
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
 
@@ -103,17 +101,140 @@ def __init__(_aaveV3: address, _addyRegistry: address):
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
-    return [AAVE_V3_POOL]
+    return [AAVE_V3_POOL, AAVE_V3_DATA_PROVIDER]
+
+
+#############
+# Utilities #
+#############
+
+
+# assets and vault tokens
+
+
+@view
+@external
+def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
+    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
+    if numOpportunities == 0:
+        return []
+    opportunities: DynArray[address, MAX_VAULTS] = []
+    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
+        opportunities.append(self.assetOpportunities[_asset][i])
+    return opportunities
+
+
+@view
+@external
+def getAssets() -> DynArray[address, MAX_ASSETS]:
+    numAssets: uint256 = self.numAssets
+    if numAssets == 0:
+        return []
+    assets: DynArray[address, MAX_ASSETS] = []
+    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
+        assets.append(self.assets[i])
+    return assets
+
+
+# underlying asset
+
+
+@view
+@external
+def isVaultToken(_vaultToken: address) -> bool:
+    return self._isVaultToken(_vaultToken)
 
 
 @view
 @internal
-def _validateAssetAndVault(_asset: address, _vault: address) -> address:
-    vault: address = _vault
-    if _vault != empty(address):
-        vault = self.assetOpportunities[_asset][1] # only one opportunity for aave v3
-    assert self.indexOfAssetOpportunity[_asset][vault] != 0 # dev: asset + vault not supported
-    return vault
+def _isVaultToken(_vaultToken: address) -> bool:
+    if self.vaultToAsset[_vaultToken] != empty(address):
+        return True
+    return self._isValidAToken(_vaultToken, AAVE_V3_DATA_PROVIDER)
+
+
+@view
+@internal
+def _isValidAToken(_aToken: address, _dataProvider: address) -> bool:
+    aTokens: DynArray[TokenData, MAX_ATOKENS] = staticcall AaveProtocolDataProvider(_dataProvider).getAllATokens()
+    for i: uint256 in range(len(aTokens), bound=MAX_ATOKENS):
+        if aTokens[i].tokenAddress == _aToken:
+            return True
+    return False
+
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    return self._getUnderlyingAsset(_vaultToken, AAVE_V3_DATA_PROVIDER)
+
+
+@view
+@internal
+def _getUnderlyingAsset(_vaultToken: address, _dataProvider: address) -> address:
+    asset: address = self.vaultToAsset[_vaultToken]
+    if asset == empty(address) and self._isValidAToken(_vaultToken, _dataProvider):
+        asset = staticcall AToken(_vaultToken).UNDERLYING_ASSET_ADDRESS()
+    return asset
+
+
+# underlying amount
+
+
+@view
+@external
+def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    if not self._isVaultToken(_vaultToken) or _vaultTokenAmount == 0:
+        return 0 # invalid vault token or amount
+    return self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+
+
+@view
+@internal
+def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    # treated as 1:1
+    return _vaultTokenAmount
+
+
+# usd value
+
+
+@view
+@external
+def getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> uint256:
+    return self._getUsdValueOfVaultToken(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> uint256:
+    asset: address = empty(address)
+    underlyingAmount: uint256 = 0
+    usdValue: uint256 = 0
+    asset, underlyingAmount, usdValue = self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+    return usdValue
+
+
+# all underlying data together
+
+
+@view
+@external
+def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> (address, uint256, uint256):
+    return self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> (address, uint256, uint256):
+    if _vaultTokenAmount == 0 or _vaultToken == empty(address):
+        return empty(address), 0, 0 # bad inputs
+    asset: address = self._getUnderlyingAsset(_vaultToken, AAVE_V3_DATA_PROVIDER)
+    if asset == empty(address):
+        return empty(address), 0, 0 # invalid vault token
+    underlyingAmount: uint256 = self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+    usdValue: uint256 = self._getUsdValue(asset, underlyingAmount, _oracleRegistry)
+    return asset, underlyingAmount, usdValue
 
 
 @view
@@ -123,6 +244,27 @@ def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) ->
     if _oracleRegistry == empty(address):
         oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
     return staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount)
+
+
+# other
+
+
+@view
+@external
+def totalAssets(_vaultToken: address) -> uint256:
+    if not self._isVaultToken(_vaultToken):
+        return 0 # invalid vault token
+    return staticcall AToken(_vaultToken).totalSupply()
+
+
+@view
+@external
+def totalBorrows(_vaultToken: address) -> uint256:
+    dataProvider: address = AAVE_V3_DATA_PROVIDER
+    asset: address = self._getUnderlyingAsset(_vaultToken, dataProvider)
+    if asset == empty(address):
+        return 0 # invalid vault token
+    return staticcall AaveProtocolDataProvider(dataProvider).getTotalDebt(asset)
 
 
 ###########
@@ -139,7 +281,7 @@ def depositTokens(
     _oracleRegistry: address = empty(address),
 ) -> (uint256, address, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
-    vaultToken: address = self._validateAssetAndVault(_asset, _vault)
+    vaultToken: address = self._getVaultToken(_asset, _vault)
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -152,7 +294,7 @@ def depositTokens(
 
     # deposit assets into lego partner
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
-    extcall AaveV3Interface(AAVE_V3_POOL).supply(_asset, depositAmount, _recipient, 0)
+    extcall AaveV3Pool(AAVE_V3_POOL).supply(_asset, depositAmount, _recipient, 0)
 
     # validate vault token transfer
     newRecipientVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(_recipient)
@@ -172,6 +314,16 @@ def depositTokens(
     return depositAmount, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue
 
 
+@view
+@internal
+def _getVaultToken(_asset: address, _vault: address) -> address:
+    vault: address = _vault
+    if _vault != empty(address):
+        vault = self.assetOpportunities[_asset][1] # only one opportunity for aave v3
+    assert self.indexOfAssetOpportunity[_asset][vault] != 0 # dev: asset + vault not supported
+    return vault
+
+
 ############
 # Withdraw #
 ############
@@ -186,7 +338,7 @@ def withdrawTokens(
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
-    vaultToken: address = self._validateAssetAndVault(_asset, _vaultToken)
+    vaultToken: address = self._getVaultToken(_asset, _vaultToken)
 
     # pre balances
     preLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)
@@ -198,7 +350,7 @@ def withdrawTokens(
     assert extcall IERC20(vaultToken).transferFrom(msg.sender, self, vaultTokenAmount, default_return_value=True) # dev: transfer failed
 
     # withdraw assets from lego partner
-    extcall AaveV3Interface(AAVE_V3_POOL).withdraw(_asset, max_value(uint256), _recipient)
+    extcall AaveV3Pool(AAVE_V3_POOL).withdraw(_asset, max_value(uint256), _recipient)
 
     # validate asset transfer
     newRecipientAssetBalance: uint256 = staticcall IERC20(_asset).balanceOf(_recipient)
@@ -241,9 +393,9 @@ def addAssetOpportunity(_asset: address) -> bool:
     assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
 
     # specific to lego
-    aaveV3: address = AAVE_V3_POOL
-    vaultToken: address = (staticcall AaveV3Interface(aaveV3).getReserveData(_asset)).aTokenAddress
-    assert extcall IERC20(_asset).approve(aaveV3, max_value(uint256), default_return_value=True) # dev: max approval failed
+    vaultToken: address = (staticcall AaveProtocolDataProvider(AAVE_V3_DATA_PROVIDER).getReserveTokensAddresses(_asset))[0]
+    assert vaultToken != empty(address) # dev: invalid asset
+    assert extcall IERC20(_asset).approve(AAVE_V3_POOL, max_value(uint256), default_return_value=True) # dev: max approval failed
 
     self._addAssetOpportunity(_asset, vaultToken)
     return True
@@ -340,39 +492,6 @@ def _removeAsset(_asset: address):
         lastAsset: address = self.assets[lastIndex]
         self.assets[targetIndex] = lastAsset
         self.indexOfAsset[lastAsset] = targetIndex
-
-
-# view
-
-
-@view
-@external
-def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    if numOpportunities == 0:
-        return []
-    opportunities: DynArray[address, MAX_VAULTS] = []
-    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
-        opportunities.append(self.assetOpportunities[_asset][i])
-    return opportunities
-
-
-@view
-@external
-def getAssets() -> DynArray[address, MAX_ASSETS]:
-    numAssets: uint256 = self.numAssets
-    if numAssets == 0:
-        return []
-    assets: DynArray[address, MAX_ASSETS] = []
-    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
-        assets.append(self.assets[i])
-    return assets
-
-
-@view
-@external
-def getUnderlyingAsset(_vaultToken: address) -> address:
-    return self.vaultToAsset[_vaultToken]
 
 
 #################

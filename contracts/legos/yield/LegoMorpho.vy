@@ -134,7 +134,21 @@ def getAssets() -> DynArray[address, MAX_ASSETS]:
 @view
 @external
 def isVaultToken(_vaultToken: address) -> bool:
-    return self._getUnderlyingAsset(_vaultToken) != empty(address)
+    return self._isVaultToken(_vaultToken)
+
+
+@view
+@internal
+def _isVaultToken(_vaultToken: address) -> bool:
+    if self.vaultToAsset[_vaultToken] != empty(address):
+        return True
+    return self._isValidMorphoVault(_vaultToken)
+
+
+@view
+@internal
+def _isValidMorphoVault(_vaultToken: address) -> bool:
+    return staticcall MetaMorphoFactory(META_MORPHO_FACTORY).isMetaMorpho(_vaultToken) or staticcall MetaMorphoFactory(META_MORPHO_FACTORY_LEGACY).isMetaMorpho(_vaultToken)
 
 
 @view
@@ -147,7 +161,7 @@ def getUnderlyingAsset(_vaultToken: address) -> address:
 @internal
 def _getUnderlyingAsset(_vaultToken: address) -> address:
     asset: address = self.vaultToAsset[_vaultToken]
-    if asset == empty(address) and (staticcall MetaMorphoFactory(META_MORPHO_FACTORY).isMetaMorpho(_vaultToken) or staticcall MetaMorphoFactory(META_MORPHO_FACTORY_LEGACY).isMetaMorpho(_vaultToken)):
+    if asset == empty(address) and self._isValidMorphoVault(_vaultToken):
         asset = staticcall Erc4626Interface(_vaultToken).asset()
     return asset
 
@@ -158,7 +172,7 @@ def _getUnderlyingAsset(_vaultToken: address) -> address:
 @view
 @external
 def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
-    if self._getUnderlyingAsset(_vaultToken) == empty(address) or _vaultTokenAmount == 0:
+    if not self._isVaultToken(_vaultToken) or _vaultTokenAmount == 0:
         return 0 # invalid vault token or amount
     return self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
 
@@ -225,7 +239,15 @@ def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) ->
 @view
 @external
 def totalAssets(_vaultToken: address) -> uint256:
+    if not self._isVaultToken(_vaultToken):
+        return 0 # invalid vault token
     return staticcall Erc4626Interface(_vaultToken).totalAssets()
+
+
+@view
+@external
+def totalBorrows(_vaultToken: address) -> uint256:
+    return 0 # TODO
 
 
 ###########

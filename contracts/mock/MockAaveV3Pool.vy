@@ -2,22 +2,9 @@
 
 from ethereum.ercs import IERC20
 
-struct AaveReserveDataV3:
-    configuration: uint256
-    liquidityIndex: uint128
-    currentLiquidityRate: uint128
-    variableBorrowIndex: uint128
-    currentVariableBorrowRate: uint128
-    currentStableBorrowRate: uint128
-    lastUpdateTimestamp: uint40
-    id: uint16
-    aTokenAddress: address
-    stableDebtTokenAddress: address
-    variableDebtTokenAddress: address
-    interestRateStrategyAddress: address
-    accruedToTreasury: uint128
-    unbacked: uint128
-    isolationModeTotalDebt: uint128
+struct TokenData:
+    symbol: String[32]
+    tokenAddress: address
 
 event Transfer:
     sender: indexed(address)
@@ -44,24 +31,23 @@ def __init__():
 
 @view
 @external
-def getReserveData(_asset: address) -> AaveReserveDataV3:
-    return AaveReserveDataV3(
-        configuration=0,
-        liquidityIndex=0,
-        currentLiquidityRate=0,
-        variableBorrowIndex=0,
-        currentVariableBorrowRate=0,
-        currentStableBorrowRate=0,
-        lastUpdateTimestamp=0,
-        id=0,
-        aTokenAddress=self,
-        stableDebtTokenAddress=empty(address),
-        variableDebtTokenAddress=empty(address),
-        interestRateStrategyAddress=empty(address),
-        accruedToTreasury=0,
-        unbacked=0,
-        isolationModeTotalDebt=0,
-    )
+def getReserveTokensAddresses(_asset: address) -> (address, address, address):
+    return self, empty(address), empty(address)
+
+
+@view
+@external
+def getAllATokens() -> DynArray[TokenData, 40]:
+    return [TokenData(
+        symbol="aUSDC",
+        tokenAddress=self,
+    )]
+
+
+@view
+@external
+def getTotalDebt(_asset: address) -> uint256:
+    return 0
 
 
 @external

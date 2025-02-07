@@ -6,8 +6,8 @@ from constants import ZERO_ADDRESS
 
 LEGO_REGISTRIES = {
     "aave_v3": {
-        "base": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
-        "local": ZERO_ADDRESS,
+        "base": ["0xA238Dd80C259a72e81d7e4664a9801593F98d1c5", "0xd82a47fdebB5bf5329b09441C3DaB4b5df2153Ad"],
+        "local": [],
     },
     "morpho": {
         "base": ["0xFf62A7c278C62eD665133147129245053Bbf5918", "0xA9c3D3a366466Fa809d1Ae982Fb2c46E5fC41101"],
@@ -76,9 +76,16 @@ def getRegistry(mock_registry):
 
 
 @pytest.fixture(scope="session")
-def lego_aave_v3(getRegistry, fork, mock_aave_v3_pool, lego_registry, addy_registry_deploy, governor):
-    pool = getRegistry("aave_v3", fork, mock_aave_v3_pool)
-    addr = boa.load("contracts/legos/yield/LegoAaveV3.vy", pool, addy_registry_deploy, name="lego_aave_v3")
+def lego_aave_v3(fork, lego_registry, addy_registry_deploy, governor, mock_aave_v3_pool):
+    registries = LEGO_REGISTRIES["aave_v3"][fork]
+
+    aave_pool = mock_aave_v3_pool 
+    aave_data_provider = mock_aave_v3_pool
+    if len(registries) != 0:
+        aave_pool = boa.from_etherscan(registries[0], name="aave_v3_pool")
+        aave_data_provider = boa.from_etherscan(registries[1], name="aave_v3_data_provider")
+
+    addr = boa.load("contracts/legos/yield/LegoAaveV3.vy", aave_pool, aave_data_provider, addy_registry_deploy, name="lego_aave_v3")
     assert lego_registry.registerNewLego(addr, "Aave V3", sender=governor) != 0 # dev: invalid lego id
     return addr
 
