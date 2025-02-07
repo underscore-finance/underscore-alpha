@@ -1,14 +1,14 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
 from conf_utils import filter_logs
 
 
 @pytest.fixture(scope="module")
 def new_mock_lego(lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="lego_morpho")
-    assert lego_registry.registerNewLego(addr, "New Mock Lego", sender=governor) != 0 # dev: invalid lego id
+    assert lego_registry.registerNewLego(addr, "New Mock Lego", YIELD_OPP_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
@@ -239,35 +239,3 @@ def test_get_assets(new_mock_lego, governor, alpha_token, bravo_token, charlie_t
     assert new_mock_lego.removeAssetOpportunity(alpha_token, alpha_token_erc4626_vault, sender=governor)
     assert new_mock_lego.removeAssetOpportunity(charlie_token, charlie_token_erc4626_vault, sender=governor)
     assert len(new_mock_lego.getAssets()) == 0
-
-
-def test_get_underlying_asset(new_mock_lego, governor, alpha_token, bravo_token, 
-                            alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, bravo_token_erc4626_vault):
-    # Test empty state
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault) == ZERO_ADDRESS
-    assert new_mock_lego.getUnderlyingAsset(bravo_token_erc4626_vault) == ZERO_ADDRESS
-
-    # Add first vault for alpha token
-    assert new_mock_lego.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault, sender=governor)
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault) == alpha_token.address
-
-    # Add second vault for alpha token
-    assert new_mock_lego.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault_another, sender=governor)
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault) == alpha_token.address
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault_another) == alpha_token.address
-
-    # Add vault for bravo token
-    assert new_mock_lego.addAssetOpportunity(bravo_token, bravo_token_erc4626_vault, sender=governor)
-    assert new_mock_lego.getUnderlyingAsset(bravo_token_erc4626_vault) == bravo_token.address
-
-    # Remove first alpha vault and verify mapping is cleared
-    assert new_mock_lego.removeAssetOpportunity(alpha_token, alpha_token_erc4626_vault, sender=governor)
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault) == ZERO_ADDRESS
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault_another) == alpha_token.address  # Second vault still mapped
-
-    # Remove remaining vaults and verify all mappings are cleared
-    assert new_mock_lego.removeAssetOpportunity(alpha_token, alpha_token_erc4626_vault_another, sender=governor)
-    assert new_mock_lego.removeAssetOpportunity(bravo_token, bravo_token_erc4626_vault, sender=governor)
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault) == ZERO_ADDRESS
-    assert new_mock_lego.getUnderlyingAsset(alpha_token_erc4626_vault_another) == ZERO_ADDRESS
-    assert new_mock_lego.getUnderlyingAsset(bravo_token_erc4626_vault) == ZERO_ADDRESS

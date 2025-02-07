@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
 from contracts.core import WalletTemplate
 
 
@@ -134,7 +134,7 @@ def mock_weth():
 def mock_lego_alpha(alpha_token, alpha_token_erc4626_vault, lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_alpha")
     assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault, sender=governor)
-    legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha", sender=governor)
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha", YIELD_OPP_UINT256, sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
 
@@ -143,7 +143,7 @@ def mock_lego_alpha(alpha_token, alpha_token_erc4626_vault, lego_registry, addy_
 def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_alpha_another")
     assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault_another, sender=governor)
-    legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", sender=governor)
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", YIELD_OPP_UINT256, sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
 
@@ -155,7 +155,7 @@ def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego
 def mock_lego_bravo(bravo_token, bravo_token_erc4626_vault, addy_registry_deploy, lego_registry, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_bravo")
     assert addr.addAssetOpportunity(bravo_token, bravo_token_erc4626_vault, sender=governor)
-    legoId = lego_registry.registerNewLego(addr, "Mock Lego Bravo", sender=governor)
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Bravo", YIELD_OPP_UINT256, sender=governor)
     assert legoId != 0 # dev: invalid lego id
     return addr
 

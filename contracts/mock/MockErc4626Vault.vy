@@ -44,6 +44,16 @@ def redeem(_shares: uint256, _receiver: address, _owner: address) -> uint256:
     return amount
 
 
+@external
+def convertToAssets(_vaultTokenAmount: uint256) -> uint256:
+    return _vaultTokenAmount
+
+
+@external
+def totalAssets() -> uint256:
+    return staticcall IERC20(self.asset).balanceOf(self)
+
+
 # erc20 methods
 
 

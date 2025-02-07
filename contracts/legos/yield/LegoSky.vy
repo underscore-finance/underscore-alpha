@@ -1,9 +1,9 @@
 # @version 0.4.0
 
-implements: LegoPartner
+implements: LegoYield
 
 from ethereum.ercs import IERC20
-import interfaces.LegoInterface as LegoPartner
+from interfaces import LegoYield
 
 interface SkyPsm:
     def swapExactIn(_assetIn: address, _assetOut: address, _amountIn: uint256, _minAmountOut: uint256, _receiver: address, _referralCode: uint256) -> uint256: nonpayable
@@ -339,16 +339,6 @@ def withdrawTokens(
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
     log SkyWithdrawal(msg.sender, _asset, vaultToken, assetAmountReceived, usdValue, vaultTokenAmount, _recipient)
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
-
-
-###################
-# Not Implemented #
-###################
-
-
-@external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
-    raise "Not Implemented"
 
 
 #################

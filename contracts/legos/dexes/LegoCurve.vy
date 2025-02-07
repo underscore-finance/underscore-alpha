@@ -1,9 +1,9 @@
 # @version 0.4.0
 
-implements: LegoPartner
+implements: LegoDex
 
 from ethereum.ercs import IERC20
-import interfaces.LegoInterface as LegoPartner
+from interfaces import LegoDex
 
 interface CurveMetaRegistry:
     def get_coin_indices(_pool: address, _from: address, _to: address) -> (int128, int128, bool): view
@@ -299,21 +299,6 @@ def setPreferredPools(_pools: DynArray[address, MAX_POOLS]) -> bool:
     self.preferredPools = pools
     log PreferredPoolsSet(len(pools))
     return True
-
-
-###################
-# Not Implemented #
-###################
-
-
-@external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, address, uint256, uint256, uint256):
-    raise "Not Implemented"
-
-
-@external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
-    raise "Not Implemented"
 
 
 #################

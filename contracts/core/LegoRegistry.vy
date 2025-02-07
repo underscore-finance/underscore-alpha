@@ -6,16 +6,22 @@ interface LegoPartner:
 interface AddyRegistry:
     def governor() -> address: view
 
+flag LegoType:
+    YIELD_OPP
+    DEX
+
 struct LegoInfo:
     addr: address
     version: uint256
     lastModified: uint256
     description: String[64]
+    legoType: LegoType
 
 event NewLegoRegistered:
     addr: indexed(address)
     legoId: uint256
     description: String[64]
+    legoType: LegoType
 
 event LegoAddrUpdated:
     newAddr: indexed(address)
@@ -23,12 +29,14 @@ event LegoAddrUpdated:
     legoId: uint256
     version: uint256
     description: String[64]
+    legoType: LegoType
 
 event LegoAddrDisabled:
     prevAddr: indexed(address)
     legoId: uint256
     version: uint256
     description: String[64]
+    legoType: LegoType
 
 event LegoHelperSet:
     helperAddr: indexed(address)
@@ -85,12 +93,13 @@ def _isValidNewLegoAddr(_addr: address) -> bool:
 
 
 @external
-def registerNewLego(_addr: address, _description: String[64]) -> uint256:
+def registerNewLego(_addr: address, _description: String[64], _legoType: LegoType) -> uint256:
     """
     @notice Register a new Lego integration contract in the registry
     @dev Only callable by governor when registry is activated. Sets Lego ID on the contract.
     @param _addr The address of the Lego contract to register
     @param _description A brief description of the Lego integration's functionality
+    @param _legoType The type of Lego integration
     @return The assigned Lego ID if registration successful, 0 if failed
     """
     assert self.isActivated # dev: not activated
@@ -104,6 +113,7 @@ def registerNewLego(_addr: address, _description: String[64]) -> uint256:
         version=1,
         lastModified=block.timestamp,
         description=_description,
+        legoType=_legoType,
     )
 
     legoId: uint256 = self.numLegos
@@ -112,7 +122,7 @@ def registerNewLego(_addr: address, _description: String[64]) -> uint256:
     self.legoInfo[legoId] = data
     assert extcall LegoPartner(_addr).setLegoId(legoId) # dev: set id failed
 
-    log NewLegoRegistered(_addr, legoId, _description)
+    log NewLegoRegistered(_addr, legoId, _description, _legoType)
     return legoId
 
 
@@ -174,7 +184,7 @@ def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     if prevAddr != empty(address):
         self.legoAddrToId[prevAddr] = 0
 
-    log LegoAddrUpdated(_newAddr, prevAddr, _legoId, data.version, data.description)
+    log LegoAddrUpdated(_newAddr, prevAddr, _legoId, data.version, data.description, data.legoType)
     return True
 
 
@@ -227,7 +237,7 @@ def disableLegoAddr(_legoId: uint256) -> bool:
     self.legoInfo[_legoId] = data
     self.legoAddrToId[prevAddr] = 0
 
-    log LegoAddrDisabled(prevAddr, _legoId, data.version, data.description)
+    log LegoAddrDisabled(prevAddr, _legoId, data.version, data.description, data.legoType)
     return True
 
 

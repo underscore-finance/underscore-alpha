@@ -1,0 +1,76 @@
+# @version 0.4.0
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    ...
+
+# yield opportunities
+
+@external
+def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, address, uint256, uint256, uint256):
+    ...
+
+@external
+def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
+    ...
+
+@view
+@external
+def getAssetOpportunities(_asset: address) -> DynArray[address, 15]:
+    ...
+
+@view
+@external
+def getAssets() -> DynArray[address, 25]:
+    ...
+
+@view
+@external
+def isVaultToken(_vaultToken: address) -> bool:
+    ...
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    ...
+
+@view
+@external
+def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    ...
+
+@view
+@external
+def getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> uint256:
+    ...
+
+@view
+@external
+def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> (address, uint256, uint256):
+    ...
+
+@view
+@external
+def totalAssets(_vaultToken: address) -> uint256:
+    ...
+
+@view
+@external
+def totalBorrows(_vaultToken: address) -> uint256:
+    ...
+
+# config
+
+@external
+def recoverFunds(_asset: address, _recipient: address) -> bool:
+    ...
+
+@view
+@external
+def legoId() -> uint256:
+    ...
+
+@external
+def setLegoId(_legoId: uint256) -> bool:
+    ...

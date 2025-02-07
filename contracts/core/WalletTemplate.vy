@@ -1,7 +1,8 @@
 # @version 0.4.0
 
 from ethereum.ercs import IERC20
-import interfaces.LegoInterface as LegoPartner
+from interfaces import LegoDex
+from interfaces import LegoYield
 
 interface PriceSheets:
     def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> TransactionCost: view
@@ -571,7 +572,7 @@ def _depositTokens(
     vaultTokenAmountReceived: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue = extcall LegoPartner(legoAddr).depositTokens(_asset, amount, _vault, self)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue = extcall LegoYield(legoAddr).depositTokens(_asset, amount, _vault, self)
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     log AgenticDeposit(_signer, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
@@ -664,7 +665,7 @@ def _withdrawTokens(
     vaultTokenAmountBurned: uint256 = 0
     refundVaultTokenAmount: uint256 = 0
     usdValue: uint256 = 0
-    assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue = extcall LegoPartner(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken, self)
+    assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue = extcall LegoYield(legoAddr).withdrawTokens(_asset, withdrawAmount, _vaultToken, self)
 
     # zero out approvals
     if _vaultToken != empty(address):
@@ -854,7 +855,7 @@ def _swapTokens(
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    actualSwapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoPartner(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
+    actualSwapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     log AgenticSwap(_signer, _tokenIn, _tokenOut, actualSwapAmount, toAmount, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)

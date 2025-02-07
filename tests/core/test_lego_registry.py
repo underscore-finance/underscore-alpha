@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
 from conf_utils import filter_logs
 
 
@@ -32,7 +32,7 @@ def test_register_new_lego(lego_registry, new_lego, governor):
     numLegos = lego_registry.numLegos()
 
     # Test successful registration
-    lego_id = lego_registry.registerNewLego(new_lego, description, sender=governor)
+    lego_id = lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
     assert lego_id  == numLegos
 
     # Verify event
@@ -61,20 +61,20 @@ def test_register_new_lego_invalid_cases(lego_registry, new_lego, governor, bob)
     
     # Test non-governor cannot register
     with boa.reverts("no perms"):
-        lego_registry.registerNewLego(new_lego, description, sender=bob)
+        lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=bob)
     
     # Test cannot register zero address
     assert not lego_registry.isValidNewLegoAddr(ZERO_ADDRESS)
-    assert lego_registry.registerNewLego(ZERO_ADDRESS, description, sender=governor) == 0
+    assert lego_registry.registerNewLego(ZERO_ADDRESS, description, YIELD_OPP_UINT256, sender=governor) == 0
     
     # Test cannot register same lego twice
-    assert lego_registry.registerNewLego(new_lego, description, sender=governor) != 0
-    assert lego_registry.registerNewLego(new_lego, description, sender=governor) == 0
+    assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor) != 0
+    assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor) == 0
 
 
 def test_update_lego_addr(lego_registry, new_lego, new_lego_b, governor, bob):
     description = "Test Lego"
-    lego_id = lego_registry.registerNewLego(new_lego, description, sender=governor)
+    lego_id = lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
     assert lego_id != 0
 
     # Test non-governor cannot update
@@ -111,7 +111,7 @@ def test_update_lego_addr(lego_registry, new_lego, new_lego_b, governor, bob):
 
 def test_disable_lego_addr(lego_registry, new_lego, governor, bob):
     description = "Test Lego"
-    lego_id = lego_registry.registerNewLego(new_lego, description, sender=governor)
+    lego_id = lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
     assert lego_id != 0
 
     # Test non-governor cannot disable
@@ -184,7 +184,7 @@ def test_activation(lego_registry, new_lego, governor, bob):
     # Test operations fail when deactivated
     description = "Test Lego"
     with boa.reverts("not activated"):
-        lego_registry.registerNewLego(new_lego, description, sender=governor)
+        lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
     
     # Test reactivation
     lego_registry.activate(True, sender=governor)
@@ -193,7 +193,7 @@ def test_activation(lego_registry, new_lego, governor, bob):
 
 def test_view_functions(lego_registry, new_lego, governor):
     description = "Test Lego"
-    lego_id = lego_registry.registerNewLego(new_lego, description, sender=governor)
+    lego_id = lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
     
     # Test isValidNewLegoAddr
     assert not lego_registry.isValidNewLegoAddr(new_lego.address)  # Already registered

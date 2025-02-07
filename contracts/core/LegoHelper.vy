@@ -1,8 +1,23 @@
 # @version 0.4.0
 
+from interfaces import LegoYield
+
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
     def isValidLegoId(_legoId: uint256) -> bool: view
+    def legoInfo(_legoId: uint256) -> LegoInfo: view
+    def numLegos() -> uint256: view
+
+flag LegoType:
+    YIELD_OPP
+    DEX
+
+struct LegoInfo:
+    addr: address
+    version: uint256
+    lastModified: uint256
+    description: String[64]
+    legoType: LegoType
 
 LEGO_REGISTRY: public(immutable(address))
 
@@ -44,6 +59,12 @@ def __init__(
     MOONWELL_ID = _moonwellId
     MORPHO_ID = _morphoId
     SKY_ID = _skyId
+
+
+#######################
+# Yield Opportunities #
+#######################
+
 
 @view
 @external
@@ -127,3 +148,21 @@ def sky() -> address:
 @external
 def skyId() -> uint256:
     return SKY_ID
+
+
+# utility functions
+
+
+@view
+@external
+def getLegoFromVaultToken(_vaultToken: address) -> address:
+    legoRegistry: address = LEGO_REGISTRY
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+        if staticcall LegoYield(legoInfo.addr).isVaultToken(_vaultToken):
+            return legoInfo.addr
+    return empty(address)
+

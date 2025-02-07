@@ -1,9 +1,9 @@
 # @version 0.4.0
 
-implements: LegoPartner
+implements: LegoDex
 
 from ethereum.ercs import IERC20
-import interfaces.LegoInterface as LegoPartner
+from interfaces import LegoDex
 
 interface AeroSlipStreamFactory:
     def getPool(_tokenA: address, _tokenB: address, _tickSpacing: int24) -> address: view
@@ -163,21 +163,6 @@ def swapTokens(
 
     log AeroSlipStreamSwap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, usdValue, _recipient)
     return actualSwapAmount, toAmount, refundAssetAmount, usdValue
-
-
-###################
-# Not Implemented #
-###################
-
-
-@external
-def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, address, uint256, uint256, uint256):
-    raise "Not Implemented"
-
-
-@external
-def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
-    raise "Not Implemented"
 
 
 #################

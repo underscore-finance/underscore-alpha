@@ -1,7 +1,6 @@
 # @version 0.4.0
 
 from ethereum.ercs import IERC20Detailed
-import interfaces.LegoInterface as LegoPartner
 import interfaces.OraclePartnerInterface as OraclePartner
 
 interface AddyRegistry:
