@@ -18,6 +18,14 @@ flag LegoType:
     YIELD_OPP
     DEX
 
+struct UnderlyingData:
+    asset: address
+    amount: uint256
+    usdValue: uint256
+    legoId: uint256
+    legoAddr: address
+    legoDesc: String[64]
+
 struct LegoInfo:
     addr: address
     version: uint256
@@ -170,7 +178,7 @@ def skyId() -> uint256:
 
 @view
 @external
-def getLegoFromVaultToken(_vaultToken: address) -> address:
+def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address, String[64]):
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
     numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
     for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
@@ -178,15 +186,15 @@ def getLegoFromVaultToken(_vaultToken: address) -> address:
         if legoInfo.legoType != LegoType.YIELD_OPP:
             continue
         if staticcall LegoYield(legoInfo.addr).isVaultToken(_vaultToken):
-            return legoInfo.addr
-    return empty(address)
+            return i, legoInfo.addr, legoInfo.description
+    return 0, empty(address), ""
 
 
 @view
 @external
-def getUnderlyingData(_asset: address, _amount: uint256) -> (address, uint256, uint256):
+def getUnderlyingData(_asset: address, _amount: uint256) -> UnderlyingData:
     if _amount == 0 or _asset == empty(address):
-        return empty(address), 0, 0 # bad inputs
+        return empty(UnderlyingData)
 
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
     oracleRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
@@ -202,6 +210,20 @@ def getUnderlyingData(_asset: address, _amount: uint256) -> (address, uint256, u
         usdValue: uint256 = 0
         asset, underlyingAmount, usdValue = staticcall LegoYield(legoInfo.addr).getUnderlyingData(_asset, _amount, oracleRegistry)
         if asset != empty(address):
-            return asset, underlyingAmount, usdValue
+            return UnderlyingData(
+                asset=asset,
+                amount=underlyingAmount,
+                usdValue=usdValue,
+                legoId=i,
+                legoAddr=legoInfo.addr,
+                legoDesc=legoInfo.description,
+            )
 
-    return _asset, _amount, staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount)
+    return UnderlyingData(
+        asset=_asset,
+        amount=_amount,
+        usdValue=staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount),
+        legoId=0,
+        legoAddr=empty(address),
+        legoDesc="",
+    )
