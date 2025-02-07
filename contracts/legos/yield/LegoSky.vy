@@ -7,6 +7,9 @@ import interfaces.LegoInterface as LegoPartner
 
 interface SkyPsm:
     def swapExactIn(_assetIn: address, _assetOut: address, _amountIn: uint256, _minAmountOut: uint256, _receiver: address, _referralCode: uint256) -> uint256: nonpayable
+    def convertToAssets(_asset: address, _numShares: uint256) -> uint256: view
+    def convertToShares(_asset: address, _amount: uint256) -> uint256: view
+    def totalAssets() -> uint256: view
     def susds() -> address: view
     def usdc() -> address: view
     def usds() -> address: view
@@ -55,16 +58,10 @@ event SkyLegoIdSet:
 event SkyActivated:
     isActivated: bool
 
-# asset opportunities
-assetOpportunities: public(HashMap[address, HashMap[uint256, address]]) # asset -> index -> vault token
-indexOfAssetOpportunity: public(HashMap[address, HashMap[address, uint256]]) # asset -> vault token -> index
-numAssetOpportunities: public(HashMap[address, uint256]) # asset -> number of opportunities
-vaultToAsset: public(HashMap[address, address]) # vault token -> asset
-
-# assets
-assets: public(HashMap[uint256, address]) # index -> asset
-indexOfAsset: public(HashMap[address, uint256]) # asset -> index
-numAssets: public(uint256) # number of assets
+# sky assets
+usdc: public(address)
+usds: public(address)
+susds: public(address)
 
 # config
 legoId: public(uint256)
@@ -72,6 +69,8 @@ isActivated: public(bool)
 SKY_PSM: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
+HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
+MIN_SLIPPAGE: constant(uint256) = 2_00 # 2%
 MAX_VAULTS: constant(uint256) = 15
 MAX_ASSETS: constant(uint256) = 25
 
@@ -83,6 +82,20 @@ def __init__(_skyPsm: address, _addyRegistry: address):
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
 
+    # sky assets
+    usdc: address = staticcall SkyPsm(_skyPsm).usdc()
+    if usdc != empty(address):
+        assert extcall IERC20(usdc).approve(_skyPsm, max_value(uint256), default_return_value=True) # dev: max approval failed
+        self.usdc = usdc
+    usds: address = staticcall SkyPsm(_skyPsm).usds()
+    if usds != empty(address):
+        assert extcall IERC20(usds).approve(_skyPsm, max_value(uint256), default_return_value=True) # dev: max approval failed
+        self.usds = usds
+    susds: address = staticcall SkyPsm(_skyPsm).susds()
+    if susds != empty(address):
+        assert extcall IERC20(susds).approve(_skyPsm, max_value(uint256), default_return_value=True) # dev: max approval failed
+        self.susds = susds
+
 
 @view
 @external
@@ -90,14 +103,114 @@ def getRegistries() -> DynArray[address, 10]:
     return [SKY_PSM]
 
 
+#############
+# Utilities #
+#############
+
+
+# assets and vault tokens
+
+
+@view
+@external
+def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
+    if _asset not in [self.usdc, self.usds]:
+        return []
+    return [self.susds]
+
+
+@view
+@external
+def getAssets() -> DynArray[address, MAX_ASSETS]:
+    return [self.usdc, self.usds]
+
+
+# underlying asset
+
+
+@view
+@external
+def isVaultToken(_vaultToken: address) -> bool:
+    return self._isVaultToken(_vaultToken)
+
+
 @view
 @internal
-def _validateAssetAndVault(_asset: address, _vault: address) -> address:
-    vault: address = _vault
-    if _vault != empty(address):
-        vault = self.assetOpportunities[_asset][1] # only one opportunity for sky
-    assert self.indexOfAssetOpportunity[_asset][vault] != 0 # dev: asset + vault not supported
-    return vault
+def _isVaultToken(_vaultToken: address) -> bool:
+    return _vaultToken == self.susds
+
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    return self._getUnderlyingAsset(_vaultToken)
+
+
+@view
+@internal
+def _getUnderlyingAsset(_vaultToken: address) -> address:
+    if not self._isVaultToken(_vaultToken):
+        return empty(address)
+    return self.usds # treating usds as default underlying asset
+
+
+# underlying amount
+
+
+@view
+@external
+def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    if not self._isVaultToken(_vaultToken) or _vaultTokenAmount == 0:
+        return 0 # invalid vault token or amount
+    return self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+
+
+@view
+@internal
+def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    # treating usds as default underlying asset
+    return staticcall SkyPsm(SKY_PSM).convertToAssets(self.usds, _vaultTokenAmount)
+
+
+# usd value
+
+
+@view
+@external
+def getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> uint256:
+    return self._getUsdValueOfVaultToken(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUsdValueOfVaultToken(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> uint256:
+    asset: address = empty(address)
+    underlyingAmount: uint256 = 0
+    usdValue: uint256 = 0
+    asset, underlyingAmount, usdValue = self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+    return usdValue
+
+
+# all underlying data together
+
+
+@view
+@external
+def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address = empty(address)) -> (address, uint256, uint256):
+    return self._getUnderlyingData(_vaultToken, _vaultTokenAmount, _oracleRegistry)
+
+
+@view
+@internal
+def _getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> (address, uint256, uint256):
+    if _vaultTokenAmount == 0 or _vaultToken == empty(address):
+        return empty(address), 0, 0 # bad inputs
+    asset: address = self._getUnderlyingAsset(_vaultToken)
+    if asset == empty(address):
+        return empty(address), 0, 0 # invalid vault token
+    underlyingAmount: uint256 = self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
+    usdValue: uint256 = self._getUsdValue(asset, underlyingAmount, _oracleRegistry)
+    return asset, underlyingAmount, usdValue
 
 
 @view
@@ -107,6 +220,23 @@ def _getUsdValue(_asset: address, _amount: uint256, _oracleRegistry: address) ->
     if _oracleRegistry == empty(address):
         oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
     return staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount)
+
+
+# other
+
+
+@view
+@external
+def totalAssets(_vaultToken: address) -> uint256:
+    if not self._isVaultToken(_vaultToken):
+        return 0 # invalid vault token
+    return staticcall SkyPsm(SKY_PSM).totalAssets()
+
+
+@view
+@external
+def totalBorrows(_vaultToken: address) -> uint256:
+    return 0
 
 
 ###########
@@ -123,7 +253,11 @@ def depositTokens(
     _oracleRegistry: address = empty(address),
 ) -> (uint256, address, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
-    vaultToken: address = self._validateAssetAndVault(_asset, _vault)
+
+    assert _asset in [self.usdc, self.usds] # dev: invalid asset
+    vaultToken: address = self.susds
+    if _vault != empty(address):
+        assert vaultToken == _vault # dev: invalid vault
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -134,9 +268,13 @@ def depositTokens(
     assert transferAmount != 0 # dev: nothing to transfer
     assert extcall IERC20(_asset).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
 
-    # deposit assets into lego partner
+    # calc min amount out
     depositAmount: uint256 = min(transferAmount, staticcall IERC20(_asset).balanceOf(self))
-    vaultTokenAmountReceived: uint256 = extcall SkyPsm(SKY_PSM).swapExactIn(_asset, vaultToken, depositAmount, 0, _recipient, 0)
+    expectedShares: uint256 = staticcall SkyPsm(SKY_PSM).convertToShares(_asset, depositAmount)
+    minAmountOut: uint256 = expectedShares * (HUNDRED_PERCENT - MIN_SLIPPAGE) // HUNDRED_PERCENT
+
+    # deposit assets into lego partner
+    vaultTokenAmountReceived: uint256 = extcall SkyPsm(SKY_PSM).swapExactIn(_asset, vaultToken, depositAmount, minAmountOut, _recipient, 0)
     assert vaultTokenAmountReceived != 0 # dev: no vault tokens received
 
     # refund if full deposit didn't get through
@@ -166,7 +304,11 @@ def withdrawTokens(
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
-    vaultToken: address = self._validateAssetAndVault(_asset, _vaultToken)
+
+    assert _asset in [self.usdc, self.usds] # dev: invalid asset
+    vaultToken: address = self.susds
+    if _vaultToken != empty(address):
+        assert vaultToken == _vaultToken # dev: invalid vault
 
     # pre balances
     preLegoVaultBalance: uint256 = staticcall IERC20(vaultToken).balanceOf(self)
@@ -177,9 +319,13 @@ def withdrawTokens(
     assert transferVaultTokenAmount != 0 # dev: nothing to transfer
     assert extcall IERC20(vaultToken).transferFrom(msg.sender, self, transferVaultTokenAmount, default_return_value=True) # dev: transfer failed
 
-    # withdraw assets from lego partner
+    # calc min amount out
     vaultTokenAmount: uint256 = min(transferVaultTokenAmount, staticcall IERC20(vaultToken).balanceOf(self))
-    assetAmountReceived: uint256 = extcall SkyPsm(SKY_PSM).swapExactIn(vaultToken, _asset, vaultTokenAmount, 0, _recipient, 0)
+    expectedAssetAmount: uint256 = staticcall SkyPsm(SKY_PSM).convertToAssets(_asset, vaultTokenAmount)
+    minAmountOut: uint256 = expectedAssetAmount * (HUNDRED_PERCENT - MIN_SLIPPAGE) // HUNDRED_PERCENT
+
+    # withdraw assets from lego partner
+    assetAmountReceived: uint256 = extcall SkyPsm(SKY_PSM).swapExactIn(vaultToken, _asset, vaultTokenAmount, minAmountOut, _recipient, 0)
     assert assetAmountReceived != 0 # dev: no asset amount received
 
     # refund if full withdrawal didn't happen
@@ -203,155 +349,6 @@ def withdrawTokens(
 @external
 def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     raise "Not Implemented"
-
-
-##################
-# Asset Registry #
-##################
-
-
-# settings
-
-
-@external
-def addAssetOpportunity(_asset: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
-
-    # specific to lego
-    skyPsm: address = SKY_PSM
-    assert _asset in [staticcall SkyPsm(skyPsm).usdc(), staticcall SkyPsm(skyPsm).usds()] # dev: asset not supported
-    vaultToken: address = staticcall SkyPsm(skyPsm).susds()
-    assert extcall IERC20(_asset).approve(skyPsm, max_value(uint256), default_return_value=True) # dev: max approval failed
-    assert extcall IERC20(vaultToken).approve(skyPsm, max_value(uint256), default_return_value=True) # dev: max approval failed
-
-    self._addAssetOpportunity(_asset, vaultToken)
-    return True
-
-
-@external
-def removeAssetOpportunity(_asset: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
-
-    vaultToken: address = self.assetOpportunities[_asset][1] # only one opportunity for sky
-    self._removeAssetOpportunity(_asset, vaultToken)
-    assert extcall IERC20(_asset).approve(SKY_PSM, 0, default_return_value=True) # dev: approval failed
-    return True
-
-
-# internal / utils
-
-
-@internal
-def _addAssetOpportunity(_asset: address, _vault: address):
-    assert self.indexOfAssetOpportunity[_asset][_vault] == 0 # dev: asset + vault token already added
-    assert empty(address) not in [_asset, _vault] # dev: invalid addresses
-
-    aid: uint256 = self.numAssetOpportunities[_asset]
-    if aid == 0:
-        aid = 1 # not using 0 index
-    self.assetOpportunities[_asset][aid] = _vault
-    self.indexOfAssetOpportunity[_asset][_vault] = aid
-    self.numAssetOpportunities[_asset] = aid + 1
-    self.vaultToAsset[_vault] = _asset
-
-    # add asset
-    self._addAsset(_asset)
-
-    log AssetOpportunityAdded(_asset, _vault)
-
-
-@internal
-def _addAsset(_asset: address):
-    if self.indexOfAsset[_asset] != 0:
-        return
-    aid: uint256 = self.numAssets
-    if aid == 0:
-        aid = 1 # not using 0 index
-    self.assets[aid] = _asset
-    self.indexOfAsset[_asset] = aid
-    self.numAssets = aid + 1
-
-
-@internal
-def _removeAssetOpportunity(_asset: address, _vault: address):
-    targetIndex: uint256 = self.indexOfAssetOpportunity[_asset][_vault]
-    assert targetIndex != 0 # dev: asset + vault token not found
-
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    assert numOpportunities > 1 # dev: no opportunities to remove
-
-    # update data
-    lastIndex: uint256 = numOpportunities - 1
-    self.numAssetOpportunities[_asset] = lastIndex
-    self.indexOfAssetOpportunity[_asset][_vault] = 0
-    self.vaultToAsset[_vault] = empty(address)
-
-    # shift to replace the removed one
-    if targetIndex != lastIndex:
-        lastVaultToken: address = self.assetOpportunities[_asset][lastIndex]
-        self.assetOpportunities[_asset][targetIndex] = lastVaultToken
-        self.indexOfAssetOpportunity[_asset][lastVaultToken] = targetIndex
-
-    # remove asset
-    if lastIndex <= 1:
-        self._removeAsset(_asset)
-
-    log AssetOpportunityRemoved(_asset, _vault)
-
-
-@internal
-def _removeAsset(_asset: address):
-    numAssets: uint256 = self.numAssets
-    if numAssets <= 1:
-        return
-
-    targetIndex: uint256 = self.indexOfAsset[_asset]
-    if targetIndex == 0:
-        return
-
-    # update data
-    lastIndex: uint256 = numAssets - 1
-    self.numAssets = lastIndex
-    self.indexOfAsset[_asset] = 0
-
-    # shift to replace the removed one
-    if targetIndex != lastIndex:
-        lastAsset: address = self.assets[lastIndex]
-        self.assets[targetIndex] = lastAsset
-        self.indexOfAsset[lastAsset] = targetIndex
-
-
-# view
-
-
-@view
-@external
-def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    if numOpportunities == 0:
-        return []
-    opportunities: DynArray[address, MAX_VAULTS] = []
-    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
-        opportunities.append(self.assetOpportunities[_asset][i])
-    return opportunities
-
-
-@view
-@external
-def getAssets() -> DynArray[address, MAX_ASSETS]:
-    numAssets: uint256 = self.numAssets
-    if numAssets == 0:
-        return []
-    assets: DynArray[address, MAX_ASSETS] = []
-    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
-        assets.append(self.assets[i])
-    return assets
-
-
-@view
-@external
-def getUnderlyingAsset(_vaultToken: address) -> address:
-    return self.vaultToAsset[_vaultToken]
 
 
 #################

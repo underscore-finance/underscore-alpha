@@ -13,15 +13,15 @@ interface CompoundV2:
     def totalSupply() -> uint256: view
     def underlying() -> address: view
 
-interface CompoundV2Comptroller:
-    def getAllMarkets() -> DynArray[address, MAX_MARKETS]: view
-
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface CompoundV2Comptroller:
+    def getAllMarkets() -> DynArray[address, MAX_MARKETS]: view
 
 event MoonwellDeposit:
     sender: indexed(address)

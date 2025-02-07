@@ -12,8 +12,12 @@ interface Erc4626Interface:
     def totalAssets() -> uint256: view
     def asset() -> address: view
 
-interface EulerVault:
-    def totalBorrows() -> uint256: view
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
+    def governor() -> address: view
+
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface EulerEarnFactory:
     def isValidDeployment(_vault: address) -> bool: view
@@ -21,12 +25,8 @@ interface EulerEarnFactory:
 interface EulerEvaultFactory:
     def isProxy(_vault: address) -> bool: view
 
-interface AddyRegistry:
-    def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
-
-interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+interface EulerVault:
+    def totalBorrows() -> uint256: view
 
 event EulerDeposit:
     sender: indexed(address)

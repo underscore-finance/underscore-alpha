@@ -12,15 +12,15 @@ interface Erc4626Interface:
     def totalAssets() -> uint256: view
     def asset() -> address: view
 
-interface MetaMorphoFactory:
-    def isMetaMorpho(_vault: address) -> bool: view
-
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface MetaMorphoFactory:
+    def isMetaMorpho(_vault: address) -> bool: view
 
 event MorphoDeposit:
     sender: indexed(address)

@@ -59,3 +59,24 @@ def isProxy(_vault: address) -> bool:
 @external
 def isMetaMorpho(_vault: address) -> bool:
     return True
+
+
+# sky
+
+
+@view
+@external
+def usdc() -> address:
+    return empty(address)
+
+
+@view
+@external
+def usds() -> address:
+    return empty(address)
+
+
+@view
+@external
+def susds() -> address:
+    return empty(address)
