@@ -8,6 +8,9 @@ interface LegoRegistry:
     def legoInfo(_legoId: uint256) -> LegoInfo: view
     def numLegos() -> uint256: view
 
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
@@ -181,8 +184,8 @@ def getLegoFromVaultToken(_vaultToken: address) -> address:
 
 @view
 @external
-def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256) -> (address, uint256, uint256):
-    if _vaultTokenAmount == 0 or _vaultToken == empty(address):
+def getUnderlyingData(_asset: address, _amount: uint256) -> (address, uint256, uint256):
+    if _amount == 0 or _asset == empty(address):
         return empty(address), 0, 0 # bad inputs
 
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
@@ -197,8 +200,8 @@ def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256) -> (addr
         asset: address = empty(address)
         underlyingAmount: uint256 = 0
         usdValue: uint256 = 0
-        asset, underlyingAmount, usdValue = staticcall LegoYield(legoInfo.addr).getUnderlyingData(_vaultToken, _vaultTokenAmount, oracleRegistry)
+        asset, underlyingAmount, usdValue = staticcall LegoYield(legoInfo.addr).getUnderlyingData(_asset, _amount, oracleRegistry)
         if asset != empty(address):
             return asset, underlyingAmount, usdValue
 
-    return empty(address), 0, 0
+    return _asset, _amount, staticcall OracleRegistry(oracleRegistry).getUsdValue(_asset, _amount)
