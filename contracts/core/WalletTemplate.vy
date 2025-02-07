@@ -327,6 +327,7 @@ def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _ini
             allowedLegoIds=[],
             allowedActions=empty(AllowedActions),
         )
+        log AgentAdded(_initialAgent, 0, 0)
 
     # protocol subscription
     protocolSub: ProtocolSub = empty(ProtocolSub)
