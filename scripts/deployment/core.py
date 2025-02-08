@@ -50,3 +50,6 @@ def deploy_core(deployer):
         addy_registry.registerNewAddy(price_sheets, "Price Sheets")
     if addy_registry.isValidNewAddy(oracle_registry):
         addy_registry.registerNewAddy(oracle_registry, "Oracle Registry")
+
+    if agent_factory.numAgenticWalletsAllowed() == 0:
+        agent_factory.setNumAgenticWalletsAllowed(10)
