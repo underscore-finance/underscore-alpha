@@ -869,7 +869,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xa7176F6B43F7E7b25ea7002c8713d9BFd2aC4A32",
+    "address": "0xe14514759D2E8A7349961c11F61A51769554f68B",
     "path": "contracts/legos/yield/LegoAaveV3.vy"
   },
   "AddyRegistry": {
@@ -1395,7 +1395,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x2D6DD1c0a2Ad951Ea2C4F95173C98173ac6Bcf17",
+    "address": "0xa79c4aA551F38EeBC90291C1C87AE4E0D129355E",
     "path": "contracts/core/AddyRegistry.vy"
   },
   "AgentFactory": {
@@ -1845,7 +1845,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x7F9c1926868ebD3b34C07342450F86f43Ba1b72F",
+    "address": "0xDcE3c05846c60a8B32Fdbd822F6903C363b138F0",
     "path": "contracts/core/AgentFactory.vy"
   },
   "ChainlinkFeeds": {
@@ -2303,7 +2303,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xC12152418FDF2daE2A45C3D07AdFf9f6f1249BbA",
+    "address": "0xeEe1310C52248D1C00cE015B352032DF9dFD4a90",
     "path": "contracts/oracles/ChainlinkFeeds.vy"
   },
   "CompoundV3": {
@@ -3168,7 +3168,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x454F58c08ABF6BafaD6E759DF2563bc951B2c1F4",
+    "address": "0xE8599F4d90E6c72EA4aD173d2102D1a6011b6904",
     "path": "contracts/legos/yield/LegoCompoundV3.vy"
   },
   "Euler": {
@@ -4049,7 +4049,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x5E2D5C8969Fd244AdA939155196338A023A132A5",
+    "address": "0xE5aa65b7AaaD8e0fbEa45eE959bc1dFb36C3B9f0",
     "path": "contracts/legos/yield/LegoEuler.vy"
   },
   "Fluid": {
@@ -4902,8 +4902,389 @@
         "type": "constructor"
       }
     ],
-    "address": "0xC1867a45F4f644d519aE02200FA246331A6EF3Dd",
+    "address": "0x7d043676c00F00740f1e0f494675C0bbA9C85Ba1",
     "path": "contracts/legos/yield/LegoFluid.vy"
+  },
+  "LegoHelper": {
+    "abi": [
+      {
+        "inputs": [],
+        "name": "aaveV3",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "aaveV3Id",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "compoundV3",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "compoundV3Id",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "euler",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "eulerId",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "fluid",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "fluidId",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "moonwell",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "moonwellId",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "morpho",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "morphoId",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "sky",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "skyId",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "_vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "getLegoFromVaultToken",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          },
+          {
+            "name": "",
+            "type": "address"
+          },
+          {
+            "name": "",
+            "type": "string"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "_asset",
+            "type": "address"
+          },
+          {
+            "name": "_amount",
+            "type": "uint256"
+          }
+        ],
+        "name": "getUnderlyingData",
+        "outputs": [
+          {
+            "components": [
+              {
+                "name": "asset",
+                "type": "address"
+              },
+              {
+                "name": "amount",
+                "type": "uint256"
+              },
+              {
+                "name": "usdValue",
+                "type": "uint256"
+              },
+              {
+                "name": "legoId",
+                "type": "uint256"
+              },
+              {
+                "name": "legoAddr",
+                "type": "address"
+              },
+              {
+                "name": "legoDesc",
+                "type": "string"
+              }
+            ],
+            "name": "",
+            "type": "tuple"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "ADDY_REGISTRY",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "AAVE_V3_ID",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "COMPOUND_V3_ID",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "EULER_ID",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "FLUID_ID",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "MOONWELL_ID",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "MORPHO_ID",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "SKY_ID",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "_addyRegistry",
+            "type": "address"
+          },
+          {
+            "name": "_aaveV3Id",
+            "type": "uint256"
+          },
+          {
+            "name": "_compoundV3Id",
+            "type": "uint256"
+          },
+          {
+            "name": "_eulerId",
+            "type": "uint256"
+          },
+          {
+            "name": "_fluidId",
+            "type": "uint256"
+          },
+          {
+            "name": "_moonwellId",
+            "type": "uint256"
+          },
+          {
+            "name": "_morphoId",
+            "type": "uint256"
+          },
+          {
+            "name": "_skyId",
+            "type": "uint256"
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+      }
+    ],
+    "address": "0x6d798b02283cb02189c4295725AD09272BF89000",
+    "path": "contracts/core/LegoHelper.vy"
   },
   "LegoRegistry": {
     "abi": [
@@ -5467,7 +5848,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x611ce0729f6C052f49536c84a8fD717E619D5dc6",
+    "address": "0x949e305cb9621F8b03d65B977d6F571BF46F24FB",
     "path": "contracts/core/LegoRegistry.vy"
   },
   "Moonwell": {
@@ -6332,7 +6713,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x6b75d78B9bccD45fC3FC536203f58f05858660AA",
+    "address": "0x835D71D7f0c4cEe09FcbB81E54818724ABa76C36",
     "path": "contracts/legos/yield/LegoMoonwell.vy"
   },
   "Morpho": {
@@ -7213,7 +7594,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x269cBCB4694483aA890423FFFe51777c11251C72",
+    "address": "0xD5FA5a655aFD3f76502990c160888562e5B1E8CD",
     "path": "contracts/legos/yield/LegoMorpho.vy"
   },
   "OracleRegistry": {
@@ -8049,7 +8430,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x003d1beA6B9C5193cDA8d747A5362eD2932a35d0",
+    "address": "0x34E4dd7677FB0Ca736819e3427ee181e563A6F54",
     "path": "contracts/core/OracleRegistry.vy"
   },
   "PriceSheets": {
@@ -9075,7 +9456,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x1d9d43eFD5B1ECd6582Cae061c560F03cAd958c7",
+    "address": "0xD77CF11D0aE18233bFAA18c02c20a2D9E842Eb2C",
     "path": "contracts/core/PriceSheets.vy"
   },
   "PythFeeds": {
@@ -9498,7 +9879,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xcfC0655910AF35E65307bC24F6c34a56a1912a47",
+    "address": "0xb9B570D29C27f87e8D576d7569f0c9481b6C6fD5",
     "path": "contracts/oracles/PythFeeds.vy"
   },
   "Sky": {
@@ -10235,7 +10616,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x3820d1F925675189731F258EdDA9d89Ad913Ed10",
+    "address": "0xFA9dbCF372aBcD65b1EFCf4022e610a252fc4c6d",
     "path": "contracts/legos/yield/LegoSky.vy"
   },
   "WalletTemplate": {
@@ -12911,7 +13292,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xf425C67b9078899B4EEEcEA2770025fE59433234",
+    "address": "0xcd68B978e20752F92A9ca20bc479DebaA2F71B63",
     "path": "contracts/core/WalletTemplate.vy"
   }
 }

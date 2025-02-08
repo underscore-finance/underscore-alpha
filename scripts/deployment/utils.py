@@ -27,18 +27,15 @@ class LegoType:
 
 # Declare DEPLOYMENTS as a global variable
 DEPLOYMENTS = {}
-OUTPUT_DIR = Path("generated")
+OUTPUT_DIR = Path("deployments")
 MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
 
 
 def load_deployments():
     global DEPLOYMENTS  # Use the global DEPLOYMENTS variable
-    output_dir = Path("generated")
-    output_dir.mkdir(exist_ok=True)
 
-    manifest_path = output_dir / "manifest.json"
-    if manifest_path.exists():
-        with open(manifest_path, "r") as f:
+    if MANIFEST_PATH.exists():
+        with open(MANIFEST_PATH, "r") as f:
             log.h3("Loading deployments from manifest...")
             DEPLOYMENTS = json.load(f)
             log.h3(f"Loaded {len(DEPLOYMENTS.keys())} deployments")
