@@ -9,32 +9,32 @@ from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MONTH_IN_SECONDS, HOUR_IN
 
 LOCAL_TOKENS = {
     "link": {
-        "base": "0xd403d1624daef243fbcbd4a80d8a6f36affe32b2", # link
+        "base": "0xd403d1624daef243fbcbd4a80d8a6f36affe32b2",  # link
     },
     "btc": {
-        "base": "0x3b86ad95859b6ab773f55f8d94b4b9d443ee931f", # solvBTC
+        "base": "0x3b86ad95859b6ab773f55f8d94b4b9d443ee931f",  # solvBTC
     },
 }
 
 CONV_FEEDS = {
     "eth": {
-        "base": "0xc5E65227fe3385B88468F9A01600017cDC9F3A12", # link/eth
+        "base": "0xc5E65227fe3385B88468F9A01600017cDC9F3A12",  # link/eth
     },
     "btc": {
-        "base": "0xB4a1a7f260C9FF7fEd6A6fbb9fe5a9acFa725DBf", # solvBTC/btc
+        "base": "0xB4a1a7f260C9FF7fEd6A6fbb9fe5a9acFa725DBf",  # solvBTC/btc
     },
 }
 
 
 USD_FEEDS = {
     "link": {
-        "base": "0x17CAb8FE31E32f08326e5E27412894e49B0f9D65", # link/usd
+        "base": "0x17CAb8FE31E32f08326e5E27412894e49B0f9D65",  # link/usd
     },
     "btc": {
-        "base": "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F", # btc/usd
+        "base": "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F",  # btc/usd
     },
     "usdc": {
-        "base": "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", # usdc/usd
+        "base": "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",  # usdc/usd
     },
 }
 
@@ -198,7 +198,7 @@ def test_chainlink_stale_price(
 ):
     # setup
     boa.env.evm.patch.timestamp += MONTH_IN_SECONDS
-    
+
     # setup
     time = boa.env.evm.patch.timestamp
     mock_decimals = 8
@@ -222,7 +222,7 @@ def test_chainlink_zero_price(
     bob,
 ):
     boa.env.evm.patch.timestamp += MONTH_IN_SECONDS
-    
+
     # test, price is zero
     chainlink_mock_feed.setMockData(0, sender=bob)
     assert new_chainlink.getChainlinkData(chainlink_mock_feed, 8) == 0
