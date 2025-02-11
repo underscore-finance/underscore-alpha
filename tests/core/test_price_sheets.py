@@ -25,13 +25,13 @@ def test_activation(price_sheets, governor, sally):
     
     # Governor can deactivate
     price_sheets.activate(False, sender=governor)
-    log = filter_logs(price_sheets, "AgentRegistryActivated")[0]
+    log = filter_logs(price_sheets, "PriceSheetsActivated")[0]
     assert log.isActivated == False
     assert not price_sheets.isActivated()
     
     # Governor can reactivate
     price_sheets.activate(True, sender=governor)
-    log = filter_logs(price_sheets, "AgentRegistryActivated")[0]
+    log = filter_logs(price_sheets, "PriceSheetsActivated")[0]
     assert log.isActivated == True
     assert price_sheets.isActivated()
 
@@ -871,3 +871,220 @@ def test_agent_pricing_combined_states(price_sheets, governor, bob_agent, alpha_
     info = price_sheets.getAgentSubPriceData(bob_agent)
     assert info.asset == ZERO_ADDRESS
     assert info.usdValue == 0
+
+
+def test_price_change_delay(price_sheets, governor, sally):
+    """Test setting and managing price change delay"""
+    
+    # Only governor can set delay
+    with boa.reverts("no perms"):
+        price_sheets.setPriceChangeDelay(43_200, sender=sally)
+    
+    # Cannot set delay less than minimum buffer
+    with boa.reverts("invalid delay"):
+        price_sheets.setPriceChangeDelay(43_199, sender=governor)
+    
+    # Set valid delay
+    assert price_sheets.setPriceChangeDelay(43_200, sender=governor)
+    log = filter_logs(price_sheets, "PriceChangeDelaySet")[0]
+    assert log.delayBlocks == 43_200
+    assert price_sheets.priceChangeDelay() == 43_200
+    
+    # Can set to zero to disable delay
+    assert price_sheets.setPriceChangeDelay(0, sender=governor)
+    assert price_sheets.priceChangeDelay() == 0
+
+
+def test_pending_agent_tx_price_sheet(price_sheets, governor, bob_agent, alpha_token):
+    """Test setting and finalizing pending agent transaction price sheets"""
+    
+    delay = 43_200
+
+    # Set initial delay
+    price_sheets.setPriceChangeDelay(delay, sender=governor)
+    assert price_sheets.priceChangeDelay() == delay
+    
+    # Set pending price sheet
+    assert price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100,    # depositFee
+        200,    # withdrawalFee
+        300,    # rebalanceFee
+        400,    # transferFee
+        500,    # swapFee
+        sender=governor
+    )
+    
+    # Verify pending price sheet is set
+    pending = price_sheets.pendingAgentTxPrices(bob_agent)
+    assert pending.priceSheet.asset == alpha_token.address
+    assert pending.priceSheet.depositFee == 100
+    assert pending.priceSheet.withdrawalFee == 200
+    assert pending.priceSheet.rebalanceFee == 300
+    assert pending.priceSheet.transferFee == 400
+    assert pending.priceSheet.swapFee == 500
+    assert pending.effectiveBlock == boa.env.evm.patch.block_number + delay
+    
+    # Cannot finalize before delay
+    with boa.reverts("time delay not reached"):
+        price_sheets.finalizePendingTxPriceSheet(bob_agent)
+    
+    # Advance blocks
+    boa.env.time_travel(blocks=delay)
+    
+    # Now can finalize
+    assert price_sheets.finalizePendingTxPriceSheet(bob_agent)
+    
+    # Verify price sheet is set and pending is cleared
+    sheet = price_sheets.agentTxPriceData(bob_agent)
+    assert sheet.asset == alpha_token.address
+    assert sheet.depositFee == 100
+    assert sheet.withdrawalFee == 200
+    assert sheet.rebalanceFee == 300
+    assert sheet.transferFee == 400
+    assert sheet.swapFee == 500
+    
+    pending = price_sheets.pendingAgentTxPrices(bob_agent)
+    assert pending.effectiveBlock == 0
+
+
+def test_pending_agent_sub_price(price_sheets, governor, bob_agent, alpha_token):
+    """Test setting and finalizing pending agent subscription prices"""
+
+    delay = 43_200
+
+    # Set initial delay
+    price_sheets.setPriceChangeDelay(delay, sender=governor)
+    assert price_sheets.priceChangeDelay() == delay
+    
+    # Set pending subscription price
+    assert price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000,   # usdValue
+        43_200, # trialPeriod
+        302_400,# payPeriod
+        sender=governor
+    )
+    
+    # Verify pending subscription price is set
+    pending = price_sheets.pendingAgentSubPrices(bob_agent)
+    assert pending.subInfo.asset == alpha_token.address
+    assert pending.subInfo.usdValue == 1000
+    assert pending.subInfo.trialPeriod == 43_200
+    assert pending.subInfo.payPeriod == 302_400
+    assert pending.effectiveBlock == boa.env.evm.patch.block_number + delay
+    
+    # Cannot finalize before delay
+    with boa.reverts("time delay not reached"):
+        price_sheets.finalizePendingAgentSubPrice(bob_agent)
+    
+    # Advance blocks
+    boa.env.time_travel(blocks=delay)
+    
+    # Now can finalize
+    assert price_sheets.finalizePendingAgentSubPrice(bob_agent)
+    
+    # Verify subscription price is set and pending is cleared
+    info = price_sheets.agentSubPriceData(bob_agent)
+    assert info.asset == alpha_token.address
+    assert info.usdValue == 1000
+    assert info.trialPeriod == 43_200
+    assert info.payPeriod == 302_400
+    
+    pending = price_sheets.pendingAgentSubPrices(bob_agent)
+    assert pending.effectiveBlock == 0
+
+
+def test_pending_price_change_edge_cases(price_sheets, governor, bob_agent, alpha_token, sally):
+    """Test edge cases for pending price changes"""
+    
+    delay = 43_200
+
+    # Set initial delay
+    price_sheets.setPriceChangeDelay(delay, sender=governor)
+    
+    # Cannot finalize non-existent pending changes
+    with boa.reverts("time delay not reached"):
+        price_sheets.finalizePendingTxPriceSheet(bob_agent)
+    with boa.reverts("time delay not reached"):
+        price_sheets.finalizePendingAgentSubPrice(bob_agent)
+    
+    # Set pending changes
+    price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100, 200, 300, 400, 500,
+        sender=governor
+    )
+    price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000, 43_200, 302_400,
+        sender=governor
+    )
+    
+    # Advance blocks
+    boa.env.time_travel(blocks=delay)
+    
+    # anyone can finalize
+    assert price_sheets.finalizePendingTxPriceSheet(bob_agent, sender=sally)
+    assert price_sheets.finalizePendingAgentSubPrice(bob_agent, sender=sally)
+    
+    # Setting new pending changes overwrites old ones
+    price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        150, 250, 350, 450, 550,
+        sender=governor
+    )
+    price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        2000, 43_200, 302_400,
+        sender=governor
+    )
+    
+    pending_tx = price_sheets.pendingAgentTxPrices(bob_agent)
+    assert pending_tx.priceSheet.depositFee == 150
+    pending_sub = price_sheets.pendingAgentSubPrices(bob_agent)
+    assert pending_sub.subInfo.usdValue == 2000
+
+
+def test_zero_delay_price_changes(price_sheets, governor, bob_agent, alpha_token):
+    """Test price changes when delay is set to zero"""
+    
+    # Set zero delay
+    price_sheets.setPriceChangeDelay(0, sender=governor)
+    assert price_sheets.priceChangeDelay() == 0
+    
+    # Price changes should take effect immediately
+    price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100, 200, 300, 400, 500,
+        sender=governor
+    )
+    
+    # Verify changes are immediate
+    sheet = price_sheets.agentTxPriceData(bob_agent)
+    assert sheet.depositFee == 100
+    
+    # No pending changes should be set
+    pending = price_sheets.pendingAgentTxPrices(bob_agent)
+    assert pending.effectiveBlock == 0
+    
+    # Same for subscription prices
+    price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000, 43_200, 302_400,
+        sender=governor
+    )
+    
+    info = price_sheets.agentSubPriceData(bob_agent)
+    assert info.usdValue == 1000
+    
+    pending = price_sheets.pendingAgentSubPrices(bob_agent)
+    assert pending.effectiveBlock == 0
