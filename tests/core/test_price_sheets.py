@@ -443,10 +443,7 @@ def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally
     # Deactivate contract
     price_sheets.activate(False, sender=governor)
     
-    # All operations should fail when deactivated
-    with boa.reverts("not active"):
-        price_sheets.setProtocolRecipient(sally, sender=governor)
-    
+    # many operations should fail when deactivated
     with boa.reverts("not active"):
         price_sheets.setAgentSubPrice(
             bob_agent,
@@ -454,23 +451,8 @@ def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally
             1000,
             43_200,
             302_400,
-            sender=governor
+            sender=bob_agent
         )
-    
-    with boa.reverts("not active"):
-        price_sheets.setProtocolSubPrice(
-            alpha_token,
-            1000,
-            43_200,
-            302_400,
-            sender=governor
-        )
-    
-    with boa.reverts("not active"):
-        price_sheets.removeAgentSubPrice(bob_agent, sender=governor)
-    
-    with boa.reverts("not active"):
-        price_sheets.removeProtocolSubPrice(sender=governor)
     
     with boa.reverts("not active"):
         price_sheets.setAgentTxPriceSheet(
@@ -481,26 +463,8 @@ def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally
             300,
             400,
             500,
-            sender=governor
+            sender=bob_agent
         )
-    
-    with boa.reverts("not active"):
-        price_sheets.setProtocolTxPriceSheet(
-            alpha_token,
-            100,
-            200,
-            300,
-            400,
-            500,
-            sender=governor
-        )
-    
-    with boa.reverts("not active"):
-        price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
-    
-    with boa.reverts("not active"):
-        price_sheets.removeProtocolTxPriceSheet(sender=governor)
-
 
 def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custom, oracle_registry, sally):
     """Test edge cases and boundary conditions"""

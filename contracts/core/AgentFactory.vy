@@ -1,10 +1,11 @@
 # @version 0.4.0
 
+initializes: gov
+exports: gov.__interface__
+import contracts.modules.Governable as gov
+
 interface AgenticWallet:
     def initialize(_AddyRegistry: address, _wethAddr: address, _owner: address, _agent: address) -> bool: nonpayable
-
-interface AddyRegistry:
-    def governor() -> address: view
 
 struct TemplateInfo:
     addr: address
@@ -55,6 +56,7 @@ WETH_ADDR: public(immutable(address))
 @deploy
 def __init__(_addyRegistry: address, _wethAddr: address, _walletTemplate: address):
     assert empty(address) not in [_addyRegistry, _wethAddr] # dev: invalid addrs
+    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
     WETH_ADDR = _wethAddr
 
@@ -167,8 +169,8 @@ def setAgenticWalletTemplate(_addr: address) -> bool:
     @param _addr The address of the new template to use
     @return True if template was successfully updated, False if invalid address
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     if not self._isValidWalletTemplate(_addr):
         return False
     return self._setAgenticWalletTemplate(_addr)
@@ -201,8 +203,8 @@ def setWhitelist(_addr: address, _shouldWhitelist: bool) -> bool:
     @param _shouldWhitelist True to whitelist, False to unwhitelist
     @return True if the whitelist status was successfully updated, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.whitelist[_addr] = _shouldWhitelist
     log WhitelistSet(_addr, _shouldWhitelist)
     return True
@@ -216,8 +218,8 @@ def setNumAgenticWalletsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bo
     @param _numAllowed The new maximum number of wallets allowed
     @return True if the maximum number was successfully updated, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.numAgenticWalletsAllowed = _numAllowed
     log NumAgenticWalletsAllowedSet(_numAllowed)
     return True
@@ -231,8 +233,8 @@ def setShouldEnforceWhitelist(_shouldEnforce: bool) -> bool:
     @param _shouldEnforce True to enforce whitelist, False to disable
     @return True if the whitelist enforcement state was successfully updated, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.shouldEnforceWhitelist = _shouldEnforce
     log ShouldEnforceWhitelistSet(_shouldEnforce)
     return True
@@ -250,6 +252,7 @@ def activate(_shouldActivate: bool):
     @dev Only callable by the governor, toggles isActivated state
     @param _shouldActivate True to activate the factory, False to deactivate
     """
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(_shouldActivate)

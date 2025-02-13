@@ -21,7 +21,6 @@ def new_oracle_b(addy_registry):
 
 
 def test_initial_state(oracle_registry):
-    assert oracle_registry.isActivated()
     assert oracle_registry.numOraclePartners() == 1
 
 
@@ -143,29 +142,6 @@ def test_disable_oracle_addr(oracle_registry, new_oracle, governor, bob):
     assert not oracle_registry.disableOraclePartnerAddr(oracle_id, sender=governor)
 
 
-def test_oracle_registry_activation(oracle_registry, new_oracle, governor, bob):
-    # Test non-governor cannot change activation
-    with boa.reverts("no perms"):
-        oracle_registry.activate(False, sender=bob)
-    
-    # Test deactivation
-    oracle_registry.activate(False, sender=governor)
-
-    log = filter_logs(oracle_registry, "OracleRegistryActivated")[0]
-    assert log.isActivated == False
-
-    assert not oracle_registry.isActivated()
-    
-    # Test operations fail when deactivated
-    description = "Test Oracle Partner"
-    with boa.reverts("not activated"):
-        oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    
-    # Test reactivation
-    oracle_registry.activate(True, sender=governor)
-    assert oracle_registry.isActivated()
-
-
 def test_view_functions(oracle_registry, new_oracle, governor):
     description = "Test Oracle Partner"
     oracle_id = oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
@@ -232,12 +208,6 @@ def test_priority_oracle_partners(oracle_registry, new_oracle, new_oracle_b, gov
     assert stored_priority_ids[0] == oracle_id_a
     assert stored_priority_ids[1] == oracle_id_b
 
-    # Test when registry is deactivated
-    oracle_registry.activate(False, sender=governor)
-    with boa.reverts("not activated"):
-        oracle_registry.setPriorityOraclePartnerIds(priority_ids, sender=governor)
-    oracle_registry.activate(True, sender=governor)
-
 
 def test_priority_oracle_partners_price_order(oracle_registry, new_oracle, new_oracle_b, governor, alpha_token):
     description = "Test Oracle Partner"
@@ -302,12 +272,6 @@ def test_stale_time(oracle_registry, governor, bob):
 
     # Verify state
     assert oracle_registry.staleTime() == valid_stale_time
-
-    # Test when registry is deactivated
-    oracle_registry.activate(False, sender=governor)
-    with boa.reverts("not activated"):
-        oracle_registry.setStaleTime(valid_stale_time, sender=governor)
-    oracle_registry.activate(True, sender=governor)
 
 
 def test_stale_time_price_impact(oracle_registry, new_oracle, governor, alpha_token):

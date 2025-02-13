@@ -1,10 +1,11 @@
 # @version 0.4.0
 
+initializes: gov
+exports: gov.__interface__
+
 from ethereum.ercs import IERC20Detailed
 import interfaces.OraclePartnerInterface as OraclePartner
-
-interface AddyRegistry:
-    def governor() -> address: view
+import contracts.modules.Governable as gov
 
 struct OraclePartnerInfo:
     addr: address
@@ -36,9 +37,6 @@ event PriorityOraclePartnerIdsModified:
 event StaleTimeSet:
     staleTime: uint256
 
-event OracleRegistryActivated:
-    isActivated: bool
-
 # registry core
 oraclePartnerInfo: public(HashMap[uint256, OraclePartnerInfo])
 oraclePartnerAddrToId: public(HashMap[address, uint256])
@@ -50,7 +48,6 @@ staleTime: public(uint256)
 
 # config
 ADDY_REGISTRY: public(immutable(address))
-isActivated: public(bool)
 
 ETH: constant(address) = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
 MAX_PRIORITY_PARTNERS: constant(uint256) = 10
@@ -61,8 +58,8 @@ MAX_STALE_TIME: constant(uint256) = 60 * 60 * 24 * 3 # 3 days
 @deploy
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
+    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
-    self.isActivated = True
 
     # start at 1 index
     self.numOraclePartners = 1
@@ -261,13 +258,12 @@ def _isValidNewOraclePartnerAddr(_addr: address) -> bool:
 def registerNewOraclePartner(_addr: address, _description: String[64]) -> uint256:
     """
     @notice Register a new oracle partner contract in the registry
-    @dev Only callable by governor when registry is activated. Sets oracle partner ID on the contract.
+    @dev Sets oracle partner ID on the contract.
     @param _addr The address of the oracle partner contract to register
     @param _description A brief description of the oracle partner's functionality
     @return The assigned oracle partner ID if registration successful, 0 if failed
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     if not self._isValidNewOraclePartnerAddr(_addr):
         return 0
@@ -321,13 +317,12 @@ def _isValidOraclePartnerUpdate(_oracleId: uint256, _newAddr: address, _prevAddr
 def updateOraclePartnerAddr(_oracleId: uint256, _newAddr: address) -> bool:
     """
     @notice Update the address of an existing oracle partner
-    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @dev Updates version and timestamp.
     @param _oracleId The ID of the oracle partner to update
     @param _newAddr The new address for the oracle partner
     @return True if update successful, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     data: OraclePartnerInfo = self.oraclePartnerInfo[_oracleId]
     prevAddr: address = data.addr # needed for later
@@ -380,12 +375,11 @@ def _isValidOraclePartnerDisable(_oracleId: uint256, _prevAddr: address) -> bool
 def disableOraclePartnerAddr(_oracleId: uint256) -> bool:
     """
     @notice Disable an oracle partner by setting its address to empty
-    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @dev Updates version and timestamp.
     @param _oracleId The ID of the oracle partner to disable
     @return True if disable successful, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     data: OraclePartnerInfo = self.oraclePartnerInfo[_oracleId]
     prevAddr: address = data.addr # needed for later
@@ -461,8 +455,7 @@ def setPriorityOraclePartnerIds(_priorityIds: DynArray[uint256, MAX_PRIORITY_PAR
     @param _priorityIds Array of oracle partner IDs in desired priority order
     @return True if priority list was set successfully, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     priorityIds: DynArray[uint256, MAX_PRIORITY_PARTNERS] = self._sanitizePriorityOraclePartnerIds(_priorityIds)
     if not self._areValidPriorityOraclePartnerIds(priorityIds):
@@ -504,8 +497,7 @@ def setStaleTime(_staleTime: uint256) -> bool:
     @param _staleTime The stale time in seconds
     @return True if stale time was set successfully, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     if not self._isValidStaleTime(_staleTime):
         return False
@@ -639,20 +631,3 @@ def getLastOraclePartnerId() -> uint256:
     @return The ID of the last registered oracle partner
     """
     return self.numOraclePartners - 1
-
-
-############
-# Activate #
-############
-
-
-@external
-def activate(_shouldActivate: bool):
-    """
-    @notice Activate or deactivate the oracle registry
-    @dev Only callable by governor. When deactivated, most functions cannot be called.
-    @param _shouldActivate True to activate, False to deactivate
-    """
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
-    self.isActivated = _shouldActivate
-    log OracleRegistryActivated(_shouldActivate)

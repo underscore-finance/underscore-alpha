@@ -1,5 +1,9 @@
 # @version 0.4.0
 
+initializes: gov
+exports: gov.__interface__
+import contracts.modules.Governable as gov
+
 interface LegoRegistry:
     def isValidLegoId(_legoId: uint256) -> bool: view
     def numLegos() -> uint256: view
@@ -174,6 +178,7 @@ MIN_PRICE_CHANGE_BUFFER: constant(uint256) = 43_200 # 1 day on Base (2 seconds p
 @deploy
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
+    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
     self.protocolRecipient = staticcall AddyRegistry(_addyRegistry).governor()
     self.isActivated = True
@@ -243,8 +248,11 @@ def setAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _tria
     @param _payPeriod The payment period in blocks
     @return bool True if pending subscription price was set successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == _agent or msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    isAgent: bool = msg.sender == _agent
+    assert isAgent or gov._isGovernor(msg.sender) # dev: no perms
+
+    if isAgent:
+        assert self.isActivated # dev: not active
 
     # validation
     assert _agent != empty(address) # dev: invalid agent
@@ -305,15 +313,14 @@ def _setAgentSubPrice(_agent: address, _subInfo: SubscriptionInfo):
 def setProtocolSubPrice(_asset: address, _usdValue: uint256, _trialPeriod: uint256, _payPeriod: uint256) -> bool:
     """
     @notice Set subscription pricing for the protocol
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _asset The token address for subscription payments
     @param _usdValue The USD value of the subscription
     @param _trialPeriod The trial period in blocks
     @param _payPeriod The payment period in blocks
     @return bool True if protocol subscription price was set successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     # validation
     if not self._isValidSubPrice(_asset, _usdValue, _trialPeriod, _payPeriod):
@@ -338,12 +345,11 @@ def setProtocolSubPrice(_asset: address, _usdValue: uint256, _trialPeriod: uint2
 def removeAgentSubPrice(_agent: address) -> bool:
     """
     @notice Remove subscription pricing for a specific agent
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _agent The address of the agent
     @return bool True if agent subscription price was removed successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     prevInfo: SubscriptionInfo = self.agentSubPriceData[_agent]
     if empty(address) in [prevInfo.asset, _agent]:
@@ -358,11 +364,10 @@ def removeAgentSubPrice(_agent: address) -> bool:
 def removeProtocolSubPrice() -> bool:
     """
     @notice Remove subscription pricing for the protocol
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @return bool True if protocol subscription price was removed successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     prevInfo: SubscriptionInfo = self.protocolSubPriceData
     if prevInfo.asset == empty(address):
@@ -380,12 +385,11 @@ def removeProtocolSubPrice() -> bool:
 def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
     """
     @notice Enable or disable agent subscription pricing
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _isEnabled True to enable, False to disable
     @return bool True if agent subscription pricing state was changed successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     assert _isEnabled != self.isAgentSubPricingEnabled # dev: no change
     self.isAgentSubPricingEnabled = _isEnabled
     log AgentSubPricingEnabled(_isEnabled)
@@ -548,8 +552,11 @@ def setAgentTxPriceSheet(
     @param _swapFee The fee percentage for swaps
     @return bool True if pending price sheet was set successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == _agent or msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    isAgent: bool = msg.sender == _agent
+    assert isAgent or gov._isGovernor(msg.sender) # dev: no perms
+
+    if isAgent:
+        assert self.isActivated # dev: not active
 
     # validation
     assert _agent != empty(address) # dev: invalid agent
@@ -619,7 +626,7 @@ def setProtocolTxPriceSheet(
 ) -> bool:
     """
     @notice Set transaction price sheet for the protocol
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _asset The token address for fee payments
     @param _depositFee The fee percentage for deposits
     @param _withdrawalFee The fee percentage for withdrawals
@@ -628,8 +635,7 @@ def setProtocolTxPriceSheet(
     @param _swapFee The fee percentage for swaps
     @return bool True if protocol price sheet was set successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     # validation
     if not self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee):
@@ -656,12 +662,11 @@ def setProtocolTxPriceSheet(
 def removeAgentTxPriceSheet(_agent: address) -> bool:
     """
     @notice Remove transaction price sheet for a specific agent
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _agent The address of the agent
     @return bool True if agent price sheet was removed successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     prevInfo: TxPriceSheet = self.agentTxPriceData[_agent]
     if empty(address) in [prevInfo.asset, _agent]:
@@ -676,11 +681,10 @@ def removeAgentTxPriceSheet(_agent: address) -> bool:
 def removeProtocolTxPriceSheet() -> bool:
     """
     @notice Remove transaction price sheet for the protocol
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @return bool True if protocol price sheet was removed successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     prevInfo: TxPriceSheet = self.protocolTxPriceData
     if prevInfo.asset == empty(address):
@@ -698,12 +702,11 @@ def removeProtocolTxPriceSheet() -> bool:
 def setAgentTxPricingEnabled(_isEnabled: bool) -> bool:
     """
     @notice Enable or disable agent transaction pricing
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _isEnabled True to enable, False to disable
     @return bool True if agent transaction pricing state was changed successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     assert _isEnabled != self.isAgentTxPricingEnabled # dev: no change
     self.isAgentTxPricingEnabled = _isEnabled
     log AgentTxPricingEnabled(_isEnabled)
@@ -719,12 +722,11 @@ def setAgentTxPricingEnabled(_isEnabled: bool) -> bool:
 def setProtocolRecipient(_recipient: address) -> bool:
     """
     @notice Set the recipient address for protocol fees
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _recipient The address to receive protocol fees
     @return bool True if protocol recipient was set successfully
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     assert _recipient != empty(address) # dev: invalid recipient
     self.protocolRecipient = _recipient
     log ProtocolRecipientSet(_recipient)
@@ -740,11 +742,10 @@ def setProtocolRecipient(_recipient: address) -> bool:
 def setPriceChangeDelay(_delayBlocks: uint256) -> bool:
     """
     @notice Set the number of blocks required before price changes take effect
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _delayBlocks The number of blocks to wait before price changes take effect
     """
-    assert self.isActivated # dev: not active
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     assert _delayBlocks == 0 or _delayBlocks >= MIN_PRICE_CHANGE_BUFFER # dev: invalid delay
     self.priceChangeDelay = _delayBlocks
     log PriceChangeDelaySet(_delayBlocks)
@@ -763,6 +764,6 @@ def activate(_shouldActivate: bool):
     @dev Only callable by governor. When deactivated, most functions cannot be called.
     @param _shouldActivate True to activate, False to deactivate
     """
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log PriceSheetsActivated(_shouldActivate)
