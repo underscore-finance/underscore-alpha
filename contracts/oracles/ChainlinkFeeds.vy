@@ -13,7 +13,6 @@ interface ChainlinkFeed:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
 
 struct ChainlinkRound:
     roundId: uint80

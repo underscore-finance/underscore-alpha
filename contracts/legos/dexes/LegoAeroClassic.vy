@@ -1,7 +1,10 @@
 # @version 0.4.0
 
 implements: LegoDex
+initializes: gov
+exports: gov.__interface__
 
+import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
@@ -11,12 +14,11 @@ interface AeroRouter:
 interface AeroFactory:
     def getPool(_tokenA: address, _tokenB: address, _isStable: bool) -> address: view
 
-interface AddyRegistry:
-    def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
-
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
 
 struct Route:
     from_: address
@@ -41,9 +43,14 @@ event FundsRecovered:
 event AerodromeLegoIdSet:
     legoId: uint256
 
-legoId: public(uint256)
+event AerodromeActivated:
+    isActivated: bool
 
+# config
+legoId: public(uint256)
+isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
+
 AERODROME_FACTORY: public(immutable(address))
 AERODROME_ROUTER: public(immutable(address))
 
@@ -56,6 +63,8 @@ def __init__(_aerodromeFactory: address, _aerodromeRouter: address, _addyRegistr
     AERODROME_FACTORY = _aerodromeFactory
     AERODROME_ROUTER = _aerodromeRouter
     ADDY_REGISTRY = _addyRegistry
+    self.isActivated = True
+    gov.__init__(_addyRegistry)
 
 
 @view
@@ -107,6 +116,8 @@ def swapTokens(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
     factory: address = AERODROME_FACTORY
     isStable: bool = self._getBestPoolData(_tokenIn, _tokenOut, factory)
 
@@ -155,7 +166,7 @@ def swapTokens(
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -179,3 +190,10 @@ def setLegoId(_legoId: uint256) -> bool:
     self.legoId = _legoId
     log AerodromeLegoIdSet(_legoId)
     return True
+
+
+@external
+def activate(_shouldActivate: bool):
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.isActivated = _shouldActivate
+    log AerodromeActivated(_shouldActivate)

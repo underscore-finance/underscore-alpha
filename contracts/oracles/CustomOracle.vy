@@ -9,7 +9,6 @@ import contracts.modules.Governable as gov
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
 
 struct CustomOracleData:
     price: uint256
