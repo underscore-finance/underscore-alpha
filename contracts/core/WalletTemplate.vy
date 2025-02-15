@@ -405,14 +405,14 @@ def _getAllowedTxAmount(
     _legoRegistry: address,
 ) -> uint256:
     tokenBalance: uint256 = self._getAvailBalAfterTrialFunds(_shouldCheckTrialFunds, _asset, _legoRegistry)
-    wantedAmount: uint256 = min(_amount, tokenBalance)
     reservedAmount: uint256 = self.reserveAssets[_asset]
-
-    amount: uint256 = 0
-    if wantedAmount > reservedAmount:
-        amount = wantedAmount - reservedAmount
-
+    
+    assert tokenBalance >= reservedAmount # dev: insufficient balance after reserve
+    availableAmount: uint256 = tokenBalance - reservedAmount
+    
+    amount: uint256 = min(_amount, availableAmount)
     assert amount != 0 # dev: nothing to transfer
+
     return amount
 
 
@@ -1804,6 +1804,8 @@ def _isValidSignature(_encodedValue: Bytes[256], _sig: Signature):
 
 @external
 def recoverTrialFunds(_opportunities: DynArray[TrialFundsClawback, MAX_INSTRUCTIONS]) -> bool:
+    assert len(_opportunities) != 0 # dev: no instructions
+    
     addyRegistry: address = self.addyRegistry
     agentFactory: address = staticcall AddyRegistry(addyRegistry).getAddy(AGENT_FACTORY_ID)
     assert msg.sender == agentFactory # dev: no perms

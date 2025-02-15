@@ -60,6 +60,7 @@ event MockLegoActivated:
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: immutable(address)
+withdrawFails: public(bool)
 
 
 @deploy
@@ -244,6 +245,13 @@ def depositTokens(
 
 
 @external
+def setWithdrawFails(_shouldFail: bool) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.withdrawFails = _shouldFail
+    return True
+
+
+@external
 def withdrawTokens(
     _asset: address,
     _amount: uint256,
@@ -251,6 +259,7 @@ def withdrawTokens(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
+    assert not self.withdrawFails # dev: withdrawals disabled
     assert self.isActivated # dev: not activated
     assert yld.indexOfAssetOpportunity[_asset][_vaultToken] != 0 # dev: asset + vault not supported
 

@@ -212,9 +212,9 @@ def _setAgenticWalletTemplate(_addr: address) -> bool:
     return True
 
 
-################
-# Initial Gift #
-################
+###############
+# Trial Funds #
+###############
 
 
 @view

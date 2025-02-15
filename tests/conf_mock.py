@@ -160,6 +160,16 @@ def mock_lego_bravo(bravo_token, bravo_token_erc4626_vault, addy_registry_deploy
     return addr
 
 
+# mock lego: charlie
+
+@pytest.fixture(scope="session")
+def mock_lego_charlie(charlie_token, charlie_token_erc4626_vault, addy_registry_deploy, lego_registry, governor):
+    addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_charlie")
+    legoId = lego_registry.registerNewLego(addr, "Mock Lego Charlie", YIELD_OPP_UINT256, sender=governor)
+    assert legoId != 0 # dev: invalid lego id
+    return addr
+
+
 # mock lego integrations
 
 
@@ -179,3 +189,10 @@ def mock_aave_v3_pool():
 @pytest.fixture(scope="session")
 def mock_pyth():
     return boa.load("contracts/mock/MockPyth.vy", name="mock_pyth")
+
+
+@pytest.fixture
+def weth_erc4626_vault(mock_weth):
+    """Returns a mock ERC4626 vault for WETH"""
+    addr = boa.load("contracts/mock/MockErc4626Vault.vy", mock_weth.address, name="weth_erc4626_vault")
+    return addr
