@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, TRANSFER_UINT256, SWAP_UINT256
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS
 from contracts.core import WalletTemplate
 
 
@@ -20,7 +20,7 @@ def setup_trial_funds(agent_factory, alpha_token, alpha_token_whale, governor):
     return alpha_token, trial_amount
 
 
-def test_set_trial_funds_data(agent_factory, alpha_token, alpha_token_whale, governor, sally):
+def test_set_trial_funds_data(agent_factory, alpha_token, governor, sally):
     """Test setting trial funds data in AgentFactory"""
     trial_amount = 10 * EIGHTEEN_DECIMALS
 
@@ -60,7 +60,7 @@ def test_wallet_creation_with_trial_funds(agent_factory, setup_trial_funds, owne
     assert wallet.trialFundsAmount() == trial_amount
 
 
-def test_trial_funds_restrictions(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_weth, governor, alpha_token_erc4626_vault):
+def test_trial_funds_restrictions(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test trial funds usage restrictions"""
     token, trial_amount = setup_trial_funds
     
@@ -83,7 +83,7 @@ def test_trial_funds_restrictions(agent_factory, setup_trial_funds, owner, agent
         wallet.transferFunds(agent, trial_amount, token, sender=owner)
 
 
-def test_get_total_underlying_user(agent_factory, setup_trial_funds, owner, agent, lego_helper, mock_lego_alpha, mock_lego_alpha_another, governor, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+def test_get_total_underlying_user(agent_factory, setup_trial_funds, owner, agent, lego_helper, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test getTotalUnderlyingForUser across multiple legos"""
     token, trial_amount = setup_trial_funds
     
@@ -119,7 +119,7 @@ def test_get_total_underlying_user(agent_factory, setup_trial_funds, owner, agen
     assert total_underlying == trial_amount
 
 
-def test_trial_funds_clawback(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, governor, alpha_token_erc4626_vault):
+def test_trial_funds_clawback(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test trial funds clawback functionality"""
     token, trial_amount = setup_trial_funds
     
@@ -143,7 +143,7 @@ def test_trial_funds_clawback(agent_factory, setup_trial_funds, owner, agent, mo
     assert token.balanceOf(agent_factory) == trial_amount
 
 
-def test_partial_trial_funds_deployment(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, governor, alpha_token_erc4626_vault):
+def test_partial_trial_funds_deployment(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test behavior when only part of trial funds are deployed"""
     token, trial_amount = setup_trial_funds
     
@@ -185,7 +185,7 @@ def test_wallet_creation_insufficient_trial_funds(agent_factory, alpha_token, al
     assert wallet.trialFundsAmount() == trial_amount // 2
 
 
-def test_trial_funds_with_zero_amount(agent_factory, alpha_token, governor, owner, agent):
+def test_trial_funds_with_zero_amount(agent_factory, alpha_token, governor):
     """Test setting trial funds with zero amount"""
     # Set trial funds asset with zero amount
     assert not agent_factory.setTrialFundsData(alpha_token, 0, sender=governor)
@@ -208,7 +208,7 @@ def test_multiple_wallet_creation_trial_funds(agent_factory, setup_trial_funds, 
     assert factory_balance == 0
 
 
-def test_clawback_multiple_legos(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, governor, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+def test_clawback_multiple_legos(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test trial funds clawback from multiple legos"""
     token, trial_amount = setup_trial_funds
     
@@ -245,7 +245,7 @@ def test_clawback_multiple_legos(agent_factory, setup_trial_funds, owner, agent,
     assert token.balanceOf(agent_factory) == trial_amount
 
 
-def test_clawback_mixed_deployment(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, governor, alpha_token_erc4626_vault):
+def test_clawback_mixed_deployment(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test clawback when funds are split between wallet and lego"""
     token, trial_amount = setup_trial_funds
     
@@ -270,7 +270,7 @@ def test_clawback_mixed_deployment(agent_factory, setup_trial_funds, owner, agen
     assert token.balanceOf(agent_factory) == trial_amount
 
 
-def test_trial_funds_with_reserve_assets(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, governor, alpha_token_erc4626_vault):
+def test_trial_funds_with_reserve_assets(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test interaction between trial funds and reserve assets"""
     token, trial_amount = setup_trial_funds
     
@@ -299,7 +299,7 @@ def test_trial_funds_with_reserve_assets(agent_factory, setup_trial_funds, owner
     assert token.balanceOf(agent_factory) == trial_amount
 
 
-def test_batch_actions_with_trial_funds(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, governor, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+def test_batch_actions_with_trial_funds(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test batch actions with trial funds"""
     token, trial_amount = setup_trial_funds
     
@@ -336,7 +336,7 @@ def test_batch_actions_with_trial_funds(agent_factory, setup_trial_funds, owner,
     assert token.balanceOf(agent_factory) == trial_amount
 
 
-def test_clawback_failure_scenarios(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, governor, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+def test_clawback_failure_scenarios(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test clawback when a lego fails to withdraw"""
     token, trial_amount = setup_trial_funds
     
@@ -373,7 +373,7 @@ def test_clawback_failure_scenarios(agent_factory, setup_trial_funds, owner, age
     assert token.balanceOf(agent_factory) == trial_amount
 
 
-def test_gas_optimization_multiple_clawbacks(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, governor, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+def test_gas_optimization_multiple_clawbacks(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test gas optimization for multiple clawbacks"""
     token, trial_amount = setup_trial_funds
     
@@ -410,7 +410,7 @@ def test_gas_optimization_multiple_clawbacks(agent_factory, setup_trial_funds, o
     assert token.balanceOf(agent_factory) == trial_amount
 
 
-def test_clawback_permissions(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, sally, governor, alpha_token_erc4626_vault):
+def test_clawback_permissions(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, sally, alpha_token_erc4626_vault):
     """Test permissions for trial funds clawback"""
     token, trial_amount = setup_trial_funds
     
@@ -526,7 +526,7 @@ def test_initialize_invalid_trial_funds(agent_factory, alpha_token, owner, agent
         )
 
 
-def test_mismatched_vault_token_asset(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_weth, governor, alpha_token_erc4626_vault, weth_erc4626_vault):
+def test_mismatched_vault_token_asset(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault, weth_erc4626_vault):
     """Test clawback with vault token that has different underlying asset"""
     token, trial_amount = setup_trial_funds
     
@@ -552,7 +552,7 @@ def test_mismatched_vault_token_asset(agent_factory, setup_trial_funds, owner, a
     assert wallet.trialFundsAmount() == trial_amount
 
 
-def test_clawback_split_funds_multiple_sources(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, governor, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+def test_clawback_split_funds_multiple_sources(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test clawback when funds are split between wallet balance and multiple legos"""
     token, trial_amount = setup_trial_funds
     
@@ -591,7 +591,7 @@ def test_clawback_split_funds_multiple_sources(agent_factory, setup_trial_funds,
     assert wallet.trialFundsAsset() == ZERO_ADDRESS
 
 
-def test_clawback_zero_balance_vault(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, mock_lego_alpha_another, governor, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+def test_clawback_zero_balance_vault(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test clawback with a vault that has zero balance"""
     token, trial_amount = setup_trial_funds
     
@@ -610,7 +610,7 @@ def test_clawback_zero_balance_vault(agent_factory, setup_trial_funds, owner, ag
     # Try to clawback including a vault with zero balance
     clawback_data = [
         (mock_lego_alpha.legoId(), alpha_token_erc4626_vault),
-        (mock_lego_alpha_another.legoId(), alpha_token_erc4626_vault_another)  # Zero balance vault
+        (mock_lego_alpha.legoId(), alpha_token_erc4626_vault_another)  # Zero balance vault
     ]
     assert wallet.recoverTrialFunds(clawback_data, sender=agent_factory.address)
     
@@ -620,7 +620,7 @@ def test_clawback_zero_balance_vault(agent_factory, setup_trial_funds, owner, ag
     assert wallet.trialFundsAsset() == ZERO_ADDRESS
 
 
-def test_clawback_duplicate_entries(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, governor, alpha_token_erc4626_vault):
+def test_clawback_duplicate_entries(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test clawback with duplicate lego/vault entries in clawback data"""
     token, trial_amount = setup_trial_funds
     
@@ -692,7 +692,7 @@ def test_trial_funds_amount_update_after_partial_recovery(agent_factory, setup_t
     assert wallet.trialFundsAsset() == ZERO_ADDRESS
 
 
-def test_trial_funds_with_reserve_during_clawback(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, governor, alpha_token_erc4626_vault):
+def test_trial_funds_with_reserve_during_clawback(agent_factory, setup_trial_funds, owner, agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test interaction between trial funds and reserve assets during clawback"""
     token, trial_amount = setup_trial_funds
     
