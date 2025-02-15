@@ -1,6 +1,7 @@
 # @version 0.4.0
 
 from interfaces import LegoYield
+from ethereum.ercs import IERC20
 
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
@@ -43,6 +44,9 @@ FLUID_ID: public(immutable(uint256))
 MOONWELL_ID: public(immutable(uint256))
 MORPHO_ID: public(immutable(uint256))
 SKY_ID: public(immutable(uint256))
+
+MAX_VAULTS: constant(uint256) = 15
+
 
 @deploy
 def __init__(
@@ -227,3 +231,29 @@ def getUnderlyingData(_asset: address, _amount: uint256) -> UnderlyingData:
         legoAddr=empty(address),
         legoDesc="",
     )
+
+
+@view
+@external
+def getTotalUnderlyingForUser(_user: address, _underlyingAsset: address) -> uint256:
+    if empty(address) in [_user, _underlyingAsset]:
+        return 0
+
+    totalDeposited: uint256 = 0
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+
+        legoVaultTokens: DynArray[address, MAX_VAULTS] = staticcall LegoYield(legoInfo.addr).getAssetOpportunities(_underlyingAsset)
+        for vaultToken: address in legoVaultTokens:
+            if vaultToken == empty(address):
+                continue
+            vaultTokenBal: uint256 = staticcall IERC20(vaultToken).balanceOf(_user)
+            if vaultTokenBal != 0:
+                totalDeposited += staticcall LegoYield(legoInfo.addr).getUnderlyingAmount(vaultToken, vaultTokenBal)
+
+    return totalDeposited
