@@ -361,6 +361,40 @@ def getLastLegoId() -> uint256:
     return self.numLegos - 1
 
 
+# underlying asset
+
+
+@view
+@external
+def getUnderlyingForUser(_user: address, _asset: address) -> uint256:
+    """
+    @notice Get the total underlying amount for a user in a given asset
+    @dev Returns 0 if user or asset is empty
+    @param _user The address of the user to query
+    @param _asset The address of the asset to query
+    """
+    if empty(address) in [_user, _asset]:
+        return 0
+
+    totalDeposited: uint256 = 0
+    numLegos: uint256 = self.numLegos
+
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = self.legoInfo[i]
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+
+        legoVaultTokens: DynArray[address, MAX_VAULTS] = staticcall LegoYield(legoInfo.addr).getAssetOpportunities(_asset)
+        for vaultToken: address in legoVaultTokens:
+            if vaultToken == empty(address):
+                continue
+            vaultTokenBal: uint256 = staticcall IERC20(vaultToken).balanceOf(_user)
+            if vaultTokenBal != 0:
+                totalDeposited += staticcall LegoYield(legoInfo.addr).getUnderlyingAmount(vaultToken, vaultTokenBal)
+
+    return totalDeposited
+
+
 ###############
 # Lego Helper #
 ###############

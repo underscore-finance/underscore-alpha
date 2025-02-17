@@ -4,10 +4,6 @@ initializes: gov
 exports: gov.__interface__
 import contracts.modules.Governable as gov
 
-interface LegoRegistry:
-    def isValidLegoId(_legoId: uint256) -> bool: view
-    def numLegos() -> uint256: view
-
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
     def governor() -> address: view
@@ -36,14 +32,19 @@ struct SubscriptionInfo:
     trialPeriod: uint256
     payPeriod: uint256
 
-struct TransactionCost:
-    protocolRecipient: address
-    protocolAsset: address
-    protocolAssetAmount: uint256
-    protocolUsdValue: uint256
-    agentAsset: address
-    agentAssetAmount: uint256
-    agentUsdValue: uint256
+struct SubPaymentInfo:
+    recipient: address
+    asset: address
+    amount: uint256
+    usdValue: uint256
+    paidThroughBlock: uint256
+    didChange: bool
+
+struct TxCostInfo:
+    recipient: address
+    asset: address
+    amount: uint256
+    usdValue: uint256
 
 struct PendingTxPriceSheet:
     priceSheet: TxPriceSheet
@@ -184,9 +185,71 @@ def __init__(_addyRegistry: address):
     self.isActivated = True
 
 
-#####################
-# Subscription Fees #
-#####################
+######################
+# Subscription Utils #
+######################
+
+
+@view
+@external
+def getCombinedSubData(_agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo):
+    """
+    @notice Get combined subscription data for an agent and protocol
+    @dev Returns a struct containing payment amounts and paid through blocks for both agent and protocol
+    @param _agent The address of the agent
+    @param _agentPaidThru The paid through block for the agent
+    @param _protocolPaidThru The paid through block for the protocol
+    @param _oracleRegistry The address of the oracle registry
+    @return protocolData struct containing payment amounts and paid through blocks for the protocol
+    @return agentData struct containing payment amounts and paid through blocks for the agent
+    """
+    # protocol sub info
+    protocolData: SubPaymentInfo = self._updatePaidThroughBlock(_protocolPaidThru, self.protocolSubPriceData, _oracleRegistry)
+    if protocolData.amount != 0:
+        protocolData.recipient = self.protocolRecipient
+
+    # agent sub info
+    agentData: SubPaymentInfo = empty(SubPaymentInfo)
+    if _agent != empty(address):
+        agentData = self._updatePaidThroughBlock(_agentPaidThru, self.agentSubPriceData[_agent], _oracleRegistry)
+        agentData.recipient = _agent
+
+    return protocolData, agentData
+
+
+@view
+@internal
+def _updatePaidThroughBlock(_paidThroughBlock: uint256, _subData: SubscriptionInfo, _oracleRegistry: address) -> SubPaymentInfo:
+    data: SubPaymentInfo = empty(SubPaymentInfo)
+
+    # subscription was added (since last checked)
+    if _paidThroughBlock == 0 and _subData.usdValue != 0:
+        data.paidThroughBlock = block.number + _subData.trialPeriod
+        data.didChange = True
+
+    # subscription was removed (since last checked)
+    elif _paidThroughBlock != 0 and _subData.usdValue == 0:
+        data.paidThroughBlock = 0
+        data.didChange = True
+
+    # check if subscription needs to be paid
+    if data.paidThroughBlock != 0 and block.number > data.paidThroughBlock:
+        data.amount = staticcall OracleRegistry(_oracleRegistry).getAssetAmount(_subData.asset, _subData.usdValue)
+
+        # if something fails with price feed, allow transaction through.
+        # it's on agent developer to make sure price feed is working, so they can get paid
+        if data.amount != 0:
+            data.paidThroughBlock = block.number + _subData.payPeriod
+            data.usdValue = _subData.usdValue
+            data.asset = _subData.asset
+            data.didChange = True
+
+    return data
+
+
+######################
+# Agent Subscription #
+######################
 
 
 @view
@@ -281,6 +344,9 @@ def setAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _tria
     return True
 
 
+# finalize agent sub price
+
+
 @external
 def finalizePendingAgentSubPrice(_agent: address) -> bool:
     """
@@ -304,6 +370,51 @@ def finalizePendingAgentSubPrice(_agent: address) -> bool:
 def _setAgentSubPrice(_agent: address, _subInfo: SubscriptionInfo):
     self.agentSubPriceData[_agent] = _subInfo
     log AgentSubPriceSet(_agent, _subInfo.asset, _subInfo.usdValue, _subInfo.trialPeriod, _subInfo.payPeriod)
+
+
+# removing agent sub price
+
+
+@external
+def removeAgentSubPrice(_agent: address) -> bool:
+    """
+    @notice Remove subscription pricing for a specific agent
+    @dev Only callable by governor
+    @param _agent The address of the agent
+    @return bool True if agent subscription price was removed successfully
+    """
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
+    prevInfo: SubscriptionInfo = self.agentSubPriceData[_agent]
+    if empty(address) in [prevInfo.asset, _agent]:
+        return False
+
+    self.agentSubPriceData[_agent] = empty(SubscriptionInfo)
+    log AgentSubPriceRemoved(_agent, prevInfo.asset, prevInfo.usdValue, prevInfo.trialPeriod, prevInfo.payPeriod)
+    return True
+
+
+# enable / disable agent sub pricing
+
+
+@external
+def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
+    """
+    @notice Enable or disable agent subscription pricing
+    @dev Only callable by governor
+    @param _isEnabled True to enable, False to disable
+    @return bool True if agent subscription pricing state was changed successfully
+    """
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert _isEnabled != self.isAgentSubPricingEnabled # dev: no change
+    self.isAgentSubPricingEnabled = _isEnabled
+    log AgentSubPricingEnabled(_isEnabled)
+    return True
+
+
+#########################
+# Protocol Subscription #
+#########################
 
 
 # set protocol sub price
@@ -338,26 +449,7 @@ def setProtocolSubPrice(_asset: address, _usdValue: uint256, _trialPeriod: uint2
     return True
 
 
-# removing sub price
-
-
-@external
-def removeAgentSubPrice(_agent: address) -> bool:
-    """
-    @notice Remove subscription pricing for a specific agent
-    @dev Only callable by governor
-    @param _agent The address of the agent
-    @return bool True if agent subscription price was removed successfully
-    """
-    assert gov._isGovernor(msg.sender) # dev: no perms
-
-    prevInfo: SubscriptionInfo = self.agentSubPriceData[_agent]
-    if empty(address) in [prevInfo.asset, _agent]:
-        return False
-
-    self.agentSubPriceData[_agent] = empty(SubscriptionInfo)
-    log AgentSubPriceRemoved(_agent, prevInfo.asset, prevInfo.usdValue, prevInfo.trialPeriod, prevInfo.payPeriod)
-    return True
+# removing protocol sub price
 
 
 @external
@@ -378,97 +470,84 @@ def removeProtocolSubPrice() -> bool:
     return True
 
 
-# enable / disable sub pricing
-
-
-@external
-def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
-    """
-    @notice Enable or disable agent subscription pricing
-    @dev Only callable by governor
-    @param _isEnabled True to enable, False to disable
-    @return bool True if agent subscription pricing state was changed successfully
-    """
-    assert gov._isGovernor(msg.sender) # dev: no perms
-    assert _isEnabled != self.isAgentSubPricingEnabled # dev: no change
-    self.isAgentSubPricingEnabled = _isEnabled
-    log AgentSubPricingEnabled(_isEnabled)
-    return True
-
-
-####################
-# Transaction Fees #
-####################
+#################
+# Tx Fees Utils #
+#################
 
 
 @view
 @external
-def getTransactionCost(_agent: address, _action: ActionType, _usdValue: uint256) -> TransactionCost:
+def getCombinedTxCostData(_agent: address, _action: ActionType, _usdValue: uint256, _oracleRegistry: address) -> (TxCostInfo, TxCostInfo):
     """
-    @notice Calculate the transaction cost for a given action
-    @dev Returns both agent and protocol fees based on action type and USD value
+    @notice Get combined transaction cost data for an agent and protocol
+    @dev Returns a struct containing cost amounts and recipient addresses for both agent and protocol
     @param _agent The address of the agent
     @param _action The type of action being performed
     @param _usdValue The USD value of the transaction
-    @return TransactionCost struct containing fee details for both agent and protocol
+    @param _oracleRegistry The address of the oracle registry
+    @return protocolCost struct containing cost amounts and recipient addresses for the protocol
+    @return agentCost struct containing cost amounts and recipient addresses for the agent
     """
-    cost: TransactionCost = empty(TransactionCost)
-    if self.isAgentTxPricingEnabled:
-        cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue = self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent])
-    cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue = self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData)
-    if cost.protocolAsset != empty(address):
-        cost.protocolRecipient = self.protocolRecipient
-    return cost
+    # protocol tx cost info
+    protocolCost: TxCostInfo = self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData, _oracleRegistry)
+    if protocolCost.amount != 0:
+        protocolCost.recipient = self.protocolRecipient
+
+    # agent tx cost info
+    agentCost: TxCostInfo = empty(TxCostInfo)
+    if _agent != empty(address) and self.isAgentTxPricingEnabled:
+        agentCost = self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent], _oracleRegistry)
+        agentCost.recipient = _agent
+
+    return protocolCost, agentCost
 
 
 @view
 @external
-def getAgentTransactionFeeData(_agent: address, _action: ActionType, _usdValue: uint256) -> (address, uint256, uint256):
+def getAgentTransactionFeeData(_agent: address, _action: ActionType, _usdValue: uint256) -> TxCostInfo:
     """
     @notice Get transaction fee data for a specific agent
     @dev Returns empty values if agent transaction pricing is disabled
     @param _agent The address of the agent
     @param _action The type of action being performed
     @param _usdValue The USD value of the transaction
-    @return address The fee token address
-    @return uint256 The fee amount in tokens
-    @return uint256 The fee amount in USD
+    @return TxCostInfo struct containing cost amounts and recipient addresses for the agent
     """
     if not self.isAgentTxPricingEnabled:
-        return empty(address), 0, 0
-    return self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent])
+        return empty(TxCostInfo)
+    return self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent], staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4))
 
 
 @view
 @external
-def getProtocolTransactionFeeData(_action: ActionType, _usdValue: uint256) -> (address, uint256, uint256):
+def getProtocolTransactionFeeData(_action: ActionType, _usdValue: uint256) -> TxCostInfo:
     """
     @notice Get transaction fee data for the protocol
     @dev Calculates protocol fees based on action type and transaction value
     @param _action The type of action being performed
     @param _usdValue The USD value of the transaction
-    @return address The fee token address
-    @return uint256 The fee amount in tokens
-    @return uint256 The fee amount in USD
+    @return TxCostInfo struct containing cost amounts and recipient addresses for the protocol
     """
-    return self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData)
+    return self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData, staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4))
 
 
 @view
 @internal
-def _getTransactionFeeData(_action: ActionType, _usdValue: uint256, _priceSheet: TxPriceSheet) -> (address, uint256, uint256):
+def _getTransactionFeeData(_action: ActionType, _usdValue: uint256, _priceSheet: TxPriceSheet, _oracleRegistry: address) -> TxCostInfo:
     if _usdValue == 0 or _priceSheet.asset == empty(address):
-        return empty(address), 0, 0
+        return empty(TxCostInfo)
 
-    # get transaction fee
     fee: uint256 = self._getTxFeeForAction(_action, _priceSheet)
-    feeUsdValue: uint256 = _usdValue * fee // HUNDRED_PERCENT
-    assetAmount: uint256 = 0 
-    if feeUsdValue != 0:
-        oracleRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-        assetAmount = staticcall OracleRegistry(oracleRegistry).getAssetAmount(_priceSheet.asset, feeUsdValue, False)
+    if fee == 0:
+        return empty(TxCostInfo)
 
-    return _priceSheet.asset, assetAmount, feeUsdValue
+    usdValue: uint256 = _usdValue * fee // HUNDRED_PERCENT
+    return TxCostInfo(
+        recipient=empty(address),
+        asset=_priceSheet.asset,
+        amount=staticcall OracleRegistry(_oracleRegistry).getAssetAmount(_priceSheet.asset, usdValue, False),
+        usdValue=usdValue,
+    )
 
 
 @view
@@ -486,6 +565,11 @@ def _getTxFeeForAction(_action: ActionType, _prices: TxPriceSheet) -> uint256:
         return _prices.swapFee
     else:
         return 0
+
+
+#################
+# Agent Tx Fees #
+#################
 
 
 # set agent tx price sheet
@@ -587,6 +671,9 @@ def setAgentTxPriceSheet(
     return True
 
 
+# finalize pending tx price sheet
+
+
 @external
 def finalizePendingTxPriceSheet(_agent: address) -> bool:
     """
@@ -610,6 +697,51 @@ def finalizePendingTxPriceSheet(_agent: address) -> bool:
 def _setPendingTxPriceSheet(_agent: address, _priceSheet: TxPriceSheet):
     self.agentTxPriceData[_agent] = _priceSheet
     log AgentTxPriceSheetSet(_agent, _priceSheet.asset, _priceSheet.depositFee, _priceSheet.withdrawalFee, _priceSheet.rebalanceFee, _priceSheet.transferFee, _priceSheet.swapFee)
+
+
+# removing tx price sheet
+
+
+@external
+def removeAgentTxPriceSheet(_agent: address) -> bool:
+    """
+    @notice Remove transaction price sheet for a specific agent
+    @dev Only callable by governor
+    @param _agent The address of the agent
+    @return bool True if agent price sheet was removed successfully
+    """
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
+    prevInfo: TxPriceSheet = self.agentTxPriceData[_agent]
+    if empty(address) in [prevInfo.asset, _agent]:
+        return False
+
+    self.agentTxPriceData[_agent] = empty(TxPriceSheet)
+    log AgentTxPriceSheetRemoved(_agent, prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee)
+    return True
+
+
+# enable / disable agent tx pricing
+
+
+@external
+def setAgentTxPricingEnabled(_isEnabled: bool) -> bool:
+    """
+    @notice Enable or disable agent transaction pricing
+    @dev Only callable by governor
+    @param _isEnabled True to enable, False to disable
+    @return bool True if agent transaction pricing state was changed successfully
+    """
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert _isEnabled != self.isAgentTxPricingEnabled # dev: no change
+    self.isAgentTxPricingEnabled = _isEnabled
+    log AgentTxPricingEnabled(_isEnabled)
+    return True
+
+
+####################
+# Protocol Tx Fees #
+####################
 
 
 # set protocol tx price sheet
@@ -655,26 +787,7 @@ def setProtocolTxPriceSheet(
     return True
 
 
-# removing tx price sheet
-
-
-@external
-def removeAgentTxPriceSheet(_agent: address) -> bool:
-    """
-    @notice Remove transaction price sheet for a specific agent
-    @dev Only callable by governor
-    @param _agent The address of the agent
-    @return bool True if agent price sheet was removed successfully
-    """
-    assert gov._isGovernor(msg.sender) # dev: no perms
-
-    prevInfo: TxPriceSheet = self.agentTxPriceData[_agent]
-    if empty(address) in [prevInfo.asset, _agent]:
-        return False
-
-    self.agentTxPriceData[_agent] = empty(TxPriceSheet)
-    log AgentTxPriceSheetRemoved(_agent, prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee)
-    return True
+# remove protocol tx price sheet
 
 
 @external
@@ -692,24 +805,6 @@ def removeProtocolTxPriceSheet() -> bool:
 
     self.protocolTxPriceData = empty(TxPriceSheet)
     log ProtocolTxPriceSheetRemoved(prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee)
-    return True
-
-
-# enable / disable agent tx pricing
-
-
-@external
-def setAgentTxPricingEnabled(_isEnabled: bool) -> bool:
-    """
-    @notice Enable or disable agent transaction pricing
-    @dev Only callable by governor
-    @param _isEnabled True to enable, False to disable
-    @return bool True if agent transaction pricing state was changed successfully
-    """
-    assert gov._isGovernor(msg.sender) # dev: no perms
-    assert _isEnabled != self.isAgentTxPricingEnabled # dev: no change
-    self.isAgentTxPricingEnabled = _isEnabled
-    log AgentTxPricingEnabled(_isEnabled)
     return True
 
 
