@@ -235,6 +235,27 @@ def getUnderlyingData(_asset: address, _amount: uint256) -> UnderlyingData:
 
 @view
 @external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if _assetAmount == 0 or _asset == empty(address) or _vaultToken == empty(address):
+        return 0
+
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+
+        vaultTokenAmount: uint256 = staticcall LegoYield(legoInfo.addr).getVaultTokenAmount(_asset, _assetAmount, _vaultToken)
+        if vaultTokenAmount != 0:
+            return vaultTokenAmount
+
+    return 0
+
+
+@view
+@external
 def getTotalUnderlyingForUser(_user: address, _underlyingAsset: address) -> uint256:
     if empty(address) in [_user, _underlyingAsset]:
         return 0

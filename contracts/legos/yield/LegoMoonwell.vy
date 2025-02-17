@@ -144,6 +144,14 @@ def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> ui
     return _vaultTokenAmount * staticcall CompoundV2(_vaultToken).exchangeRateStored() // (10 ** 18)
 
 
+@view
+@external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if yld.vaultToAsset[_vaultToken] != _asset:
+        return 0 # invalid vault token
+    return _assetAmount * (10 ** 18) // staticcall CompoundV2(_vaultToken).exchangeRateStored()
+
+
 # usd value
 
 

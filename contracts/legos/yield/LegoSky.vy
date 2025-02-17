@@ -175,6 +175,16 @@ def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> ui
     return staticcall SkyPsm(SKY_PSM).convertToAssets(self.usds, _vaultTokenAmount)
 
 
+@view
+@external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if _asset not in [self.usdc, self.usds]:
+        return 0 # invalid asset
+    if _vaultToken != self.susds:
+        return 0 # invalid vault token
+    return staticcall SkyPsm(SKY_PSM).convertToShares(_asset, _assetAmount)
+
+
 # usd value
 
 
