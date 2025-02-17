@@ -1,4 +1,4 @@
-from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens
+from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens, remove_contract
 from utils import log
 
 MORPHO_FACTORY = "0xFf62A7c278C62eD665133147129245053Bbf5918"
@@ -12,11 +12,16 @@ class VaultTokens:
     CBBTC = "0x543257eF2161176D7C8cD90BA65C2d4CaEF5a796"
 
 
-def deploy_morpho():
+def deploy_morpho(is_update=False):
     log.h2("Deploying morpho...")
 
     addy_registry = get_contract("AddyRegistry")
     lego_registry = get_contract("LegoRegistry")
+
+    lego_id = 0
+    if is_update:
+        lego_id = get_contract("Morpho").legoId()
+        remove_contract("Morpho")
 
     lego_morpho = deploy_contract(
         "Morpho",
@@ -26,8 +31,12 @@ def deploy_morpho():
         addy_registry,
     )
 
-    if lego_registry.isValidNewLegoAddr(lego_morpho):
-        lego_registry.registerNewLego(lego_morpho, "Morpho", LegoType.YIELD_OPP)
+    print('Morpho lego id', lego_id)
+    if lego_id == 0:
+        if lego_registry.isValidNewLegoAddr(lego_morpho):
+            lego_registry.registerNewLego(lego_morpho, "Morpho", LegoType.YIELD_OPP)
+    else:
+        lego_registry.updateLegoAddr(lego_id, lego_morpho)
 
     log.h2("Adding moonwell assets to registry...")
 

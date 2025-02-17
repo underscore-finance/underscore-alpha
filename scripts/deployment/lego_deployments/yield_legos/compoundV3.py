@@ -1,4 +1,4 @@
-from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens
+from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens, remove_contract
 from utils import log
 
 COMPOUND_V3_CONFIGURATOR = "0x45939657d1CA34A8FA39A924B71D28Fe8431e581"
@@ -10,11 +10,16 @@ class VaultTokens:
     AERO = "0x784efeB622244d2348d4F2522f8860B96fbEcE89"
 
 
-def deploy_compoundV3():
+def deploy_compoundV3(is_update=False):
     log.h2("Deploying compoundV3...")
 
     addy_registry = get_contract("AddyRegistry")
     lego_registry = get_contract("LegoRegistry")
+
+    lego_id = 0
+    if is_update:
+        lego_id = get_contract("CompoundV3").legoId()
+        remove_contract("CompoundV3")
 
     lego_compoundV3 = deploy_contract(
         "CompoundV3",
@@ -23,8 +28,12 @@ def deploy_compoundV3():
         addy_registry,
     )
 
-    if lego_registry.isValidNewLegoAddr(lego_compoundV3):
-        lego_registry.registerNewLego(lego_compoundV3, "CompoundV3", LegoType.YIELD_OPP)
+    print('CompoundV3 lego id', lego_id)
+    if lego_id == 0:
+        if lego_registry.isValidNewLegoAddr(lego_compoundV3):
+            lego_registry.registerNewLego(lego_compoundV3, "CompoundV3", LegoType.YIELD_OPP)
+    else:
+        lego_registry.updateLegoAddr(lego_id, lego_compoundV3)
 
     log.h2("Adding compoundV3 assets to registry...")
 

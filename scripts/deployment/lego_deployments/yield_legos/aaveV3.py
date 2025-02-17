@@ -1,4 +1,4 @@
-from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens
+from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens, remove_contract
 from utils import log
 
 AAVE_V3_POOL = "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5"
@@ -13,11 +13,16 @@ class VaultTokens:
     CBETH = "0xcf3D55c10DB69f28fD1A75Bd73f3D8A2d9c595ad"
 
 
-def deploy_aaveV3():
+def deploy_aaveV3(is_update=False):
     log.h2("Deploying aaveV3...")
 
     addy_registry = get_contract("AddyRegistry")
     lego_registry = get_contract("LegoRegistry")
+
+    lego_id = 0
+    if is_update:
+        lego_id = get_contract("AaveV3").legoId()
+        remove_contract("AaveV3")
 
     lego_aaveV3 = deploy_contract(
         "AaveV3",
@@ -27,8 +32,13 @@ def deploy_aaveV3():
         addy_registry,
     )
 
-    if lego_registry.isValidNewLegoAddr(lego_aaveV3):
-        lego_registry.registerNewLego(lego_aaveV3, "AaveV3", LegoType.YIELD_OPP)
+    print('AaveV3 lego id', lego_id)
+
+    if lego_id == 0:
+        if lego_registry.isValidNewLegoAddr(lego_aaveV3):
+            lego_registry.registerNewLego(lego_aaveV3, "AaveV3", LegoType.YIELD_OPP)
+    else:
+        lego_registry.updateLegoAddr(lego_id, lego_aaveV3)
 
     log.h2("Adding aaveV3 assets to registry...")
 

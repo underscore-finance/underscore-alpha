@@ -95,6 +95,40 @@
           },
           {
             "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityAdded",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityRemoved",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
             "name": "recipient",
             "type": "address"
           },
@@ -132,50 +166,16 @@
         "type": "event"
       },
       {
-        "anonymous": false,
-        "inputs": [
+        "inputs": [],
+        "name": "getRegistries",
+        "outputs": [
           {
-            "indexed": true,
-            "name": "addr",
-            "type": "address"
+            "name": "",
+            "type": "address[]"
           }
         ],
-        "name": "LocalGovernorSet",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityAdded",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityRemoved",
-        "type": "event"
+        "stateMutability": "view",
+        "type": "function"
       },
       {
         "inputs": [
@@ -197,203 +197,6 @@
       {
         "inputs": [],
         "name": "getAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address[]"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "uint256"
-          }
-        ],
-        "name": "assetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAssetOpportunity",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "numAssetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "vaultToAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "uint256"
-          }
-        ],
-        "name": "assets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "numAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_address",
-            "type": "address"
-          }
-        ],
-        "name": "isGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "isValidLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "setLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "localGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getRegistries",
         "outputs": [
           {
             "name": "",
@@ -449,31 +252,6 @@
           }
         ],
         "name": "getUnderlyingAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
         "outputs": [
           {
             "name": "",
@@ -890,6 +668,128 @@
         "type": "function"
       },
       {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "uint256"
+          }
+        ],
+        "name": "assetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAssetOpportunity",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "numAssetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "vaultToAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "uint256"
+          }
+        ],
+        "name": "assets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "numAssets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
         "inputs": [],
         "name": "legoId",
         "outputs": [
@@ -969,7 +869,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x64253906f247E6f9eA34B652b047498Cf35f1CeF",
+    "address": "0xe14514759D2E8A7349961c11F61A51769554f68B",
     "path": "contracts/legos/yield/LegoAaveV3.vy"
   },
   "AddyRegistry": {
@@ -2502,6 +2402,40 @@
           },
           {
             "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityAdded",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityRemoved",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
             "name": "recipient",
             "type": "address"
           },
@@ -2539,50 +2473,16 @@
         "type": "event"
       },
       {
-        "anonymous": false,
-        "inputs": [
+        "inputs": [],
+        "name": "getRegistries",
+        "outputs": [
           {
-            "indexed": true,
-            "name": "addr",
-            "type": "address"
+            "name": "",
+            "type": "address[]"
           }
         ],
-        "name": "LocalGovernorSet",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityAdded",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityRemoved",
-        "type": "event"
+        "stateMutability": "view",
+        "type": "function"
       },
       {
         "inputs": [
@@ -2604,203 +2504,6 @@
       {
         "inputs": [],
         "name": "getAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address[]"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "uint256"
-          }
-        ],
-        "name": "assetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAssetOpportunity",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "numAssetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "vaultToAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "uint256"
-          }
-        ],
-        "name": "assets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "numAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_address",
-            "type": "address"
-          }
-        ],
-        "name": "isGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "isValidLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "setLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "localGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getRegistries",
         "outputs": [
           {
             "name": "",
@@ -2856,31 +2559,6 @@
           }
         ],
         "name": "getUnderlyingAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
         "outputs": [
           {
             "name": "",
@@ -3305,6 +2983,128 @@
         "type": "function"
       },
       {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "uint256"
+          }
+        ],
+        "name": "assetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAssetOpportunity",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "numAssetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "vaultToAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "uint256"
+          }
+        ],
+        "name": "assets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "numAssets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
         "inputs": [],
         "name": "legoId",
         "outputs": [
@@ -3368,7 +3168,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x5A5c84880D4ceC216Cf74340AB6EF5266eEA5a4b",
+    "address": "0xE8599F4d90E6c72EA4aD173d2102D1a6011b6904",
     "path": "contracts/legos/yield/LegoCompoundV3.vy"
   },
   "Euler": {
@@ -3467,6 +3267,40 @@
           },
           {
             "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityAdded",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityRemoved",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
             "name": "recipient",
             "type": "address"
           },
@@ -3504,50 +3338,16 @@
         "type": "event"
       },
       {
-        "anonymous": false,
-        "inputs": [
+        "inputs": [],
+        "name": "getRegistries",
+        "outputs": [
           {
-            "indexed": true,
-            "name": "addr",
-            "type": "address"
+            "name": "",
+            "type": "address[]"
           }
         ],
-        "name": "LocalGovernorSet",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityAdded",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityRemoved",
-        "type": "event"
+        "stateMutability": "view",
+        "type": "function"
       },
       {
         "inputs": [
@@ -3569,203 +3369,6 @@
       {
         "inputs": [],
         "name": "getAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address[]"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "uint256"
-          }
-        ],
-        "name": "assetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAssetOpportunity",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "numAssetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "vaultToAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "uint256"
-          }
-        ],
-        "name": "assets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "numAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_address",
-            "type": "address"
-          }
-        ],
-        "name": "isGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "isValidLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "setLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "localGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getRegistries",
         "outputs": [
           {
             "name": "",
@@ -3821,31 +3424,6 @@
           }
         ],
         "name": "getUnderlyingAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
         "outputs": [
           {
             "name": "",
@@ -4270,296 +3848,6 @@
         "type": "function"
       },
       {
-        "inputs": [],
-        "name": "legoId",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "isActivated",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "EVAULT_FACTORY",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "EARN_FACTORY",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "ADDY_REGISTRY",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_evaultFactory",
-            "type": "address"
-          },
-          {
-            "name": "_earnFactory",
-            "type": "address"
-          },
-          {
-            "name": "_addyRegistry",
-            "type": "address"
-          }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "constructor"
-      }
-    ],
-    "address": "0x59b4D82251fC40B138Bf46C5E6b0004A14242938",
-    "path": "contracts/legos/yield/LegoEuler.vy"
-  },
-  "Fluid": {
-    "abi": [
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "sender",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          },
-          {
-            "indexed": false,
-            "name": "assetAmountDeposited",
-            "type": "uint256"
-          },
-          {
-            "indexed": false,
-            "name": "usdValue",
-            "type": "uint256"
-          },
-          {
-            "indexed": false,
-            "name": "vaultTokenAmountReceived",
-            "type": "uint256"
-          },
-          {
-            "indexed": false,
-            "name": "recipient",
-            "type": "address"
-          }
-        ],
-        "name": "FluidDeposit",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "sender",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          },
-          {
-            "indexed": false,
-            "name": "assetAmountReceived",
-            "type": "uint256"
-          },
-          {
-            "indexed": false,
-            "name": "usdValue",
-            "type": "uint256"
-          },
-          {
-            "indexed": false,
-            "name": "vaultTokenAmountBurned",
-            "type": "uint256"
-          },
-          {
-            "indexed": false,
-            "name": "recipient",
-            "type": "address"
-          }
-        ],
-        "name": "FluidWithdrawal",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "recipient",
-            "type": "address"
-          },
-          {
-            "indexed": false,
-            "name": "balance",
-            "type": "uint256"
-          }
-        ],
-        "name": "FundsRecovered",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": false,
-            "name": "legoId",
-            "type": "uint256"
-          }
-        ],
-        "name": "FluidLegoIdSet",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": false,
-            "name": "isActivated",
-            "type": "bool"
-          }
-        ],
-        "name": "FluidActivated",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "addr",
-            "type": "address"
-          }
-        ],
-        "name": "LocalGovernorSet",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityAdded",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityRemoved",
-        "type": "event"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          }
-        ],
-        "name": "getAssetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address[]"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address[]"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
         "inputs": [
           {
             "name": "arg0",
@@ -4682,59 +3970,32 @@
         "type": "function"
       },
       {
-        "inputs": [
-          {
-            "name": "_address",
-            "type": "address"
-          }
-        ],
-        "name": "isGovernor",
+        "inputs": [],
+        "name": "legoId",
         "outputs": [
           {
             "name": "",
-            "type": "bool"
+            "type": "uint256"
           }
         ],
         "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "isValidLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "setLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "nonpayable",
         "type": "function"
       },
       {
         "inputs": [],
-        "name": "localGovernor",
+        "name": "isActivated",
+        "outputs": [
+          {
+            "name": "",
+            "type": "bool"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "EVAULT_FACTORY",
         "outputs": [
           {
             "name": "",
@@ -4743,10 +4004,252 @@
         ],
         "stateMutability": "view",
         "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "EARN_FACTORY",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "ADDY_REGISTRY",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "_evaultFactory",
+            "type": "address"
+          },
+          {
+            "name": "_earnFactory",
+            "type": "address"
+          },
+          {
+            "name": "_addyRegistry",
+            "type": "address"
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+      }
+    ],
+    "address": "0xE5aa65b7AaaD8e0fbEa45eE959bc1dFb36C3B9f0",
+    "path": "contracts/legos/yield/LegoEuler.vy"
+  },
+  "Fluid": {
+    "abi": [
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "sender",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          },
+          {
+            "indexed": false,
+            "name": "assetAmountDeposited",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "usdValue",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "vaultTokenAmountReceived",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "recipient",
+            "type": "address"
+          }
+        ],
+        "name": "FluidDeposit",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "sender",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          },
+          {
+            "indexed": false,
+            "name": "assetAmountReceived",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "usdValue",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "vaultTokenAmountBurned",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "recipient",
+            "type": "address"
+          }
+        ],
+        "name": "FluidWithdrawal",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityAdded",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityRemoved",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "recipient",
+            "type": "address"
+          },
+          {
+            "indexed": false,
+            "name": "balance",
+            "type": "uint256"
+          }
+        ],
+        "name": "FundsRecovered",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": false,
+            "name": "legoId",
+            "type": "uint256"
+          }
+        ],
+        "name": "FluidLegoIdSet",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": false,
+            "name": "isActivated",
+            "type": "bool"
+          }
+        ],
+        "name": "FluidActivated",
+        "type": "event"
       },
       {
         "inputs": [],
         "name": "getRegistries",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address[]"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "_asset",
+            "type": "address"
+          }
+        ],
+        "name": "getAssetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address[]"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "getAssets",
         "outputs": [
           {
             "name": "",
@@ -4802,31 +4305,6 @@
           }
         ],
         "name": "getUnderlyingAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
         "outputs": [
           {
             "name": "",
@@ -5239,6 +4717,128 @@
         "type": "function"
       },
       {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "uint256"
+          }
+        ],
+        "name": "assetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAssetOpportunity",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "numAssetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "vaultToAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "uint256"
+          }
+        ],
+        "name": "assets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "numAssets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
         "inputs": [],
         "name": "legoId",
         "outputs": [
@@ -5302,7 +4902,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xA14bceB2C0086Acdee1b01e47C7EF3dE49ed996E",
+    "address": "0x7d043676c00F00740f1e0f494675C0bbA9C85Ba1",
     "path": "contracts/legos/yield/LegoFluid.vy"
   },
   "LegoHelper": {
@@ -5548,52 +5148,6 @@
         "type": "function"
       },
       {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_user",
-            "type": "address"
-          },
-          {
-            "name": "_underlyingAsset",
-            "type": "address"
-          }
-        ],
-        "name": "getTotalUnderlyingForUser",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
         "inputs": [],
         "name": "ADDY_REGISTRY",
         "outputs": [
@@ -5729,7 +5283,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xfBbA972f3693360AE48B61268aD3cA2e373895bc",
+    "address": "0x6d798b02283cb02189c4295725AD09272BF89000",
     "path": "contracts/core/LegoHelper.vy"
   },
   "LegoRegistry": {
@@ -6393,6 +5947,40 @@
           },
           {
             "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityAdded",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityRemoved",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
             "name": "recipient",
             "type": "address"
           },
@@ -6430,50 +6018,16 @@
         "type": "event"
       },
       {
-        "anonymous": false,
-        "inputs": [
+        "inputs": [],
+        "name": "getRegistries",
+        "outputs": [
           {
-            "indexed": true,
-            "name": "addr",
-            "type": "address"
+            "name": "",
+            "type": "address[]"
           }
         ],
-        "name": "LocalGovernorSet",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityAdded",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityRemoved",
-        "type": "event"
+        "stateMutability": "view",
+        "type": "function"
       },
       {
         "inputs": [
@@ -6495,203 +6049,6 @@
       {
         "inputs": [],
         "name": "getAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address[]"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "uint256"
-          }
-        ],
-        "name": "assetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAssetOpportunity",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "numAssetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "vaultToAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "uint256"
-          }
-        ],
-        "name": "assets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "numAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_address",
-            "type": "address"
-          }
-        ],
-        "name": "isGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "isValidLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "setLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "localGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getRegistries",
         "outputs": [
           {
             "name": "",
@@ -6747,31 +6104,6 @@
           }
         ],
         "name": "getUnderlyingAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
         "outputs": [
           {
             "name": "",
@@ -7196,6 +6528,128 @@
         "type": "function"
       },
       {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "uint256"
+          }
+        ],
+        "name": "assetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAssetOpportunity",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "numAssetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "vaultToAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "uint256"
+          }
+        ],
+        "name": "assets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "numAssets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
         "inputs": [],
         "name": "legoId",
         "outputs": [
@@ -7259,7 +6713,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xE2445c6eEe01315Faa4d8fe3CEa9560136687B5C",
+    "address": "0x835D71D7f0c4cEe09FcbB81E54818724ABa76C36",
     "path": "contracts/legos/yield/LegoMoonwell.vy"
   },
   "Morpho": {
@@ -7358,6 +6812,40 @@
           },
           {
             "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityAdded",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "name": "vaultToken",
+            "type": "address"
+          }
+        ],
+        "name": "AssetOpportunityRemoved",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": true,
             "name": "recipient",
             "type": "address"
           },
@@ -7395,50 +6883,16 @@
         "type": "event"
       },
       {
-        "anonymous": false,
-        "inputs": [
+        "inputs": [],
+        "name": "getRegistries",
+        "outputs": [
           {
-            "indexed": true,
-            "name": "addr",
-            "type": "address"
+            "name": "",
+            "type": "address[]"
           }
         ],
-        "name": "LocalGovernorSet",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityAdded",
-        "type": "event"
-      },
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "asset",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "name": "vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "AssetOpportunityRemoved",
-        "type": "event"
+        "stateMutability": "view",
+        "type": "function"
       },
       {
         "inputs": [
@@ -7460,203 +6914,6 @@
       {
         "inputs": [],
         "name": "getAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address[]"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "uint256"
-          }
-        ],
-        "name": "assetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          },
-          {
-            "name": "arg1",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAssetOpportunity",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "numAssetOpportunities",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "vaultToAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "uint256"
-          }
-        ],
-        "name": "assets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "arg0",
-            "type": "address"
-          }
-        ],
-        "name": "indexOfAsset",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "numAssets",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_address",
-            "type": "address"
-          }
-        ],
-        "name": "isGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "isValidLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "setLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "localGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "getRegistries",
         "outputs": [
           {
             "name": "",
@@ -7712,31 +6969,6 @@
           }
         ],
         "name": "getUnderlyingAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
         "outputs": [
           {
             "name": "",
@@ -8161,6 +7393,128 @@
         "type": "function"
       },
       {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "uint256"
+          }
+        ],
+        "name": "assetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          },
+          {
+            "name": "arg1",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAssetOpportunity",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "numAssetOpportunities",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "vaultToAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "uint256"
+          }
+        ],
+        "name": "assets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "arg0",
+            "type": "address"
+          }
+        ],
+        "name": "indexOfAsset",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "numAssets",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
         "inputs": [],
         "name": "legoId",
         "outputs": [
@@ -8240,7 +7594,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x9fB69F873d24078935E1678BD61Db7675b8B6Ef4",
+    "address": "0xD5FA5a655aFD3f76502990c160888562e5B1E8CD",
     "path": "contracts/legos/yield/LegoMorpho.vy"
   },
   "OracleRegistry": {
@@ -10695,81 +10049,6 @@
         "type": "event"
       },
       {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "name": "addr",
-            "type": "address"
-          }
-        ],
-        "name": "LocalGovernorSet",
-        "type": "event"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_address",
-            "type": "address"
-          }
-        ],
-        "name": "isGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "isValidLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_newGovernor",
-            "type": "address"
-          }
-        ],
-        "name": "setLocalGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "bool"
-          }
-        ],
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "inputs": [],
-        "name": "localGovernor",
-        "outputs": [
-          {
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
         "inputs": [],
         "name": "getRegistries",
         "outputs": [
@@ -10856,31 +10135,6 @@
           }
         ],
         "name": "getUnderlyingAmount",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "inputs": [
-          {
-            "name": "_asset",
-            "type": "address"
-          },
-          {
-            "name": "_assetAmount",
-            "type": "uint256"
-          },
-          {
-            "name": "_vaultToken",
-            "type": "address"
-          }
-        ],
-        "name": "getVaultTokenAmount",
         "outputs": [
           {
             "name": "",
@@ -11362,7 +10616,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0xD9AFdFbb0eE4974Fc457d1B2e19A2d1F76c41C6b",
+    "address": "0xFA9dbCF372aBcD65b1EFCf4022e610a252fc4c6d",
     "path": "contracts/legos/yield/LegoSky.vy"
   },
   "WalletTemplate": {

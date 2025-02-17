@@ -1,4 +1,4 @@
-from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens
+from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens, remove_contract
 from utils import log
 
 
@@ -13,11 +13,16 @@ class VaultTokens:
     CBBTC = "0x882018411Bc4A020A879CEE183441fC9fa5D7f8B"
 
 
-def deploy_euler():
+def deploy_euler(is_update=False):
     log.h2("Deploying euler...")
 
     addy_registry = get_contract("AddyRegistry")
     lego_registry = get_contract("LegoRegistry")
+
+    lego_id = 0
+    if is_update:
+        lego_id = get_contract("Euler").legoId()
+        remove_contract("Euler")
 
     lego_euler = deploy_contract(
         "Euler",
@@ -27,8 +32,12 @@ def deploy_euler():
         addy_registry,
     )
 
-    if lego_registry.isValidNewLegoAddr(lego_euler):
-        lego_registry.registerNewLego(lego_euler, "Euler", LegoType.YIELD_OPP)
+    print('Euler lego id', lego_id)
+    if lego_id == 0:
+        if lego_registry.isValidNewLegoAddr(lego_euler):
+            lego_registry.registerNewLego(lego_euler, "Euler", LegoType.YIELD_OPP)
+    else:
+        lego_registry.updateLegoAddr(lego_id, lego_euler)
 
     log.h2("Adding euler assets to registry...")
 

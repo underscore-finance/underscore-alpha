@@ -44,6 +44,11 @@ def load_deployments():
         DEPLOYMENTS = {}
 
 
+def remove_contract(name):
+    global DEPLOYMENTS
+    DEPLOYMENTS.pop(name)
+
+
 def deploy_contract(name, path, *args):
     global DEPLOYMENTS  # Use the global DEPLOYMENTS variable
 

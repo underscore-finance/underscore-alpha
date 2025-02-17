@@ -1,4 +1,4 @@
-from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens
+from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens, remove_contract
 from utils import log
 
 
@@ -14,11 +14,16 @@ class VaultTokens:
     AERO = "0x73902f619CEB9B31FD8EFecf435CbDf89E369Ba6"
 
 
-def deploy_moonwell():
+def deploy_moonwell(is_update=False):
     log.h2("Deploying moonwell...")
 
     addy_registry = get_contract("AddyRegistry")
     lego_registry = get_contract("LegoRegistry")
+
+    lego_id = 0
+    if is_update:
+        lego_id = get_contract("Moonwell").legoId()
+        remove_contract("Moonwell")
 
     lego_moonwell = deploy_contract(
         "Moonwell",
@@ -27,8 +32,12 @@ def deploy_moonwell():
         addy_registry,
     )
 
-    if lego_registry.isValidNewLegoAddr(lego_moonwell):
-        lego_registry.registerNewLego(lego_moonwell, "Moonwell", LegoType.YIELD_OPP)
+    print('Moonwell lego id', lego_id)
+    if lego_id == 0:
+        if lego_registry.isValidNewLegoAddr(lego_moonwell):
+            lego_registry.registerNewLego(lego_moonwell, "Moonwell", LegoType.YIELD_OPP)
+    else:
+        lego_registry.updateLegoAddr(lego_id, lego_moonwell)
 
     log.h2("Adding moonwell assets to registry...")
 

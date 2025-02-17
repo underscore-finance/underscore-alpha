@@ -1,4 +1,4 @@
-from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens
+from scripts.deployment.utils import deploy_contract, get_contract, LegoType, Tokens, remove_contract
 from utils import log
 
 
@@ -12,11 +12,16 @@ class VaultTokens:
     EURC = "0x1943FA26360f038230442525Cf1B9125b5DCB401"
 
 
-def deploy_fluid():
+def deploy_fluid(is_update=False):
     log.h2("Deploying fluid...")
 
     addy_registry = get_contract("AddyRegistry")
     lego_registry = get_contract("LegoRegistry")
+
+    lego_id = 0
+    if is_update:
+        lego_id = get_contract("Fluid").legoId()
+        remove_contract("Fluid")
 
     lego_fluid = deploy_contract(
         "Fluid",
@@ -25,8 +30,12 @@ def deploy_fluid():
         addy_registry,
     )
 
-    if lego_registry.isValidNewLegoAddr(lego_fluid):
-        lego_registry.registerNewLego(lego_fluid, "Fluid", LegoType.YIELD_OPP)
+    print('Fluid lego id', lego_id)
+    if lego_id == 0:
+        if lego_registry.isValidNewLegoAddr(lego_fluid):
+            lego_registry.registerNewLego(lego_fluid, "Fluid", LegoType.YIELD_OPP)
+    else:
+        lego_registry.updateLegoAddr(lego_id, lego_fluid)
 
     log.h2("Adding fluid assets to registry...")
 
