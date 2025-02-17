@@ -27,8 +27,8 @@ def lego_registry(addy_registry_deploy):
 
 
 @pytest.fixture(scope="session")
-def agent_factory(addy_registry_deploy, weth, wallet_template, governor):
-    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_template, name="agent_factory")
+def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, governor):
+    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, name="agent_factory")
     assert f.setNumAgenticWalletsAllowed(MAX_UINT256, sender=governor)
     return f
 
@@ -47,8 +47,13 @@ def oracle_registry(addy_registry_deploy):
 
 
 @pytest.fixture(scope="session")
-def wallet_template():
-    return boa.load("contracts/core/WalletTemplate.vy", name="wallet_template")
+def wallet_funds_template():
+    return boa.load("contracts/core/WalletFunds.vy", name="wallet_funds_template")
+
+
+@pytest.fixture(scope="session")
+def wallet_config_template():
+    return boa.load("contracts/core/WalletConfig.vy", name="wallet_config_template")
 
 
 @pytest.fixture(scope="session")

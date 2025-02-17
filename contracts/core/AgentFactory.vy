@@ -5,8 +5,11 @@ exports: gov.__interface__
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 
-interface AgenticWallet:
-    def initialize(_AddyRegistry: address, _wethAddr: address, _trialFundsAsset: address, _trialFundsAmount: uint256, _owner: address, _agent: address) -> bool: nonpayable
+interface MainWallet:
+    def initialize(_walletConfig: address, _addyRegistry: address, _wethAddr: address, _trialFundsAsset: address, _trialFundsInitialAmount: uint256) -> bool: nonpayable
+
+interface WalletConfig:
+    def initialize(_wallet: address, _addyRegistry: address, _owner: address, _initialAgent: address) -> bool: nonpayable
 
 struct TemplateInfo:
     addr: address
@@ -18,12 +21,17 @@ struct TrialFundsData:
     amount: uint256
 
 event AgenticWalletCreated:
-    addr: indexed(address)
+    mainAddr: indexed(address)
+    configAddr: indexed(address)
     owner: indexed(address)
-    agent: indexed(address)
+    agent: address
     creator: address
 
-event AgentTemplateSet:
+event MainWalletTemplateSet:
+    template: indexed(address)
+    version: uint256
+
+event WalletConfigTemplateSet:
     template: indexed(address)
     version: uint256
 
@@ -50,7 +58,8 @@ event AgentFactoryActivated:
     isActivated: bool
 
 # template info
-agentTemplateInfo: public(TemplateInfo)
+mainWalletTemplateInfo: public(TemplateInfo)
+walletConfigTemplateInfo: public(TemplateInfo)
 trialFundsData: public(TrialFundsData)
 
 # agentic wallets
@@ -69,7 +78,7 @@ WETH_ADDR: public(immutable(address))
 
 
 @deploy
-def __init__(_addyRegistry: address, _wethAddr: address, _walletTemplate: address):
+def __init__(_addyRegistry: address, _wethAddr: address, _mainWalletTemplate: address, _walletConfigTemplate: address):
     assert empty(address) not in [_addyRegistry, _wethAddr] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
     WETH_ADDR = _wethAddr
@@ -77,8 +86,9 @@ def __init__(_addyRegistry: address, _wethAddr: address, _walletTemplate: addres
     self.isActivated = True
 
     # set agent template
-    if self._isValidWalletTemplate(_walletTemplate):
-        self._setAgenticWalletTemplate(_walletTemplate)
+    if self._isValidMainWalletTemplate(_mainWalletTemplate) and self._isValidWalletConfigTemplate(_walletConfigTemplate):
+        self._setMainWalletTemplate(_mainWalletTemplate)
+        self._setWalletConfigTemplate(_walletConfigTemplate)
 
 
 @view
@@ -86,10 +96,10 @@ def __init__(_addyRegistry: address, _wethAddr: address, _walletTemplate: addres
 def currentAgentTemplate() -> address:
     """
     @notice Get the current wallet template address being used by the factory
-    @dev This is a simple getter for the current template address stored in agentTemplateInfo
+    @dev This is a simple getter for the current template address stored in mainWalletTemplateInfo
     @return The address of the current wallet template
     """
-    return self.agentTemplateInfo.addr
+    return self.mainWalletTemplateInfo.addr
 
 
 #########################
@@ -102,18 +112,18 @@ def currentAgentTemplate() -> address:
 def isValidWalletSetup(_owner: address, _agent: address) -> bool:
     """
     @notice Check if the provided owner and agent addresses form a valid wallet setup
-    @dev Validates that the template exists and owner/agent combination is valid
+    @dev Validates that both templates exist and owner/agent combination is valid
     @param _owner The address that will own the wallet
     @param _agent The address that will be the agent (can be empty)
     @return True if the setup is valid, False otherwise
     """
-    return self._isValidWalletSetup(self.agentTemplateInfo.addr, _owner, _agent)
+    return self._isValidWalletSetup(self.mainWalletTemplateInfo.addr, self.walletConfigTemplateInfo.addr, _owner, _agent)
 
 
 @view
 @internal 
-def _isValidWalletSetup(_template: address, _owner: address, _agent: address) -> bool:
-    if _template == empty(address):
+def _isValidWalletSetup(_mainTemplate: address, _configTemplate: address, _owner: address, _agent: address) -> bool:
+    if _mainTemplate == empty(address) or _configTemplate == empty(address):
         return False
     return _owner != empty(address) and _owner != _agent
 
@@ -129,8 +139,9 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(ad
     """
     assert self.isActivated # dev: not activated
 
-    agentTemplate: address = self.agentTemplateInfo.addr
-    if not self._isValidWalletSetup(agentTemplate, _owner, _agent):
+    mainWalletTemplate: address = self.mainWalletTemplateInfo.addr
+    walletConfigTemplate: address = self.walletConfigTemplateInfo.addr
+    if not self._isValidWalletSetup(mainWalletTemplate, walletConfigTemplate, _owner, _agent):
         return empty(address)
 
     # check limits
@@ -139,76 +150,132 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(ad
     if self.numAgenticWallets >= self.numAgenticWalletsAllowed:
         return empty(address)
 
-    # create agentic wallet
-    newAgentAddr: address = create_minimal_proxy_to(agentTemplate)
+    # create both contracts (main wallet and wallet config)
+    mainWalletAddr: address = create_minimal_proxy_to(mainWalletTemplate)
+    walletConfigAddr: address = create_minimal_proxy_to(walletConfigTemplate)
+
+    # initalize main wallet and wallet config
+    trialFundsData: TrialFundsData = self.trialFundsData
+    assert extcall MainWallet(mainWalletAddr).initialize(walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount) # dev: could not initialize main wallet
+    assert extcall WalletConfig(walletConfigAddr).initialize(mainWalletAddr, ADDY_REGISTRY, _owner, _agent) # dev: could not initialize wallet config
 
     # transfer initial trial funds asset + amount
-    trialFundsData: TrialFundsData = self.trialFundsData
     if trialFundsData.asset != empty(address):
         trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
         if trialFundsData.amount != 0:
-            assert extcall IERC20(trialFundsData.asset).transfer(newAgentAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
+            assert extcall IERC20(trialFundsData.asset).transfer(mainWalletAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
 
-    # initalize wallet
-    assert extcall AgenticWallet(newAgentAddr).initialize(ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount, _owner, _agent)
-    
-    self.isAgenticWallet[newAgentAddr] = True
+    # update data
+    self.isAgenticWallet[mainWalletAddr] = True
     self.numAgenticWallets += 1
 
-    log AgenticWalletCreated(newAgentAddr, _owner, _agent, msg.sender)
-    return newAgentAddr
+    log AgenticWalletCreated(mainWalletAddr, walletConfigAddr, _owner, _agent, msg.sender)
+    return mainWalletAddr
 
 
-#######################
-# Set Wallet Template #
-#######################
+############################
+# Set Main Wallet Template #
+############################
 
 
 @view
 @external 
-def isValidWalletTemplate(_newAddr: address) -> bool:
+def isValidMainWalletTemplate(_newAddr: address) -> bool:
     """
-    @notice Check if a given address is valid to be used as a new wallet template
+    @notice Check if a given address is valid to be used as a new main wallet template
     @dev Validates the address is a contract and different from current template
     @param _newAddr The address to validate as a potential new template
     @return True if the address can be used as a template, False otherwise
     """
-    return self._isValidWalletTemplate(_newAddr)
+    return self._isValidMainWalletTemplate(_newAddr)
 
 
 @view
 @internal 
-def _isValidWalletTemplate(_newAddr: address) -> bool:
+def _isValidMainWalletTemplate(_newAddr: address) -> bool:
     if not _newAddr.is_contract or _newAddr == empty(address):
         return False
-    return _newAddr != self.agentTemplateInfo.addr
+    return _newAddr != self.mainWalletTemplateInfo.addr
 
 
 @external
-def setAgenticWalletTemplate(_addr: address) -> bool:
+def setMainWalletTemplate(_addr: address) -> bool:
     """
-    @notice Set a new wallet template address for future wallet deployments
+    @notice Set a new main wallet template address for future wallet deployments
     @dev Only callable by the governor, updates template info and emits event
     @param _addr The address of the new template to use
     @return True if template was successfully updated, False if invalid address
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
 
-    if not self._isValidWalletTemplate(_addr):
+    if not self._isValidMainWalletTemplate(_addr):
         return False
-    return self._setAgenticWalletTemplate(_addr)
+    return self._setMainWalletTemplate(_addr)
 
 
 @internal
-def _setAgenticWalletTemplate(_addr: address) -> bool:   
-    prevData: TemplateInfo = self.agentTemplateInfo
+def _setMainWalletTemplate(_addr: address) -> bool:   
+    prevData: TemplateInfo = self.mainWalletTemplateInfo
     newData: TemplateInfo = TemplateInfo(
         addr=_addr,
         version=prevData.version + 1,
         lastModified=block.timestamp,
     )
-    self.agentTemplateInfo = newData
-    log AgentTemplateSet(_addr, newData.version)
+    self.mainWalletTemplateInfo = newData
+    log MainWalletTemplateSet(_addr, newData.version)
+    return True
+
+
+##############################
+# Set Wallet Config Template #
+##############################
+
+
+@view
+@external 
+def isValidWalletConfigTemplate(_newAddr: address) -> bool:
+    """
+    @notice Check if a given address is valid to be used as a new wallet config template
+    @dev Validates the address is a contract and different from current template
+    @param _newAddr The address to validate as a potential new template
+    @return True if the address can be used as a template, False otherwise
+    """
+    return self._isValidWalletConfigTemplate(_newAddr)
+
+
+@view
+@internal 
+def _isValidWalletConfigTemplate(_newAddr: address) -> bool:
+    if not _newAddr.is_contract or _newAddr == empty(address):
+        return False
+    return _newAddr != self.walletConfigTemplateInfo.addr
+
+
+@external
+def setWalletConfigTemplate(_addr: address) -> bool:
+    """
+    @notice Set a new wallet config template address for future wallet deployments
+    @dev Only callable by the governor, updates template info and emits event
+    @param _addr The address of the new template to use
+    @return True if template was successfully updated, False if invalid address
+    """
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
+    if not self._isValidWalletConfigTemplate(_addr):
+        return False
+    return self._setWalletConfigTemplate(_addr)
+
+
+@internal
+def _setWalletConfigTemplate(_addr: address) -> bool:   
+    prevData: TemplateInfo = self.walletConfigTemplateInfo
+    newData: TemplateInfo = TemplateInfo(
+        addr=_addr,
+        version=prevData.version + 1,
+        lastModified=block.timestamp,
+    )
+    self.walletConfigTemplateInfo = newData
+    log WalletConfigTemplateSet(_addr, newData.version)
     return True
 
 

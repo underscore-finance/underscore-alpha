@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from eth_account import Account
-from contracts.core import WalletTemplate
+from contracts.core import WalletFunds, WalletConfig
 from constants import ZERO_ADDRESS
 
 
@@ -26,7 +26,12 @@ def ai_wallet(agent_factory, owner, agent):
     w = agent_factory.createAgenticWallet(owner, agent, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isAgenticWallet(w)
-    return WalletTemplate.at(w)
+    return WalletFunds.at(w)
+
+
+@pytest.fixture(scope="package")
+def ai_wallet_config(ai_wallet):
+    return WalletConfig.at(ai_wallet.walletConfig())
 
 
 @pytest.fixture(scope="package")

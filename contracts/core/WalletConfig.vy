@@ -38,7 +38,7 @@ struct AgentInfo:
 
 struct CoreData:
     owner: address
-    wallet: address,
+    wallet: address
     walletConfig: address
     legoRegistry: address
     priceSheets: address
@@ -123,6 +123,11 @@ event ReserveAssetSet:
     asset: indexed(address)
     amount: uint256
 
+event FundsRecovered:
+    asset: indexed(address)
+    recipient: indexed(address)
+    balance: uint256
+
 # core
 wallet: public(address)
 
@@ -135,7 +140,6 @@ isRecipientAllowed: public(HashMap[address, bool]) # recipient -> is allowed
 
 # config
 addyRegistry: public(address)
-wethAddr: public(address)
 initialized: public(bool)
 
 API_VERSION: constant(String[28]) = "0.0.1"
@@ -158,9 +162,6 @@ def __init__():
 def initialize(
     _wallet: address,
     _addyRegistry: address,
-    _wethAddr: address,
-    _trialFundsAsset: address,
-    _trialFundsAmount: uint256,
     _owner: address,
     _initialAgent: address,
 ) -> bool:
@@ -169,9 +170,6 @@ def initialize(
     @dev Can only be called once and sets core contract parameters
     @param _wallet The address of the wallet contract
     @param _addyRegistry The address of the core registry contract
-    @param _wethAddr The address of the WETH contract
-    @param _trialFundsAsset The address of the gift asset
-    @param _trialFundsAmount The amount of the gift asset
     @param _owner The address that will own this wallet
     @param _initialAgent The address of the initial AI agent (if any)
     @return bool True if initialization was successful
@@ -179,11 +177,10 @@ def initialize(
     assert not self.initialized # dev: can only initialize once
     self.initialized = True
 
-    assert empty(address) not in [_wallet, _addyRegistry, _wethAddr, _owner] # dev: invalid addrs
+    assert empty(address) not in [_wallet, _addyRegistry, _owner] # dev: invalid addrs
     assert _initialAgent != _owner # dev: agent cannot be owner
     self.wallet = _wallet
     self.addyRegistry = _addyRegistry
-    self.wethAddr = _wethAddr
     self.owner = _owner
 
     priceSheets: address = staticcall AddyRegistry(_addyRegistry).getAddy(PRICE_SHEETS_ID)
@@ -295,6 +292,12 @@ def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions)
         return False
 
 
+@view
+@external
+def isAgentActive(_agent: address) -> bool:
+    return self.agentSettings[_agent].isActive
+
+
 ##########################
 # Subscription + Tx Fees #
 ##########################
@@ -378,7 +381,7 @@ def _checkIfSufficientFunds(_protocolAsset: address, _protocolAmount: uint256, _
     # check if any of these assets are also trial funds asset
     trialFundsCurrentBal: uint256 = 0
     trialFundsDeployed: uint256 = 0
-    if _protocolAsset == _cd.trialFundsAsset or _agentAsset == _cd.trialFundsAsset:
+    if (_protocolAsset != empty(address) and _protocolAsset == _cd.trialFundsAsset) or (_agentAsset != empty(address) and _agentAsset == _cd.trialFundsAsset):
         trialFundsCurrentBal = staticcall IERC20(_cd.trialFundsAsset).balanceOf(_cd.wallet)
         trialFundsDeployed = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingForUser(_cd.wallet, _cd.trialFundsAsset)
 
@@ -725,4 +728,27 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
         self.reserveAssets[asset] = amount
         log ReserveAssetSet(asset, amount)
 
+    return True
+
+
+#################
+# Recover Funds #
+#################
+
+
+@external
+def recoverFunds(_asset: address) -> bool:
+    """
+    @notice transfers funds from the config contract to the main wallet
+    @dev anyone can call this!
+    @param _asset The address of the asset to recover
+    @return bool True if the funds were recovered successfully
+    """
+    balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
+    wallet: address = self.wallet
+    if empty(address) in [wallet, _asset] or balance == 0:
+        return False
+
+    assert extcall IERC20(_asset).transfer(wallet, balance, default_return_value=True) # dev: recovery failed
+    log FundsRecovered(_asset, wallet, balance)
     return True

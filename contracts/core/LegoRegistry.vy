@@ -2,7 +2,10 @@
 
 initializes: gov
 exports: gov.__interface__
+
+from ethereum.ercs import IERC20
 import contracts.modules.Governable as gov
+from interfaces import LegoYield
 
 interface LegoPartner:
     def setLegoId(_legoId: uint256) -> bool: nonpayable
@@ -52,6 +55,8 @@ numLegos: public(uint256)
 
 # config
 ADDY_REGISTRY: public(immutable(address))
+
+MAX_VAULTS: constant(uint256) = 15
 
 
 @deploy
