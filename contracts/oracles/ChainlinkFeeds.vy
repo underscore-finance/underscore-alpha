@@ -1,7 +1,11 @@
 # @version 0.4.0
 
 implements: OraclePartner
+initializes: gov
+exports: gov.__interface__
+
 import interfaces.OraclePartnerInterface as OraclePartner
+import contracts.modules.Governable as gov
 
 interface ChainlinkFeed:
     def latestRoundData() -> ChainlinkRound: view
@@ -9,7 +13,6 @@ interface ChainlinkFeed:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
 
 struct ChainlinkRound:
     roundId: uint80
@@ -33,8 +36,10 @@ event ChainlinkFeedAdded:
 event ChainlinkFeedDisabled:
     asset: indexed(address)
 
-# config
+# chainlink config
 feedConfig: public(HashMap[address, ChainlinkConfig])
+
+# general config
 oraclePartnerId: public(uint256)
 ADDY_REGISTRY: public(immutable(address))
 
@@ -53,6 +58,7 @@ NORMALIZED_DECIMALS: constant(uint256) = 18
 @deploy
 def __init__(_addyRegistry: address, _shouldSetDefaultFeeds: bool):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
+    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
 
     # set default feeds
@@ -203,7 +209,7 @@ def setChainlinkFeed(
     _needsEthToUsd: bool = False,
     _needsBtcToUsd: bool = False,
 ) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     return self._setChainlinkFeed(_asset, _feed, _needsEthToUsd, _needsBtcToUsd)
 
 
@@ -234,7 +240,7 @@ def _setChainlinkFeed(
 
 @external
 def disableChainlinkPriceFeed(_asset: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     assert _asset not in [ETH, WETH, BTC] # dev: cannot disable default feeds
     if not self._hasPriceFeed(_asset):
         return False

@@ -1,11 +1,14 @@
 # @version 0.4.0
 
 implements: OraclePartner
+initializes: gov
+exports: gov.__interface__
+
 import interfaces.OraclePartnerInterface as OraclePartner
+import contracts.modules.Governable as gov
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
 
 struct CustomOracleData:
     price: uint256
@@ -15,8 +18,10 @@ event CustomPriceSet:
     asset: indexed(address)
     price: uint256
 
-# config
+# custom config
 priceData: public(HashMap[address, CustomOracleData])
+
+# general config
 oraclePartnerId: public(uint256)
 ADDY_REGISTRY: public(immutable(address))
 
@@ -24,6 +29,7 @@ ADDY_REGISTRY: public(immutable(address))
 @deploy
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
+    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
 
 
@@ -74,7 +80,7 @@ def hasPriceFeed(_asset: address) -> bool:
 
 @external
 def setPrice(_asset: address, _price: uint256):
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     self.priceData[_asset] = CustomOracleData(
         price=_price,
         publishTime=block.timestamp,

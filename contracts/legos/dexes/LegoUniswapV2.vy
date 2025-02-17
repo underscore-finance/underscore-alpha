@@ -1,22 +1,24 @@
 # @version 0.4.0
 
 implements: LegoDex
+initializes: gov
+exports: gov.__interface__
 
+import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
 interface UniV2Router:
     def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[address, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
 
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
 interface UniV2Factory:
     def getPair(_tokenA: address, _tokenB: address) -> address: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
-
-interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 event UniswapV2Swap:
     sender: indexed(address)
@@ -35,9 +37,14 @@ event FundsRecovered:
 event UniswapV2LegoIdSet:
     legoId: uint256
 
-legoId: public(uint256)
+event UniswapV2Activated:
+    isActivated: bool
 
+# config
+legoId: public(uint256)
+isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
+
 UNISWAP_V2_FACTORY: public(immutable(address))
 UNISWAP_V2_ROUTER: public(immutable(address))
 
@@ -50,6 +57,8 @@ def __init__(_uniswapV2Factory: address, _uniswapV2Router: address, _addyRegistr
     UNISWAP_V2_FACTORY = _uniswapV2Factory
     UNISWAP_V2_ROUTER = _uniswapV2Router
     ADDY_REGISTRY = _addyRegistry
+    self.isActivated = True
+    gov.__init__(_addyRegistry)
 
 
 @view
@@ -89,6 +98,8 @@ def swapTokens(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
     assert staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut) != empty(address) # dev: no pool found
 
     # pre balances
@@ -130,7 +141,7 @@ def swapTokens(
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -154,3 +165,10 @@ def setLegoId(_legoId: uint256) -> bool:
     self.legoId = _legoId
     log UniswapV2LegoIdSet(_legoId)
     return True
+
+
+@external
+def activate(_shouldActivate: bool):
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.isActivated = _shouldActivate
+    log UniswapV2Activated(_shouldActivate)

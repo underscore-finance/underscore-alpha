@@ -1,7 +1,11 @@
 # @version 0.4.0
 
 implements: OraclePartner
+initializes: gov
+exports: gov.__interface__
+
 import interfaces.OraclePartnerInterface as OraclePartner
+import contracts.modules.Governable as gov
 
 interface PythNetwork:
     def getPriceUnsafe(_priceFeedId: bytes32) -> PythPrice: view
@@ -11,7 +15,6 @@ interface PythNetwork:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
 
 struct PythPrice:
     price: int64
@@ -35,13 +38,13 @@ event EthRecoveredFromPyth:
     recipient: indexed(address)
     amount: uint256
 
-# config
+# pyth config
+PYTH: public(immutable(address))
 feedConfig: public(HashMap[address, bytes32])
+
+# general config
 oraclePartnerId: public(uint256)
 ADDY_REGISTRY: public(immutable(address))
-
-# Base L2
-PYTH: public(immutable(address))
 
 NORMALIZED_DECIMALS: constant(uint256) = 18
 MAX_PRICE_UPDATES: constant(uint256) = 15
@@ -50,6 +53,7 @@ MAX_PRICE_UPDATES: constant(uint256) = 15
 @deploy
 def __init__(_addyRegistry: address, _pyth: address):
     assert empty(address) not in [_addyRegistry, _pyth] # dev: invalid addrs
+    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
     PYTH = _pyth
 
@@ -174,7 +178,7 @@ def _isValidPythFeed(_asset: address, _feedId: bytes32) -> bool:
 
 @external
 def setPythFeed(_asset: address, _feedId: bytes32) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     if not self._isValidPythFeed(_asset, _feedId):
         return False
 
@@ -188,7 +192,7 @@ def setPythFeed(_asset: address, _feedId: bytes32) -> bool:
 
 @external
 def disablePythPriceFeed(_asset: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     if not self._hasPriceFeed(_asset):
         return False
     self.feedConfig[_asset] = empty(bytes32)
@@ -215,7 +219,7 @@ def _isValidEthRecovery(_recipient: address, _balance: uint256) -> bool:
 
 @external
 def recoverEthBalance(_recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     balance: uint256 = self.balance
     if not self._isValidEthRecovery(_recipient, balance):
         return False

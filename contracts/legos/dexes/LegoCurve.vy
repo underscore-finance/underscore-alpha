@@ -1,7 +1,10 @@
 # @version 0.4.0
 
 implements: LegoDex
+initializes: gov
+exports: gov.__interface__
 
+import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
@@ -26,15 +29,14 @@ interface TwoCryptoNgPool:
 interface CryptoLegacyPool:
     def exchange(_i: uint256, _j: uint256, _dx: uint256, _min_dy: uint256, _use_eth: bool = False) -> uint256: payable
 
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
 interface CurveAddressProvider:
     def get_address(_id: uint256) -> address: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
-
-interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 flag PoolType:
     STABLESWAP_NG
@@ -74,13 +76,19 @@ event FundsRecovered:
 event PreferredPoolsSet:
     numPools: uint256
 
-event UniswapV2LegoIdSet:
+event CurveLegoIdSet:
     legoId: uint256
 
-legoId: public(uint256)
+event CurveActivated:
+    isActivated: bool
+
 preferredPools: public(DynArray[address, MAX_POOLS])
 
+# config
+legoId: public(uint256)
+isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
+
 CURVE_META_REGISTRY: public(immutable(address))
 CURVE_REGISTRIES: public(immutable(CurveRegistries))
 
@@ -99,6 +107,8 @@ MAX_POOLS: constant(uint256) = 50
 def __init__(_curveAddressProvider: address, _addyRegistry: address):
     assert empty(address) not in [_curveAddressProvider, _addyRegistry] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
+    self.isActivated = True
+    gov.__init__(_addyRegistry)
 
     CURVE_META_REGISTRY = staticcall CurveAddressProvider(_curveAddressProvider).get_address(META_REGISTRY_ID)
     CURVE_REGISTRIES = CurveRegistries(
@@ -221,6 +231,8 @@ def swapTokens(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
     metaRegistry: address = CURVE_META_REGISTRY
     p: PoolData = self._getPoolData(_tokenIn, _tokenOut, metaRegistry)
 
@@ -286,7 +298,7 @@ def swapTokens(
 
 @external
 def setPreferredPools(_pools: DynArray[address, MAX_POOLS]) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     pools: DynArray[address, MAX_POOLS] = []
     for i: uint256 in range(len(_pools), bound=MAX_POOLS):
@@ -308,7 +320,7 @@ def setPreferredPools(_pools: DynArray[address, MAX_POOLS]) -> bool:
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -330,5 +342,12 @@ def setLegoId(_legoId: uint256) -> bool:
     prevLegoId: uint256 = self.legoId
     assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
-    log UniswapV2LegoIdSet(_legoId)
+    log CurveLegoIdSet(_legoId)
     return True
+
+
+@external
+def activate(_shouldActivate: bool):
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.isActivated = _shouldActivate
+    log CurveActivated(_shouldActivate)

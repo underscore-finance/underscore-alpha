@@ -1,9 +1,15 @@
 # @version 0.4.0
 
 implements: LegoDex
+initializes: gov
+exports: gov.__interface__
 
+import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
+
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface UniV3Factory:
     def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view
@@ -11,15 +17,11 @@ interface UniV3Factory:
 interface UniV3SwapRouter:
     def exactInputSingle(_params: ExactInputSingleParams) -> uint256: payable
 
-interface UniV3Pool:
-    def liquidity() -> uint128: view
-
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
 
-interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+interface UniV3Pool:
+    def liquidity() -> uint128: view
 
 struct ExactInputSingleParams:
     tokenIn: address
@@ -47,9 +49,14 @@ event FundsRecovered:
 event UniswapV3LegoIdSet:
     legoId: uint256
 
-legoId: public(uint256)
+event UniswapV3Activated:
+    isActivated: bool
 
+# config
+legoId: public(uint256)
+isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
+
 UNISWAP_V3_FACTORY: public(immutable(address))
 UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
 
@@ -62,6 +69,8 @@ def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _addyReg
     UNISWAP_V3_FACTORY = _uniswapV3Factory
     UNISWAP_V3_SWAP_ROUTER = _uniswapV3SwapRouter
     ADDY_REGISTRY = _addyRegistry
+    self.isActivated = True
+    gov.__init__(_addyRegistry)
 
 
 @view
@@ -120,6 +129,8 @@ def swapTokens(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
     bestFeeTier: uint24 = self._getBestFeeTier(_tokenIn, _tokenOut)
     assert bestFeeTier != 0 # dev: no pool found
 
@@ -170,7 +181,7 @@ def swapTokens(
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -194,3 +205,10 @@ def setLegoId(_legoId: uint256) -> bool:
     self.legoId = _legoId
     log UniswapV3LegoIdSet(_legoId)
     return True
+
+
+@external
+def activate(_shouldActivate: bool):
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.isActivated = _shouldActivate
+    log UniswapV3Activated(_shouldActivate)

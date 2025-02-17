@@ -2,7 +2,14 @@
 
 implements: LegoDex
 implements: LegoYield
+initializes: yld
+initializes: gov
 
+exports: yld.__interface__
+exports: gov.__interface__
+
+import contracts.modules.YieldLegoData as yld
+import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 from interfaces import LegoYield
@@ -11,15 +18,15 @@ interface Erc4626Interface:
     def redeem(_vaultTokenAmount: uint256, _recipient: address, _owner: address) -> uint256: nonpayable
     def deposit(_assetAmount: uint256, _recipient: address) -> uint256: nonpayable
     def convertToAssets(_vaultTokenAmount: uint256) -> uint256: view
+    def convertToShares(_assetAmount: uint256) -> uint256: view
     def totalAssets() -> uint256: view
     def asset() -> address: view
 
-interface AddyRegistry:
-    def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
-
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
 
 event MockLegoDeposit:
     sender: indexed(address)
@@ -39,14 +46,6 @@ event MockLegoWithdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
-event AssetOpportunityAdded:
-    asset: indexed(address)
-    vaultToken: indexed(address)
-
-event AssetOpportunityRemoved:
-    asset: indexed(address)
-    vaultToken: indexed(address)
-
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -58,24 +57,11 @@ event MockLegoIdSet:
 event MockLegoActivated:
     isActivated: bool
 
-# asset opportunities
-assetOpportunities: public(HashMap[address, HashMap[uint256, address]]) # asset -> index -> vault token
-indexOfAssetOpportunity: public(HashMap[address, HashMap[address, uint256]]) # asset -> vault token -> index
-numAssetOpportunities: public(HashMap[address, uint256]) # asset -> number of opportunities
-vaultToAsset: public(HashMap[address, address]) # vault token -> asset
-
-# assets
-assets: public(HashMap[uint256, address]) # index -> asset
-indexOfAsset: public(HashMap[address, uint256]) # asset -> index
-numAssets: public(uint256) # number of assets
-
 # config
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: immutable(address)
-
-MAX_VAULTS: constant(uint256) = 15
-MAX_ASSETS: constant(uint256) = 25
+withdrawFails: public(bool)
 
 
 @deploy
@@ -83,6 +69,8 @@ def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addr
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
+    gov.__init__(_addyRegistry)
+    yld.__init__()
 
 
 @view
@@ -94,33 +82,6 @@ def getRegistries() -> DynArray[address, 10]:
 #############
 # Utilities #
 #############
-
-
-# assets and vault tokens
-
-
-@view
-@external
-def getAssetOpportunities(_asset: address) -> DynArray[address, MAX_VAULTS]:
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    if numOpportunities == 0:
-        return []
-    opportunities: DynArray[address, MAX_VAULTS] = []
-    for i: uint256 in range(1, numOpportunities, bound=MAX_VAULTS):
-        opportunities.append(self.assetOpportunities[_asset][i])
-    return opportunities
-
-
-@view
-@external
-def getAssets() -> DynArray[address, MAX_ASSETS]:
-    numAssets: uint256 = self.numAssets
-    if numAssets == 0:
-        return []
-    assets: DynArray[address, MAX_ASSETS] = []
-    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
-        assets.append(self.assets[i])
-    return assets
 
 
 # underlying asset
@@ -135,7 +96,7 @@ def isVaultToken(_vaultToken: address) -> bool:
 @view
 @internal
 def _isVaultToken(_vaultToken: address) -> bool:
-    return self.vaultToAsset[_vaultToken] != empty(address)
+    return yld.vaultToAsset[_vaultToken] != empty(address)
 
 
 @view
@@ -147,7 +108,7 @@ def getUnderlyingAsset(_vaultToken: address) -> address:
 @view
 @internal
 def _getUnderlyingAsset(_vaultToken: address) -> address:
-    asset: address = self.vaultToAsset[_vaultToken]
+    asset: address = yld.vaultToAsset[_vaultToken]
     if asset == empty(address):
         asset = staticcall Erc4626Interface(_vaultToken).asset()
     return asset
@@ -168,6 +129,14 @@ def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uin
 @internal
 def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
     return staticcall Erc4626Interface(_vaultToken).convertToAssets(_vaultTokenAmount)
+
+
+@view
+@external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if yld.vaultToAsset[_vaultToken] != _asset:
+        return 0 # invalid vault token
+    return staticcall Erc4626Interface(_vaultToken).convertToShares(_assetAmount)
 
 
 # usd value
@@ -251,7 +220,7 @@ def depositTokens(
     _oracleRegistry: address = empty(address)
 ) -> (uint256, address, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
-    assert self.indexOfAssetOpportunity[_asset][_vault] != 0 # dev: asset + vault not supported
+    assert yld.indexOfAssetOpportunity[_asset][_vault] != 0 # dev: asset + vault not supported
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
@@ -285,6 +254,13 @@ def depositTokens(
 
 
 @external
+def setWithdrawFails(_shouldFail: bool) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.withdrawFails = _shouldFail
+    return True
+
+
+@external
 def withdrawTokens(
     _asset: address,
     _amount: uint256,
@@ -292,8 +268,9 @@ def withdrawTokens(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
+    assert not self.withdrawFails # dev: withdrawals disabled
     assert self.isActivated # dev: not activated
-    assert self.indexOfAssetOpportunity[_asset][_vaultToken] != 0 # dev: asset + vault not supported
+    assert yld.indexOfAssetOpportunity[_asset][_vaultToken] != 0 # dev: asset + vault not supported
 
     # pre balances
     preLegoVaultBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
@@ -353,103 +330,20 @@ def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAm
 
 @external
 def addAssetOpportunity(_asset: address, _vault: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     assert extcall IERC20(_asset).approve(_vault, max_value(uint256), default_return_value=True) # dev: max approval failed
-    self._addAssetOpportunity(_asset, _vault)
+    yld._addAssetOpportunity(_asset, _vault)
     return True
 
 
 @external
 def removeAssetOpportunity(_asset: address, _vault: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
-    self._removeAssetOpportunity(_asset, _vault)
+    yld._removeAssetOpportunity(_asset, _vault)
     assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
     return True
-
-
-# internal / utils
-
-
-@internal
-def _addAssetOpportunity(_asset: address, _vault: address):
-    assert self.indexOfAssetOpportunity[_asset][_vault] == 0 # dev: asset + vault token already added
-    assert empty(address) not in [_asset, _vault] # dev: invalid addresses
-
-    aid: uint256 = self.numAssetOpportunities[_asset]
-    if aid == 0:
-        aid = 1 # not using 0 index
-    self.assetOpportunities[_asset][aid] = _vault
-    self.indexOfAssetOpportunity[_asset][_vault] = aid
-    self.numAssetOpportunities[_asset] = aid + 1
-    self.vaultToAsset[_vault] = _asset
-
-    # add asset
-    self._addAsset(_asset)
-
-    log AssetOpportunityAdded(_asset, _vault)
-
-
-@internal
-def _addAsset(_asset: address):
-    if self.indexOfAsset[_asset] != 0:
-        return
-    aid: uint256 = self.numAssets
-    if aid == 0:
-        aid = 1 # not using 0 index
-    self.assets[aid] = _asset
-    self.indexOfAsset[_asset] = aid
-    self.numAssets = aid + 1
-
-
-@internal
-def _removeAssetOpportunity(_asset: address, _vault: address):
-    targetIndex: uint256 = self.indexOfAssetOpportunity[_asset][_vault]
-    assert targetIndex != 0 # dev: asset + vault token not found
-
-    numOpportunities: uint256 = self.numAssetOpportunities[_asset]
-    assert numOpportunities > 1 # dev: no opportunities to remove
-
-    # update data
-    lastIndex: uint256 = numOpportunities - 1
-    self.numAssetOpportunities[_asset] = lastIndex
-    self.indexOfAssetOpportunity[_asset][_vault] = 0
-    self.vaultToAsset[_vault] = empty(address)
-
-    # shift to replace the removed one
-    if targetIndex != lastIndex:
-        lastVaultToken: address = self.assetOpportunities[_asset][lastIndex]
-        self.assetOpportunities[_asset][targetIndex] = lastVaultToken
-        self.indexOfAssetOpportunity[_asset][lastVaultToken] = targetIndex
-
-    # remove asset
-    if lastIndex <= 1:
-        self._removeAsset(_asset)
-
-    log AssetOpportunityRemoved(_asset, _vault)
-
-
-@internal
-def _removeAsset(_asset: address):
-    numAssets: uint256 = self.numAssets
-    if numAssets <= 1:
-        return
-
-    targetIndex: uint256 = self.indexOfAsset[_asset]
-    if targetIndex == 0:
-        return
-
-    # update data
-    lastIndex: uint256 = numAssets - 1
-    self.numAssets = lastIndex
-    self.indexOfAsset[_asset] = 0
-
-    # shift to replace the removed one
-    if targetIndex != lastIndex:
-        lastAsset: address = self.assets[lastIndex]
-        self.assets[targetIndex] = lastAsset
-        self.indexOfAsset[lastAsset] = targetIndex
 
 
 #################
@@ -459,7 +353,7 @@ def _removeAsset(_asset: address):
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -486,6 +380,6 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log MockLegoActivated(_shouldActivate)

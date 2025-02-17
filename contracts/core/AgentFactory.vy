@@ -1,15 +1,21 @@
 # @version 0.4.0
 
-interface AgenticWallet:
-    def initialize(_AddyRegistry: address, _wethAddr: address, _owner: address, _agent: address) -> bool: nonpayable
+initializes: gov
+exports: gov.__interface__
+import contracts.modules.Governable as gov
+from ethereum.ercs import IERC20
 
-interface AddyRegistry:
-    def governor() -> address: view
+interface AgenticWallet:
+    def initialize(_AddyRegistry: address, _wethAddr: address, _trialFundsAsset: address, _trialFundsAmount: uint256, _owner: address, _agent: address) -> bool: nonpayable
 
 struct TemplateInfo:
     addr: address
     version: uint256
     lastModified: uint256
+
+struct TrialFundsData:
+    asset: address
+    amount: uint256
 
 event AgenticWalletCreated:
     addr: indexed(address)
@@ -21,6 +27,10 @@ event AgentTemplateSet:
     template: indexed(address)
     version: uint256
 
+event TrialFundsDataSet:
+    asset: indexed(address)
+    amount: uint256
+
 event WhitelistSet:
     addr: address
     shouldWhitelist: bool
@@ -31,11 +41,17 @@ event NumAgenticWalletsAllowedSet:
 event ShouldEnforceWhitelistSet:
     shouldEnforce: bool
 
+event FundsRecovered:
+    asset: indexed(address)
+    recipient: indexed(address)
+    balance: uint256
+
 event AgentFactoryActivated:
     isActivated: bool
 
 # template info
 agentTemplateInfo: public(TemplateInfo)
+trialFundsData: public(TrialFundsData)
 
 # agentic wallets
 isAgenticWallet: public(HashMap[address, bool])
@@ -57,7 +73,7 @@ def __init__(_addyRegistry: address, _wethAddr: address, _walletTemplate: addres
     assert empty(address) not in [_addyRegistry, _wethAddr] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
     WETH_ADDR = _wethAddr
-
+    gov.__init__(_addyRegistry)
     self.isActivated = True
 
     # set agent template
@@ -125,7 +141,16 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(ad
 
     # create agentic wallet
     newAgentAddr: address = create_minimal_proxy_to(agentTemplate)
-    assert extcall AgenticWallet(newAgentAddr).initialize(ADDY_REGISTRY, WETH_ADDR, _owner, _agent)
+
+    # transfer initial trial funds asset + amount
+    trialFundsData: TrialFundsData = self.trialFundsData
+    if trialFundsData.asset != empty(address):
+        trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
+        if trialFundsData.amount != 0:
+            assert extcall IERC20(trialFundsData.asset).transfer(newAgentAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
+
+    # initalize wallet
+    assert extcall AgenticWallet(newAgentAddr).initialize(ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount, _owner, _agent)
     
     self.isAgenticWallet[newAgentAddr] = True
     self.numAgenticWallets += 1
@@ -167,8 +192,8 @@ def setAgenticWalletTemplate(_addr: address) -> bool:
     @param _addr The address of the new template to use
     @return True if template was successfully updated, False if invalid address
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     if not self._isValidWalletTemplate(_addr):
         return False
     return self._setAgenticWalletTemplate(_addr)
@@ -187,6 +212,40 @@ def _setAgenticWalletTemplate(_addr: address) -> bool:
     return True
 
 
+###############
+# Trial Funds #
+###############
+
+
+@view
+@external 
+def isValidTrialFundsData(_asset: address, _amount: uint256) -> bool:
+    return self._isValidTrialFundsData(_asset, _amount)
+
+
+@view
+@internal 
+def _isValidTrialFundsData(_asset: address, _amount: uint256) -> bool:
+    if not _asset.is_contract or _asset == empty(address):
+        return False
+    return _amount != 0
+
+
+@external
+def setTrialFundsData(_asset: address, _amount: uint256) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
+    if not self._isValidTrialFundsData(_asset, _amount):
+        return False
+
+    self.trialFundsData = TrialFundsData(
+        asset=_asset,
+        amount=_amount,
+    )
+    log TrialFundsDataSet(_asset, _amount)
+    return True
+
+
 ########################
 # Whitelist and Limits #
 ########################
@@ -201,8 +260,8 @@ def setWhitelist(_addr: address, _shouldWhitelist: bool) -> bool:
     @param _shouldWhitelist True to whitelist, False to unwhitelist
     @return True if the whitelist status was successfully updated, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.whitelist[_addr] = _shouldWhitelist
     log WhitelistSet(_addr, _shouldWhitelist)
     return True
@@ -216,8 +275,8 @@ def setNumAgenticWalletsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bo
     @param _numAllowed The new maximum number of wallets allowed
     @return True if the maximum number was successfully updated, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.numAgenticWalletsAllowed = _numAllowed
     log NumAgenticWalletsAllowedSet(_numAllowed)
     return True
@@ -231,10 +290,28 @@ def setShouldEnforceWhitelist(_shouldEnforce: bool) -> bool:
     @param _shouldEnforce True to enforce whitelist, False to disable
     @return True if the whitelist enforcement state was successfully updated, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.shouldEnforceWhitelist = _shouldEnforce
     log ShouldEnforceWhitelistSet(_shouldEnforce)
+    return True
+
+
+#################
+# Recover Funds #
+#################
+
+
+@external
+def recoverFunds(_asset: address, _recipient: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
+    balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
+    if empty(address) in [_recipient, _asset] or balance == 0:
+        return False
+
+    assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
+    log FundsRecovered(_asset, _recipient, balance)
     return True
 
 
@@ -250,6 +327,7 @@ def activate(_shouldActivate: bool):
     @dev Only callable by the governor, toggles isActivated state
     @param _shouldActivate True to activate the factory, False to deactivate
     """
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(_shouldActivate)

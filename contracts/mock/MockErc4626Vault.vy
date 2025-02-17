@@ -50,6 +50,11 @@ def convertToAssets(_vaultTokenAmount: uint256) -> uint256:
 
 
 @external
+def convertToShares(_assetAmount: uint256) -> uint256:
+    return _assetAmount
+
+
+@external
 def totalAssets() -> uint256:
     return staticcall IERC20(self.asset).balanceOf(self)
 

@@ -1,7 +1,10 @@
 # @version 0.4.0
 
 implements: LegoYield
+initializes: gov
+exports: gov.__interface__
 
+import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
 
@@ -14,12 +17,11 @@ interface SkyPsm:
     def usdc() -> address: view
     def usds() -> address: view
 
-interface AddyRegistry:
-    def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
-
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
 
 event SkyDeposit:
     sender: indexed(address)
@@ -81,6 +83,7 @@ def __init__(_skyPsm: address, _addyRegistry: address):
     SKY_PSM = _skyPsm
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
+    gov.__init__(_addyRegistry)
 
     # sky assets
     usdc: address = staticcall SkyPsm(_skyPsm).usdc()
@@ -170,6 +173,16 @@ def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uin
 def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
     # treating usds as default underlying asset
     return staticcall SkyPsm(SKY_PSM).convertToAssets(self.usds, _vaultTokenAmount)
+
+
+@view
+@external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if _asset not in [self.usdc, self.usds]:
+        return 0 # invalid asset
+    if _vaultToken != self.susds:
+        return 0 # invalid vault token
+    return staticcall SkyPsm(SKY_PSM).convertToShares(_asset, _assetAmount)
 
 
 # usd value
@@ -348,7 +361,7 @@ def withdrawTokens(
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -376,6 +389,6 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log SkyActivated(_shouldActivate)

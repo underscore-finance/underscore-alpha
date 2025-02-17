@@ -1,10 +1,11 @@
 # @version 0.4.0
 
+initializes: gov
+exports: gov.__interface__
+import contracts.modules.Governable as gov
+
 interface LegoPartner:
     def setLegoId(_legoId: uint256) -> bool: nonpayable
-
-interface AddyRegistry:
-    def governor() -> address: view
 
 flag LegoType:
     YIELD_OPP
@@ -41,9 +42,6 @@ event LegoAddrDisabled:
 event LegoHelperSet:
     helperAddr: indexed(address)
 
-event LegoRegistryActivated:
-    isActivated: bool
-
 # other
 legoHelper: public(address)
 
@@ -54,14 +52,13 @@ numLegos: public(uint256)
 
 # config
 ADDY_REGISTRY: public(immutable(address))
-isActivated: public(bool)
 
 
 @deploy
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
+    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
-    self.isActivated = True
 
     # start at 1 index
     self.numLegos = 1
@@ -96,14 +93,13 @@ def _isValidNewLegoAddr(_addr: address) -> bool:
 def registerNewLego(_addr: address, _description: String[64], _legoType: LegoType) -> uint256:
     """
     @notice Register a new Lego integration contract in the registry
-    @dev Only callable by governor when registry is activated. Sets Lego ID on the contract.
+    @dev Only callable by governor. Sets Lego ID on the contract.
     @param _addr The address of the Lego contract to register
     @param _description A brief description of the Lego integration's functionality
     @param _legoType The type of Lego integration
     @return The assigned Lego ID if registration successful, 0 if failed
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     if not self._isValidNewLegoAddr(_addr):
         return 0
@@ -158,13 +154,12 @@ def _isValidLegoUpdate(_legoId: uint256, _newAddr: address, _prevAddr: address) 
 def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     """
     @notice Update the address of an existing Lego
-    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @dev Only callable by governor. Updates version and timestamp.
     @param _legoId The ID of the Lego to update
     @param _newAddr The new address for the Lego
     @return True if update successful, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     data: LegoInfo = self.legoInfo[_legoId]
     prevAddr: address = data.addr # needed for later
@@ -217,12 +212,11 @@ def _isValidLegoDisable(_legoId: uint256, _prevAddr: address) -> bool:
 def disableLegoAddr(_legoId: uint256) -> bool:
     """
     @notice Disable a Lego by setting its address to empty
-    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @dev Only callable by governor. Updates version and timestamp.
     @param _legoId The ID of the Lego to disable
     @return True if disable successful, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     data: LegoInfo = self.legoInfo[_legoId]
     prevAddr: address = data.addr # needed for later
@@ -396,31 +390,15 @@ def _isValidLegoHelper(_helperAddr: address) -> bool:
 def setLegoHelper(_helperAddr: address) -> bool:
     """
     @notice Set a new Lego helper address
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _helperAddr The address to set as helper
     @return True if helper was set successfully, False otherwise
     """
-    assert self.isActivated # dev: not activated
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
     if not self._isValidLegoHelper(_helperAddr):
         return False
     self.legoHelper = _helperAddr
     log LegoHelperSet(_helperAddr)
     return True
 
-
-############
-# Activate #
-############
-
-
-@external
-def activate(_shouldActivate: bool):
-    """
-    @notice Activate or deactivate the registry
-    @dev Only callable by governor. When deactivated, most functions cannot be called.
-    @param _shouldActivate True to activate, False to deactivate
-    """
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
-    self.isActivated = _shouldActivate
-    log LegoRegistryActivated(_shouldActivate)

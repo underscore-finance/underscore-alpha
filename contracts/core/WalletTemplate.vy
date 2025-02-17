@@ -1,4 +1,5 @@
 # @version 0.4.0
+# pragma optimize codesize
 
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
@@ -18,10 +19,14 @@ interface OracleRegistry:
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
     def isValidLegoId(_legoId: uint256) -> bool: view
+    def legoHelper() -> address: view
 
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
+
+interface LegoHelper:
+    def getTotalUnderlyingForUser(_user: address, _underlyingAsset: address) -> uint256: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -33,6 +38,10 @@ flag ActionType:
     TRANSFER
     SWAP
     CONVERSION
+
+struct TrialFundsClawback:
+    legoId: uint256
+    vaultToken: address
 
 struct AgentInfo:
     isActive: bool
@@ -242,12 +251,20 @@ event ReserveAssetSet:
     asset: indexed(address)
     amount: uint256
 
+event TrialFundsClawedBack:
+    clawedBackAmount: uint256
+    remainingAmount: uint256
+
 # settings
 owner: public(address) # owner of the wallet
 protocolSub: public(ProtocolSub) # subscription info
 reserveAssets: public(HashMap[address, uint256]) # asset -> reserve amount
 agentSettings: public(HashMap[address, AgentInfo]) # agent -> agent info
 isRecipientAllowed: public(HashMap[address, bool]) # recipient -> is allowed
+
+# trial funds info
+trialFundsAsset: public(address)
+trialFundsAmount: public(uint256)
 
 # config
 addyRegistry: public(address)
@@ -261,6 +278,7 @@ MAX_LEGOS: constant(uint256) = 10
 MAX_INSTRUCTIONS: constant(uint256) = 20
 
 # registry ids
+AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
@@ -293,12 +311,21 @@ def __default__():
 
 
 @external
-def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _initialAgent: address) -> bool:
+def initialize(
+    _addyRegistry: address,
+    _wethAddr: address,
+    _trialFundsAsset: address,
+    _trialFundsAmount: uint256,
+    _owner: address,
+    _initialAgent: address,
+) -> bool:
     """
     @notice Sets up the initial state of the wallet template
     @dev Can only be called once and sets core contract parameters
     @param _addyRegistry The address of the core registry contract
     @param _wethAddr The address of the WETH contract
+    @param _trialFundsAsset The address of the gift asset
+    @param _trialFundsAmount The amount of the gift asset
     @param _owner The address that will own this wallet
     @param _initialAgent The address of the initial AI agent (if any)
     @return bool True if initialization was successful
@@ -311,6 +338,11 @@ def initialize(_addyRegistry: address, _wethAddr: address, _owner: address, _ini
     self.addyRegistry = _addyRegistry
     self.wethAddr = _wethAddr
     self.owner = _owner
+
+    # gift info
+    if _trialFundsAsset != empty(address) and _trialFundsAmount != 0:   
+        self.trialFundsAsset = _trialFundsAsset
+        self.trialFundsAmount = _trialFundsAmount
 
     priceSheets: address = staticcall AddyRegistry(_addyRegistry).getAddy(PRICE_SHEETS_ID)
 
@@ -366,16 +398,45 @@ def _getAddys() -> MainAddys:
 
 @view
 @internal
-def _getAllowedTxAmount(_asset: address, _amount: uint256) -> uint256:
-    wantedAmount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(self))
+def _getAllowedTxAmount(
+    _asset: address,
+    _amount: uint256,
+    _shouldCheckTrialFunds: bool,
+    _legoRegistry: address,
+) -> uint256:
+    tokenBalance: uint256 = self._getAvailBalAfterTrialFunds(_shouldCheckTrialFunds, _asset, _legoRegistry)
     reservedAmount: uint256 = self.reserveAssets[_asset]
-
-    amount: uint256 = 0
-    if wantedAmount > reservedAmount:
-        amount = wantedAmount - reservedAmount
-
+    
+    assert tokenBalance >= reservedAmount # dev: insufficient balance after reserve
+    availableAmount: uint256 = tokenBalance - reservedAmount
+    
+    amount: uint256 = min(_amount, availableAmount)
     assert amount != 0 # dev: nothing to transfer
+
     return amount
+
+
+@view
+@internal
+def _getAvailBalAfterTrialFunds(_shouldCheckTrialFunds: bool, _asset: address, _legoRegistry: address) -> uint256:
+    userBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
+    if not _shouldCheckTrialFunds or _asset != self.trialFundsAsset:
+        return userBalance
+
+    legoHelper: address = staticcall LegoRegistry(_legoRegistry).legoHelper()
+    totalUnderlying: uint256 = staticcall LegoHelper(legoHelper).getTotalUnderlyingForUser(self, _asset)
+
+    # sufficient trial funds already deployed
+    trialFundsAmount: uint256 = self.trialFundsAmount
+    if totalUnderlying >= trialFundsAmount:
+        return userBalance
+
+    lockAmount: uint256 = trialFundsAmount - totalUnderlying
+    availAmount: uint256 = 0
+    if lockAmount < userBalance:
+        availAmount = userBalance - lockAmount
+
+    return availAmount
 
 
 ################
@@ -465,10 +526,11 @@ def _checkPermissionsAndSubscriptions(
     _legoIds: DynArray[uint256, MAX_LEGOS],
     _priceSheets: address,
     _oracleRegistry: address,
+    _legoRegistry: address,
 ) -> bool:
 
     # protocol subscription
-    self._checkProtocolSubscription(_priceSheets, _oracleRegistry)
+    self._checkProtocolSubscription(_priceSheets, _oracleRegistry, _legoRegistry)
 
     # if signer is owner, no need to check agent permissions
     if _signer == _owner:
@@ -477,7 +539,7 @@ def _checkPermissionsAndSubscriptions(
     # agent permissions / subscription
     agentInfo: AgentInfo = self.agentSettings[_signer]
     assert self._canAgentAccess(agentInfo, _action, _assets, _legoIds) # dev: agent not allowed
-    self._checkAgentSubscription(_signer, agentInfo, _priceSheets, _oracleRegistry)
+    self._checkAgentSubscription(_signer, agentInfo, _priceSheets, _oracleRegistry, _legoRegistry)
     return True
 
 
@@ -511,7 +573,7 @@ def depositTokens(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnDeposit(_legoId, _asset, _amount, _vault, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.DEPOSIT, [_asset], [_legoId], addys.priceSheets, addys.oracleRegistry)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.DEPOSIT, [_asset], [_legoId], addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # deposit tokens
     assetAmountDeposited: uint256 = 0
@@ -520,7 +582,7 @@ def depositTokens(
     usdValue: uint256 = 0
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = self._depositTokens(signer, _legoId, _asset, _amount, _vault, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, usdValue, addys.priceSheets)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, usdValue, addys.priceSheets, addys.legoRegistry)
     return assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue
 
 
@@ -563,7 +625,7 @@ def _depositTokens(
     assert legoAddr != empty(address) # dev: invalid lego
 
     # finalize amount
-    amount: uint256 = self._getAllowedTxAmount(_asset, _amount)
+    amount: uint256 = self._getAllowedTxAmount(_asset, _amount, False, _legoRegistry)
     assert extcall IERC20(_asset).approve(legoAddr, amount, default_return_value=True) # dev: approval failed
 
     # deposit into lego partner
@@ -625,7 +687,7 @@ def withdrawTokens(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnWithdrawal(_legoId, _asset, _amount, _vaultToken, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.WITHDRAWAL, [_asset], [_legoId], addys.priceSheets, addys.oracleRegistry)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.WITHDRAWAL, [_asset], [_legoId], addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # withdraw from lego partner
     assetAmountReceived: uint256 = 0
@@ -633,7 +695,7 @@ def withdrawTokens(
     usdValue: uint256 = 0
     assetAmountReceived, vaultTokenAmountBurned, usdValue = self._withdrawTokens(signer, _legoId, _asset, _amount, _vaultToken, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.priceSheets)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.priceSheets, addys.legoRegistry)
     return assetAmountReceived, vaultTokenAmountBurned, usdValue
 
 
@@ -653,7 +715,7 @@ def _withdrawTokens(
     # finalize amount, this will look at vault token balance (not always 1:1 with underlying asset)
     withdrawAmount: uint256 = _amount
     if _vaultToken != empty(address):
-        withdrawAmount = self._getAllowedTxAmount(_vaultToken, _amount)
+        withdrawAmount = self._getAllowedTxAmount(_vaultToken, _amount, False, _legoRegistry)
 
         # some vault tokens require max value approval (comp v3)
         assert extcall IERC20(_vaultToken).approve(legoAddr, max_value(uint256), default_return_value=True) # dev: approval failed
@@ -726,7 +788,7 @@ def rebalance(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnRebalance(_fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.REBALANCE, [_asset], [_fromLegoId, _toLegoId], addys.priceSheets, addys.oracleRegistry)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.REBALANCE, [_asset], [_fromLegoId, _toLegoId], addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # rebalance
     assetAmountDeposited: uint256 = 0
@@ -735,7 +797,7 @@ def rebalance(
     usdValue: uint256 = 0
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = self._rebalance(signer, _fromLegoId, _toLegoId, _asset, _amount, _fromVaultToken, _toVault, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.REBALANCE, usdValue, addys.priceSheets)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.REBALANCE, usdValue, addys.priceSheets, addys.legoRegistry)
     return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue
 
 
@@ -819,7 +881,7 @@ def swapTokens(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnSwap(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId], addys.priceSheets, addys.oracleRegistry)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId], addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # swap
     actualSwapAmount: uint256 = 0
@@ -827,7 +889,7 @@ def swapTokens(
     usdValue: uint256 = 0
     actualSwapAmount, toAmount, usdValue = self._swapTokens(signer, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, isSignerAgent, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.SWAP, usdValue, addys.priceSheets)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.SWAP, usdValue, addys.priceSheets, addys.legoRegistry)
     return actualSwapAmount, toAmount, usdValue
 
 
@@ -847,7 +909,7 @@ def _swapTokens(
     assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
 
     # finalize amount
-    swapAmount: uint256 = self._getAllowedTxAmount(_tokenIn, _amountIn)
+    swapAmount: uint256 = self._getAllowedTxAmount(_tokenIn, _amountIn, True, _legoRegistry)
     assert extcall IERC20(_tokenIn).approve(legoAddr, swapAmount, default_return_value=True) # dev: approval failed
 
     # swap assets via lego partner
@@ -908,14 +970,14 @@ def transferFunds(
     # check permissions / subscription data
     owner: address = self.owner
     signer: address = self._getSignerOnTransfer(_recipient, _amount, _asset, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.TRANSFER, [_asset], [], addys.priceSheets, addys.oracleRegistry)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.TRANSFER, [_asset], [], addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # transfer funds
     amount: uint256 = 0
     usdValue: uint256 = 0
-    amount, usdValue = self._transferFunds(signer, _recipient, _amount, _asset, owner, isSignerAgent, addys.oracleRegistry)
+    amount, usdValue = self._transferFunds(signer, _recipient, _amount, _asset, owner, isSignerAgent, addys.oracleRegistry, addys.legoRegistry)
 
-    self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets)
+    self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets, addys.legoRegistry)
     return amount, usdValue
 
 
@@ -928,6 +990,7 @@ def _transferFunds(
     _owner: address,
     _isSignerAgent: bool,
     _oracleRegistry: address,
+    _legoRegistry: address,
 ) -> (uint256, uint256):
     # validate recipient
     if _recipient != _owner:
@@ -945,7 +1008,7 @@ def _transferFunds(
 
     # erc20 tokens
     else:
-        amount = self._getAllowedTxAmount(_asset, _amount)
+        amount = self._getAllowedTxAmount(_asset, _amount, True, _legoRegistry)
         assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
         usdValue = staticcall OracleRegistry(_oracleRegistry).getUsdValue(_asset, amount)
 
@@ -1013,7 +1076,7 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
     addys: MainAddys = self._getAddys()
 
     # protocol subscription
-    self._checkProtocolSubscription(addys.priceSheets, addys.oracleRegistry)
+    self._checkProtocolSubscription(addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     owner: address = self.owner
     signer: address = msg.sender
@@ -1027,7 +1090,7 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         isSignerAgent = True
         agentInfo = self.agentSettings[signer]
         assert agentInfo.isActive # dev: agent not active
-        self._checkAgentSubscription(signer, agentInfo, addys.priceSheets, addys.oracleRegistry)
+        self._checkAgentSubscription(signer, agentInfo, addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # init vars
     aggCostData: TransactionCost = empty(TransactionCost)
@@ -1067,10 +1130,10 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         # transfer
         elif instruction.action == ActionType.TRANSFER:
             assert self._canAgentAccess(agentInfo, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, usdValue = self._transferFunds(signer, instruction.recipient, instruction.amount, instruction.asset, owner, isSignerAgent, addys.oracleRegistry)
+            naValueA, usdValue = self._transferFunds(signer, instruction.recipient, instruction.amount, instruction.asset, owner, isSignerAgent, addys.oracleRegistry, addys.legoRegistry)
             aggCostData = self._aggregateBatchTxCostData(aggCostData, signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets)
 
-    self._handleBatchTransactionFees(signer, isSignerAgent, aggCostData)
+    self._handleBatchTransactionFees(signer, isSignerAgent, aggCostData, addys.legoRegistry)
     return True
 
 
@@ -1106,7 +1169,7 @@ def convertEthToWeth(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnEthToWeth(_amount, _depositLegoId, _depositVault, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.CONVERSION, [weth], [_depositLegoId], addys.priceSheets, addys.oracleRegistry)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, self.owner, ActionType.CONVERSION, [weth], [_depositLegoId], addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # convert eth to weth
     amount: uint256 = min(_amount, self.balance)
@@ -1120,7 +1183,7 @@ def convertEthToWeth(
     if _depositLegoId != 0:
         depositUsdValue: uint256 = 0
         amount, vaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(signer, _depositLegoId, weth, amount, _depositVault, isSignerAgent, addys.legoRegistry)
-        self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, depositUsdValue, addys.priceSheets)
+        self._handleTransactionFee(signer, isSignerAgent, ActionType.DEPOSIT, depositUsdValue, addys.priceSheets, addys.legoRegistry)
 
     return amount, vaultToken, vaultTokenAmountReceived
 
@@ -1168,7 +1231,7 @@ def convertWethToEth(
     # check permissions / subscription data
     owner: address = self.owner
     signer: address = self._getSignerOnWethToEth(_amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.CONVERSION, [weth], [_withdrawLegoId], addys.priceSheets, addys.oracleRegistry)
+    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, owner, ActionType.CONVERSION, [weth], [_withdrawLegoId], addys.priceSheets, addys.oracleRegistry, addys.legoRegistry)
 
     # withdraw weth from lego partner (if applicable)
     amount: uint256 = _amount
@@ -1176,7 +1239,7 @@ def convertWethToEth(
     if _withdrawLegoId != 0:
         _na: uint256 = 0
         amount, _na, usdValue = self._withdrawTokens(signer, _withdrawLegoId, weth, _amount, _withdrawVaultToken, isSignerAgent, addys.legoRegistry)
-        self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.priceSheets)
+        self._handleTransactionFee(signer, isSignerAgent, ActionType.WITHDRAWAL, usdValue, addys.priceSheets, addys.legoRegistry)
 
     # convert weth to eth
     amount = min(amount, staticcall IERC20(weth).balanceOf(self))
@@ -1186,8 +1249,8 @@ def convertWethToEth(
 
     # transfer eth to recipient (if applicable)
     if _recipient != empty(address):
-        amount, usdValue = self._transferFunds(signer, _recipient, amount, empty(address), owner, isSignerAgent, addys.oracleRegistry)
-        self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets)
+        amount, usdValue = self._transferFunds(signer, _recipient, amount, empty(address), owner, isSignerAgent, addys.oracleRegistry, addys.legoRegistry)
+        self._handleTransactionFee(signer, isSignerAgent, ActionType.TRANSFER, usdValue, addys.priceSheets, addys.legoRegistry)
             
     return amount
 
@@ -1222,11 +1285,13 @@ def hasEnoughForTxFees(_agent: address, _action: ActionType, _usdValue: uint256)
 
     hasEnoughForAgent: bool = True
     if cost.agentAsset != empty(address) and cost.agentAssetAmount != 0:
-        hasEnoughForAgent = staticcall IERC20(cost.agentAsset).balanceOf(self) >= cost.agentAssetAmount
+        tokenBalForAgent: uint256 = self._getAvailBalAfterTrialFunds(True, cost.agentAsset, addys.legoRegistry)
+        hasEnoughForAgent = tokenBalForAgent >= cost.agentAssetAmount
 
     hasEnoughForProtocol: bool = True
     if cost.protocolAsset != empty(address) and cost.protocolAssetAmount != 0:
-        hasEnoughForProtocol = staticcall IERC20(cost.protocolAsset).balanceOf(self) >= cost.protocolAssetAmount
+        tokenBalForProtocol: uint256 = self._getAvailBalAfterTrialFunds(True, cost.protocolAsset, addys.legoRegistry)
+        hasEnoughForProtocol = tokenBalForProtocol >= cost.protocolAssetAmount
 
     return hasEnoughForAgent and hasEnoughForProtocol
 
@@ -1238,37 +1303,40 @@ def _handleTransactionFee(
     _action: ActionType,
     _usdValue: uint256,
     _priceSheets: address,
+    _legoRegistry: address,
 ):
     if not _isSignerAgent or _usdValue == 0:
         return
     cost: TransactionCost = staticcall PriceSheets(_priceSheets).getTransactionCost(_agent, _action, _usdValue)
-    didPay: bool = self._payAgentAndProtocolFees(_agent, cost)
+    didPay: bool = self._payAgentAndProtocolFees(_agent, cost, _legoRegistry)
     if didPay:
         log TransactionFeePaid(_agent, _action, _usdValue, cost.agentAsset, cost.agentAssetAmount, cost.agentUsdValue, cost.protocolRecipient, cost.protocolAsset, cost.protocolAssetAmount, cost.protocolUsdValue)
 
 
 @internal
-def _handleBatchTransactionFees(_agent: address, _isSignerAgent: bool, _aggCostData: TransactionCost):
+def _handleBatchTransactionFees(_agent: address, _isSignerAgent: bool, _aggCostData: TransactionCost, _legoRegistry: address):
     if not _isSignerAgent:
         return
-    didPay: bool = self._payAgentAndProtocolFees(_agent, _aggCostData)
+    didPay: bool = self._payAgentAndProtocolFees(_agent, _aggCostData, _legoRegistry)
     if didPay:
         log BatchTransactionFeesPaid(_agent, _aggCostData.agentAsset, _aggCostData.agentAssetAmount, _aggCostData.agentUsdValue, _aggCostData.protocolRecipient, _aggCostData.protocolAsset, _aggCostData.protocolAssetAmount, _aggCostData.protocolUsdValue)
 
 
 @internal
-def _payAgentAndProtocolFees(_agent: address, _cost: TransactionCost) -> bool:
+def _payAgentAndProtocolFees(_agent: address, _cost: TransactionCost, _legoRegistry: address) -> bool:
     didPay: bool = False
 
     # transfer agent fees
     if _cost.agentAsset != empty(address) and _cost.agentAssetAmount != 0:
-        assert staticcall IERC20(_cost.agentAsset).balanceOf(self) >= _cost.agentAssetAmount # dev: insufficient balance for agent tx fee payment
+        tokenBalForAgent: uint256 = self._getAvailBalAfterTrialFunds(True, _cost.agentAsset, _legoRegistry)
+        assert tokenBalForAgent >= _cost.agentAssetAmount # dev: insufficient balance for agent tx fee payment
         assert extcall IERC20(_cost.agentAsset).transfer(_agent, _cost.agentAssetAmount, default_return_value=True) # dev: agent tx fee transfer failed
         didPay = True
 
     # transfer protocol fees
     if _cost.protocolRecipient != empty(address) and _cost.protocolAsset != empty(address) and _cost.protocolAssetAmount != 0:
-        assert staticcall IERC20(_cost.protocolAsset).balanceOf(self) >= _cost.protocolAssetAmount # dev: insufficient balance for protocol tx fee payment
+        tokenBalForProtocol: uint256 = self._getAvailBalAfterTrialFunds(True, _cost.protocolAsset, _legoRegistry)
+        assert tokenBalForProtocol >= _cost.protocolAssetAmount # dev: insufficient balance for protocol tx fee payment
         assert extcall IERC20(_cost.protocolAsset).transfer(_cost.protocolRecipient, _cost.protocolAssetAmount, default_return_value=True) # dev: protocol tx fee transfer failed
         didPay = True
 
@@ -1329,7 +1397,7 @@ def getAgentSubscriptionStatus(_agent: address) -> (uint256, uint256, bool):
 
 
 @internal
-def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _priceSheets: address, _oracleRegistry: address):
+def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _priceSheets: address, _oracleRegistry: address, _legoRegistry: address):
     agentInfo: AgentInfo = _agentInfo
     subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).getAgentSubPriceData(_agent)
     
@@ -1339,7 +1407,8 @@ def _checkAgentSubscription(_agent: address, _agentInfo: AgentInfo, _priceSheets
 
     # make payment
     if paymentAmount != 0:
-        assert staticcall IERC20(subData.asset).balanceOf(self) >= paymentAmount # dev: insufficient balance for agent payment
+        tokenBalance: uint256 = self._getAvailBalAfterTrialFunds(True, subData.asset, _legoRegistry)
+        assert tokenBalance >= paymentAmount # dev: insufficient balance for agent payment
         assert extcall IERC20(subData.asset).transfer(_agent, paymentAmount, default_return_value=True) # dev: agent subscription payment failed
         log AgentSubscriptionPaid(_agent, subData.asset, paymentAmount, subData.usdValue, agentInfo.paidThroughBlock)
 
@@ -1360,7 +1429,7 @@ def getProtocolSubscriptionStatus() -> (uint256, uint256, bool):
 
 
 @internal
-def _checkProtocolSubscription(_priceSheets: address, _oracleRegistry: address):
+def _checkProtocolSubscription(_priceSheets: address, _oracleRegistry: address, _legoRegistry: address):
     userStatus: ProtocolSub = self.protocolSub
     subData: SubscriptionInfo = staticcall PriceSheets(_priceSheets).protocolSubPriceData()
 
@@ -1371,7 +1440,8 @@ def _checkProtocolSubscription(_priceSheets: address, _oracleRegistry: address):
     # make payment
     if paymentAmount != 0:
         recipient: address = staticcall PriceSheets(_priceSheets).protocolRecipient()
-        assert staticcall IERC20(subData.asset).balanceOf(self) >= paymentAmount # dev: insufficient balance for protocol payment
+        tokenBalance: uint256 = self._getAvailBalAfterTrialFunds(True, subData.asset, _legoRegistry)
+        assert tokenBalance >= paymentAmount # dev: insufficient balance for protocol payment
         assert extcall IERC20(subData.asset).transfer(recipient, paymentAmount, default_return_value=True) # dev: protocol subscription payment failed
         log ProtocolSubscriptionPaid(recipient, subData.asset, paymentAmount, subData.usdValue, userStatus.paidThroughBlock)
 
@@ -1426,7 +1496,8 @@ def canMakeSubscriptionPayments(_agent: address) -> (bool, bool):
     agentPaymentAmount: uint256 = 0
     agentPaymentAmount, na1, na2 = self._updateSubscriptionInfo(self.agentSettings[_agent].paidThroughBlock, agentSubData, addys.oracleRegistry)
     if agentSubData.asset != empty(address) and agentPaymentAmount != 0:
-        canPayAgent = staticcall IERC20(agentSubData.asset).balanceOf(self) >= agentPaymentAmount
+        tokenBalance: uint256 = self._getAvailBalAfterTrialFunds(True, agentSubData.asset, addys.legoRegistry)
+        canPayAgent = tokenBalance >= agentPaymentAmount
 
     # protocol subscription
     canPayProtocol: bool = True
@@ -1434,7 +1505,8 @@ def canMakeSubscriptionPayments(_agent: address) -> (bool, bool):
     protocolPaymentAmount: uint256 = 0
     protocolPaymentAmount, na1, na2 = self._updateSubscriptionInfo(self.protocolSub.paidThroughBlock, protocolSubData, addys.oracleRegistry)
     if protocolSubData.asset != empty(address) and protocolPaymentAmount != 0:
-        canPayProtocol = staticcall IERC20(protocolSubData.asset).balanceOf(self) >= protocolPaymentAmount
+        tokenBalance: uint256 = self._getAvailBalAfterTrialFunds(True, protocolSubData.asset, addys.legoRegistry)
+        canPayProtocol = tokenBalance >= protocolPaymentAmount
 
     return canPayAgent, canPayProtocol
 
@@ -1724,3 +1796,60 @@ def _isValidSignature(_encodedValue: Bytes[256], _sig: Signature):
     assert abi_decode(response, address) == _sig.signer # dev: invalid signature
     self.usedSignatures[_sig.signature] = True
 
+
+########################
+# trial funds recovery #
+########################
+
+
+@external
+def recoverTrialFunds(_opportunities: DynArray[TrialFundsClawback, MAX_INSTRUCTIONS]) -> bool:
+    assert len(_opportunities) != 0 # dev: no instructions
+    
+    addyRegistry: address = self.addyRegistry
+    agentFactory: address = staticcall AddyRegistry(addyRegistry).getAddy(AGENT_FACTORY_ID)
+    assert msg.sender == agentFactory # dev: no perms
+
+    # validation
+    trialFundsAsset: address = self.trialFundsAsset
+    assert trialFundsAsset != empty(address) # dev: no trial funds asset
+    trialFundsAmount: uint256 = self.trialFundsAmount
+    assert trialFundsAmount != 0 # dev: no trial funds amount
+
+    balanceAvail: uint256 = staticcall IERC20(trialFundsAsset).balanceOf(self)
+    legoRegistry: address = staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID)
+
+    # iterate through clawback data
+    for i: uint256 in range(len(_opportunities), bound=MAX_INSTRUCTIONS):
+        if balanceAvail >= trialFundsAmount:
+            break
+
+        # get vault token data
+        data: TrialFundsClawback = _opportunities[i]
+        vaultTokenBal: uint256 = staticcall IERC20(data.vaultToken).balanceOf(self)
+        if vaultTokenBal == 0:
+            continue
+
+        # withdraw from lego partner
+        assetAmountReceived: uint256 = 0
+        na1: uint256 = 0
+        na2: uint256 = 0
+        assetAmountReceived, na1, na2 = self._withdrawTokens(agentFactory, data.legoId, trialFundsAsset, vaultTokenBal, data.vaultToken, False, legoRegistry)
+        balanceAvail += assetAmountReceived
+
+        # deposit any extra balance back lego
+        if balanceAvail > trialFundsAmount:
+            self._depositTokens(agentFactory, data.legoId, trialFundsAsset, balanceAvail - trialFundsAmount, data.vaultToken, False, legoRegistry)
+
+    # transfer back to agent factory
+    amount: uint256 = min(trialFundsAmount, staticcall IERC20(trialFundsAsset).balanceOf(self))
+    assert amount != 0 # dev: no funds to transfer
+    assert extcall IERC20(trialFundsAsset).transfer(agentFactory, amount, default_return_value=True) # dev: trial funds transfer failed
+
+    # clear trial funds data
+    self.trialFundsAmount -= amount
+    if amount == trialFundsAmount:
+        self.trialFundsAsset = empty(address)
+
+    log TrialFundsClawedBack(trialFundsAmount, trialFundsAmount - amount)
+    return True

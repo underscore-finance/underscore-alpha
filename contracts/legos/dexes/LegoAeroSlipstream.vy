@@ -1,9 +1,15 @@
 # @version 0.4.0
 
 implements: LegoDex
+initializes: gov
+exports: gov.__interface__
 
+import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
+
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface AeroSlipStreamFactory:
     def getPool(_tokenA: address, _tokenB: address, _tickSpacing: int24) -> address: view
@@ -11,15 +17,11 @@ interface AeroSlipStreamFactory:
 interface AeroSlipStreamRouter:
     def exactInputSingle(_params: ExactInputSingleParams) -> uint256: payable
 
-interface AeroSlipStreamPool:
-    def liquidity() -> uint128: view
-
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
 
-interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+interface AeroSlipStreamPool:
+    def liquidity() -> uint128: view
 
 struct ExactInputSingleParams:
     tokenIn: address
@@ -48,9 +50,14 @@ event FundsRecovered:
 event AeroSlipStreamLegoIdSet:
     legoId: uint256
 
-legoId: public(uint256)
+event AeroSlipStreamActivated:
+    isActivated: bool
 
+# config
+legoId: public(uint256)
+isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
+
 AERO_SLIPSTREAM_FACTORY: public(immutable(address))
 AERO_SLIPSTREAM_ROUTER: public(immutable(address))
 
@@ -63,6 +70,8 @@ def __init__(_aeroFactory: address, _aeroRouter: address, _addyRegistry: address
     AERO_SLIPSTREAM_FACTORY = _aeroFactory
     AERO_SLIPSTREAM_ROUTER = _aeroRouter
     ADDY_REGISTRY = _addyRegistry
+    self.isActivated = True
+    gov.__init__(_addyRegistry)
 
 
 @view
@@ -121,6 +130,8 @@ def swapTokens(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
     bestTickSpacing: int24 = self._getBestTickSpacing(_tokenIn, _tokenOut)
     assert bestTickSpacing != 0 # dev: no pool found
 
@@ -172,7 +183,7 @@ def swapTokens(
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).governor() # dev: no perms
+    assert gov._isGovernor(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -196,3 +207,10 @@ def setLegoId(_legoId: uint256) -> bool:
     self.legoId = _legoId
     log AeroSlipStreamLegoIdSet(_legoId)
     return True
+
+
+@external
+def activate(_shouldActivate: bool):
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.isActivated = _shouldActivate
+    log AeroSlipStreamActivated(_shouldActivate)

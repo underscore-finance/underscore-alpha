@@ -168,29 +168,6 @@ def test_set_lego_helper(lego_registry, alpha_token, governor, bob):
     assert not lego_registry.setLegoHelper(lego_helper, sender=governor)
 
 
-def test_activation(lego_registry, new_lego, governor, bob):
-    # Test non-governor cannot change activation
-    with boa.reverts("no perms"):
-        lego_registry.activate(False, sender=bob)
-    
-    # Test deactivation
-    lego_registry.activate(False, sender=governor)
-
-    log = filter_logs(lego_registry, "LegoRegistryActivated")[0]
-    assert log.isActivated == False
-
-    assert not lego_registry.isActivated()
-    
-    # Test operations fail when deactivated
-    description = "Test Lego"
-    with boa.reverts("not activated"):
-        lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    
-    # Test reactivation
-    lego_registry.activate(True, sender=governor)
-    assert lego_registry.isActivated()
-
-
 def test_view_functions(lego_registry, new_lego, governor):
     description = "Test Lego"
     lego_id = lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)

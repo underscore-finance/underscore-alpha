@@ -37,14 +37,12 @@ numAddys: public(uint256)
 
 # config
 governor: public(address)
-isActivated: public(bool)
 
 
 @deploy
 def __init__(_governor: address):
     assert _governor != empty(address) # dev: invalid governor
     self.governor = _governor
-    self.isActivated = True
 
     # start at 1 index
     self.numAddys = 1
@@ -79,12 +77,11 @@ def _isValidNewAddy(_addy: address) -> bool:
 def registerNewAddy(_addy: address, _description: String[64]) -> uint256:
     """
     @notice Register a new core contract address in the registry
-    @dev Only callable by governor when registry is activated
+    @dev Only callable by governor
     @param _addy The address of the contract to register
     @param _description A brief description of the contract's functionality
     @return The assigned ID if registration successful, 0 if failed
     """
-    assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
 
     if not self._isValidNewAddy(_addy):
@@ -138,12 +135,11 @@ def _isValidAddyUpdate(_addyId: uint256, _newAddy: address, _prevAddy: address) 
 def updateAddy(_addyId: uint256, _newAddy: address) -> bool:
     """
     @notice Update the address of an existing core contract
-    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @dev Only callable by governor. Updates version and timestamp.
     @param _addyId The ID of the contract to update
     @param _newAddy The new address for the contract
     @return True if update successful, False otherwise
     """
-    assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
 
     data: AddyInfo = self.addyInfo[_addyId]
@@ -196,11 +192,10 @@ def _isValidAddyDisable(_addyId: uint256, _prevAddy: address) -> bool:
 def disableAddy(_addyId: uint256) -> bool:
     """
     @notice Disable a core contract by setting its address to empty
-    @dev Only callable by governor when registry is activated. Updates version and timestamp.
+    @dev Only callable by governor. Updates version and timestamp.
     @param _addyId The ID of the contract to disable
     @return True if disable successful, False otherwise
     """
-    assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
 
     data: AddyInfo = self.addyInfo[_addyId]
@@ -375,31 +370,13 @@ def _isValidGovernor(_newGovernor: address) -> bool:
 def setGovernor(_newGovernor: address) -> bool:
     """
     @notice Set a new governor address
-    @dev Only callable by current governor when registry is activated
+    @dev Only callable by current governor
     @param _newGovernor The address to set as governor
     @return True if governor was set successfully, False otherwise
     """
-    assert self.isActivated # dev: not activated
     assert msg.sender == self.governor # dev: no perms
     if not self._isValidGovernor(_newGovernor):
         return False
     self.governor = _newGovernor
     log AddyRegistryGovernorSet(_newGovernor)
     return True
-
-
-############
-# Activate #
-############
-
-
-@external
-def activate(_shouldActivate: bool):
-    """
-    @notice Activate or deactivate the address registry
-    @dev Only callable by governor. When deactivated, most functions cannot be called.
-    @param _shouldActivate True to activate, False to deactivate
-    """
-    assert msg.sender == self.governor # dev: no perms
-    self.isActivated = _shouldActivate
-    log AddyRegistryActivated(_shouldActivate)
