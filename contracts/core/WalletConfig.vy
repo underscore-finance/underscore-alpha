@@ -2,33 +2,20 @@
 # pragma optimize codesize
 
 from ethereum.ercs import IERC20
-from interfaces import LegoDex
-from interfaces import LegoYield
 
 interface PriceSheets:
     def getCombinedSubData(_agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
     def getCombinedTxCostData(_agent: address, _action: ActionType, _usdValue: uint256, _oracleRegistry: address) -> (TxCostInfo, TxCostInfo): view
     def getAgentSubPriceData(_agent: address) -> SubscriptionInfo: view
     def protocolSubPriceData() -> SubscriptionInfo: view
-    def protocolRecipient() -> address: view
-
-interface OracleRegistry:
-    def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256: view
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
-    def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface LegoRegistry:
     def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
-    def getLegoAddr(_legoId: uint256) -> address: view
     def isValidLegoId(_legoId: uint256) -> bool: view
-    def legoHelper() -> address: view
 
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
-
-interface LegoHelper:
-    def getTotalUnderlyingForUser(_user: address, _underlyingAsset: address) -> uint256: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -40,10 +27,6 @@ flag ActionType:
     TRANSFER
     SWAP
     CONVERSION
-
-struct TrialFundsClawback:
-    legoId: uint256
-    vaultToken: address
 
 struct AgentInfo:
     isActive: bool
@@ -90,72 +73,15 @@ struct AllowedActions:
     canSwap: bool
     canConvert: bool
 
-struct Signature:
-    signature: Bytes[65]
-    signer: address
-    expiration: uint256
-
 struct ReserveAsset:
     asset: address
     amount: uint256
-
-struct ActionInstruction:
-    action: ActionType
-    legoId: uint256
-    asset: address
-    vault: address
-    amount: uint256
-    recipient: address
-    altLegoId: uint256
-    altVault: address
-    altAsset: address
-    altAmount: uint256
 
 struct SubscriptionInfo:
     asset: address
     usdValue: uint256
     trialPeriod: uint256
     payPeriod: uint256
-
-event TransactionFeePaid:
-    agent: indexed(address)
-    action: ActionType
-    transactionUsdValue: uint256
-    agentAsset: indexed(address)
-    agentAssetAmount: uint256
-    agentUsdValue: uint256
-    protocolRecipient: address
-    protocolAsset: indexed(address)
-    protocolAssetAmount: uint256
-    protocolUsdValue: uint256
-
-event BatchTransactionFeesPaid:
-    agent: indexed(address)
-    agentAsset: indexed(address)
-    agentAssetAmount: uint256
-    agentUsdValue: uint256
-    protocolRecipient: address
-    protocolAsset: indexed(address)
-    protocolAssetAmount: uint256
-    protocolUsdValue: uint256
-
-event AgentSubscriptionPaid:
-    agent: indexed(address)
-    asset: indexed(address)
-    amount: uint256
-    usdValue: uint256
-    paidThroughBlock: uint256
-
-event ProtocolSubscriptionPaid:
-    recipient: indexed(address)
-    asset: indexed(address)
-    amount: uint256
-    usdValue: uint256
-    paidThroughBlock: uint256
-
-event WhitelistAddrSet:
-    addr: indexed(address)
-    isAllowed: bool
 
 event AgentAdded:
     agent: indexed(address)
@@ -189,17 +115,18 @@ event AllowedActionsModified:
     canSwap: bool
     canConvert: bool
 
+event WhitelistAddrSet:
+    addr: indexed(address)
+    isAllowed: bool
+
 event ReserveAssetSet:
     asset: indexed(address)
     amount: uint256
 
-event TrialFundsClawedBack:
-    clawedBackAmount: uint256
-    remainingAmount: uint256
-
+# core
 wallet: public(address)
 
-# settings
+# user settings
 owner: public(address) # owner of the wallet
 protocolSub: public(ProtocolSub) # subscription info
 reserveAssets: public(HashMap[address, uint256]) # asset -> reserve amount
@@ -215,13 +142,10 @@ API_VERSION: constant(String[28]) = "0.0.1"
 
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 10
-MAX_INSTRUCTIONS: constant(uint256) = 20
 
 # registry ids
-AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
-ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 
 @deploy
@@ -302,77 +226,9 @@ def apiVersion() -> String[28]:
     return API_VERSION
 
 
-#############
-# Utilities #
-#############
-
-
-@view
-@internal
-def _getCoreData() -> CoreData:
-    addyRegistry: address = self.addyRegistry
-    wallet: address = self.wallet
-    return CoreData(
-        wallet=wallet,
-        walletConfig=self,
-        legoRegistry=staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID),
-        priceSheets=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_SHEETS_ID),
-        oracleRegistry=staticcall AddyRegistry(addyRegistry).getAddy(ORACLE_REGISTRY_ID),
-        trialFundsAsset=WalletFunds(wallet).trialFundsAsset(),
-        trialFundsInitialAmount=WalletFunds(wallet).trialFundsInitialAmount(),
-    )
-
-
-@view
-@external
-def getAvailableTxAmount(
-    _asset: address,
-    _wantedAmount: uint256,
-    _shouldCheckTrialFunds: bool,
-    _cd: CoreData,
-) -> uint256:
-    tokenBalance: uint256 = self._getAvailBalAfterTrialFunds(_asset, _shouldCheckTrialFunds, _cd.trialFundsAsset, _cd.trialFundsAmount, _cd.wallet, _cd.legoRegistry)
-    reservedAmount: uint256 = self.reserveAssets[_asset]
-    
-    assert tokenBalance > reservedAmount # dev: insufficient balance after reserve
-    availableAmount: uint256 = tokenBalance - reservedAmount
-    
-    amount: uint256 = min(_wantedAmount, availableAmount)
-    assert amount != 0 # dev: no funds available
-
-    return amount
-
-
-@view
-@internal
-def _getAvailBalAfterTrialFunds(
-    _asset: address,
-    _shouldCheckTrialFunds: bool,
-    _trialFundsAsset: address,
-    _trialFundsAmount: uint256,
-    _wallet: address,
-    _legoHelper: address,
-) -> uint256:
-    userBalance: uint256 = staticcall IERC20(_asset).balanceOf(_wallet)
-    if _asset != _trialFundsAsset or not _shouldCheckTrialFunds:
-        return userBalance
-
-    # sufficient trial funds already deployed
-    totalUnderlying: uint256 = staticcall LegoHelper(_legoHelper).getTotalUnderlyingForUser(_wallet, _asset)
-    if totalUnderlying >= _trialFundsAmount:
-        return userBalance
-
-    lockedAmount: uint256 = _trialFundsAmount - totalUnderlying
-    availAmount: uint256 = 0
-    if lockedAmount < userBalance:
-        availAmount = userBalance - lockedAmount
-
-    return availAmount
-
-
-################
-# Agent Access #
-################
+#####################
+# Agent Permissions #
+#####################
 
 
 @view
@@ -439,48 +295,6 @@ def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions)
         return False
 
 
-#####################
-# Transaction Costs #
-#####################
-
-
-@view
-@internal
-def _aggregateBatchTxCostData(
-    _aggCostData: TransactionCost,
-    _agent: address,
-    _isSignerAgent: bool,
-    _action: ActionType,
-    _usdValue: uint256,
-    _priceSheets: address,
-) -> TransactionCost:
-    if not _isSignerAgent or _usdValue == 0:
-        return _aggCostData
-
-    aggCostData: TransactionCost = _aggCostData
-    txCost: TransactionCost = staticcall PriceSheets(_priceSheets).getTransactionCost(_agent, _action, _usdValue)
-
-    # agent asset
-    if aggCostData.agentAsset == empty(address) and txCost.agentAsset != empty(address):
-        aggCostData.agentAsset = txCost.agentAsset
-
-    # protocol asset
-    if aggCostData.protocolAsset == empty(address) and txCost.protocolAsset != empty(address):
-        aggCostData.protocolAsset = txCost.protocolAsset
-
-    # protocol recipient
-    if aggCostData.protocolRecipient == empty(address) and txCost.protocolRecipient != empty(address):
-        aggCostData.protocolRecipient = txCost.protocolRecipient
-
-    # aggregate amounts / usd values
-    aggCostData.agentAssetAmount += txCost.agentAssetAmount
-    aggCostData.protocolAssetAmount += txCost.protocolAssetAmount
-    aggCostData.agentUsdValue += txCost.agentUsdValue
-    aggCostData.protocolUsdValue += txCost.protocolUsdValue
-
-    return aggCostData
-
-
 ##########################
 # Subscription + Tx Fees #
 ##########################
@@ -494,6 +308,16 @@ def handleSubscriptionsAndPermissions(
     _legoIds: DynArray[uint256, MAX_LEGOS],
     _cd: CoreData,
 ) -> (SubPaymentInfo, SubPaymentInfo):
+    """
+    @notice Handles the subscription and permission data for the given agent and action
+    @param _agent The address of the agent
+    @param _action The action to handle
+    @param _assets The assets to check
+    @param _legoIds The legos to check
+    @param _cd The core data
+    @return protocolSub The protocol subscription data
+    @return agentSub The agent subscription data
+    """
     assert msg.sender == self.wallet # dev: no perms
 
     # check if agent can perform action with assets and legos
@@ -527,6 +351,15 @@ def handleSubscriptionsAndPermissions(
 @view
 @external
 def getTransactionCosts(_agent: address, _action: ActionType, _usdValue: uint256, _cd: CoreData) -> (TxCostInfo, TxCostInfo):
+    """
+    @notice Returns the transaction costs for the given agent and action
+    @param _agent The address of the agent
+    @param _action The action to check
+    @param _usdValue The USD value of the transaction
+    @param _cd The core data
+    @return protocolCost The transaction cost for the protocol
+    @return agentCost The transaction cost for the agent
+    """
     protocolCost: TxCostInfo = empty(TxCostInfo)
     agentCost: TxCostInfo = empty(TxCostInfo)
     protocolCost, agentCost = staticcall PriceSheets(_cd.priceSheets).getCombinedTxCostData(_agent, _action, _usdValue, _cd.oracleRegistry)
@@ -562,6 +395,46 @@ def _checkIfSufficientFunds(_protocolAsset: address, _protocolAmount: uint256, _
     if _agentAmount != 0:
         availBalForAgent: uint256 = self._getAvailBalAfterTrialFunds(_agentAsset, _cd.wallet, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, trialFundsCurrentBal, trialFundsDeployed)
         assert availBalForAgent >= _agentAmount # dev: insufficient balance for agent subscription payment
+
+
+####################
+# Random Utilities #
+####################
+
+
+@view
+@external
+def getAvailableTxAmount(
+    _asset: address,
+    _wantedAmount: uint256,
+    _shouldCheckTrialFunds: bool,
+    _cd: CoreData,
+) -> uint256:
+    """
+    @notice Returns the maximum amount that can be sent from the wallet
+    @param _asset The address of the asset to check
+    @param _wantedAmount The amount of the asset to send
+    @param _shouldCheckTrialFunds Whether to check if the asset is a trial funds asset
+    @param _cd The core data
+    @return amount The maximum amount that can be sent
+    """
+    tokenBalance: uint256 = staticcall IERC20(_asset).balanceOf(_cd.wallet)
+
+    # check if asset is trial funds asset
+    if _shouldCheckTrialFunds and _asset == _cd.trialFundsAsset:
+        trialFundsDeployed: uint256 = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingForUser(_cd.wallet, _asset)
+        tokenBalance = self._getAvailBalAfterTrialFunds(_asset, _cd.wallet, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, tokenBalance, trialFundsDeployed)
+
+    # check if any reserve is set
+    reservedAmount: uint256 = self.reserveAssets[_asset]
+    assert tokenBalance > reservedAmount # dev: insufficient balance after reserve
+    availableAmount: uint256 = tokenBalance - reservedAmount
+
+    # return min of wanted amount and available amount
+    amount: uint256 = min(_wantedAmount, availableAmount)
+    assert amount != 0 # dev: no funds available
+
+    return amount
 
 
 @view
@@ -826,7 +699,7 @@ def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
 
 
 ##################
-# reserve assets #
+# Reserve Assets #
 ##################
 
 

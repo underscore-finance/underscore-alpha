@@ -7,25 +7,12 @@ from interfaces import LegoYield
 
 interface WalletConfig:
     def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo): nonpayable
-    def checkAgentAccessAndSubscription(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (address, uint256): nonpayable
-    def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData) -> uint256: nonpayable
     def getTransactionCosts(_agent: address, _action: ActionType, _usdValue: uint256, _cd: CoreData) -> (TxCostInfo, TxCostInfo): view
-    def checkProtocolSubscription(_cd: CoreData) -> (address, address, uint256): nonpayable
+    def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData) -> uint256: view
     def owner() -> address: view
 
-interface OracleRegistry:
-    def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256: view
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
-    def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
-
 interface LegoRegistry:
-    def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
     def getLegoAddr(_legoId: uint256) -> address: view
-    def legoHelper() -> address: view
-
-interface WethContract:
-    def withdraw(_amount: uint256): nonpayable
-    def deposit(): payable
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -59,27 +46,6 @@ struct Signature:
     signer: address
     expiration: uint256
 
-struct ActionInstruction:
-    action: ActionType
-    legoId: uint256
-    asset: address
-    vault: address
-    amount: uint256
-    recipient: address
-    altLegoId: uint256
-    altVault: address
-    altAsset: address
-    altAmount: uint256
-
-struct TransactionCost:
-    protocolRecipient: address
-    protocolAsset: address
-    protocolAssetAmount: uint256
-    protocolUsdValue: uint256
-    agentAsset: address
-    agentAssetAmount: uint256
-    agentUsdValue: uint256
-
 event SubscriptionPaid:
     recipient: indexed(address)
     asset: indexed(address)
@@ -109,57 +75,7 @@ event AgenticDeposit:
     broadcaster: address
     isSignerAgent: bool
 
-event AgenticWithdrawal:
-    signer: indexed(address)
-    asset: indexed(address)
-    vaultToken: indexed(address)
-    assetAmountReceived: uint256
-    vaultTokenAmountBurned: uint256
-    refundVaultTokenAmount: uint256
-    usdValue: uint256
-    legoId: uint256
-    legoAddr: address
-    broadcaster: address
-    isSignerAgent: bool
-
-event AgenticSwap:
-    signer: indexed(address)
-    tokenIn: indexed(address)
-    tokenOut: indexed(address)
-    swapAmount: uint256
-    toAmount: uint256
-    refundAssetAmount: uint256
-    usdValue: uint256
-    legoId: uint256
-    legoAddr: address
-    broadcaster: address
-    isSignerAgent: bool
-
-event WalletFundsTransferred:
-    signer: indexed(address)
-    recipient: indexed(address)
-    asset: indexed(address)
-    amount: uint256
-    usdValue: uint256
-    broadcaster: address
-    isSignerAgent: bool
-
-event EthConvertedToWeth:
-    signer: indexed(address)
-    amount: uint256
-    paidEth: uint256
-    weth: indexed(address)
-    broadcaster: indexed(address)
-    isSignerAgent: bool
-
-event WethConvertedToEth:
-    signer: indexed(address)
-    amount: uint256
-    weth: indexed(address)
-    broadcaster: indexed(address)
-    isSignerAgent: bool
-
-# config
+# core
 walletConfig: public(address)
 
 # trial funds info
@@ -175,27 +91,17 @@ API_VERSION: constant(String[28]) = "0.0.1"
 
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 10
-MAX_INSTRUCTIONS: constant(uint256) = 20
 
 # registry ids
-AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 # eip-712
 usedSignatures: public(HashMap[Bytes[65], bool])
-
-DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address asset,uint256 amount,address vault,uint256 expiration)')
-WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,uint256 amount,address vaultToken,uint256 expiration)')
-REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,uint256 toLegoId,address asset,uint256 amount,address fromVaultToken,address toVault,uint256 expiration)')
-SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,uint256 expiration)')
-TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
-ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
-WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
-
-DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
 ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
+DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
+DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address asset,uint256 amount,address vault,uint256 expiration)')
 
 
 @deploy
@@ -285,7 +191,7 @@ def depositTokens(
 
     # check permissions / subscription data
     signer: address = self._getSignerOnDeposit(_legoId, _asset, _amount, _vault, _sig)
-    isSignerAgent: bool = self._checkPermissionsAndSubscriptions(signer, ActionType.DEPOSIT, [_asset], [_legoId], cd)
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.DEPOSIT, [_asset], [_legoId], cd)
 
     # deposit tokens
     assetAmountDeposited: uint256 = 0
@@ -393,7 +299,7 @@ def _getCoreData() -> CoreData:
 
 
 @internal
-def _checkPermissionsAndSubscriptions(
+def _checkPermsAndHandleSubs(
     _signer: address,
     _action: ActionType,
     _assets: DynArray[address, MAX_ASSETS],
