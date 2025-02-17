@@ -51,5 +51,5 @@ def deploy_core(deployer):
     if addy_registry.isValidNewAddy(oracle_registry):
         addy_registry.registerNewAddy(oracle_registry, "Oracle Registry")
 
-    if agent_factory.numAgenticWalletsAllowed() == 0:
-        agent_factory.setNumAgenticWalletsAllowed(10)
+    if agent_factory.numAgenticWalletsAllowed() < 1000:
+        agent_factory.setNumAgenticWalletsAllowed(1000)
