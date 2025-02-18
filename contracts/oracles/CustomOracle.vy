@@ -2,10 +2,13 @@
 
 implements: OraclePartner
 initializes: gov
+initializes: oad
 exports: gov.__interface__
+exports: oad.__interface__
 
-import interfaces.OraclePartnerInterface as OraclePartner
 import contracts.modules.Governable as gov
+import contracts.modules.OracleAssetData as oad
+import interfaces.OraclePartnerInterface as OraclePartner
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -18,6 +21,9 @@ event CustomPriceSet:
     asset: indexed(address)
     price: uint256
 
+event CustomPriceDisabled:
+    asset: indexed(address)
+
 # custom config
 priceData: public(HashMap[address, CustomOracleData])
 
@@ -29,8 +35,9 @@ ADDY_REGISTRY: public(immutable(address))
 @deploy
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
-    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
+    gov.__init__(_addyRegistry)
+    oad.__init__()
 
 
 #############
@@ -85,7 +92,22 @@ def setPrice(_asset: address, _price: uint256):
         price=_price,
         publishTime=block.timestamp,
     )
+    oad._addAsset(_asset)
     log CustomPriceSet(_asset, _price)
+
+
+# disable price feed
+
+
+@external
+def disablePriceFeed(_asset: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    if self.priceData[_asset].price == 0:
+        return False
+    self.priceData[_asset] = empty(CustomOracleData)
+    oad._removeAsset(_asset)
+    log CustomPriceDisabled(_asset)
+    return True
 
 
 ##########
