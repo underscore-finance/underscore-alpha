@@ -181,7 +181,6 @@ wethAddr: public(address)
 initialized: public(bool)
 
 API_VERSION: constant(String[28]) = "0.0.1"
-
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
 MAX_INSTRUCTIONS: constant(uint256) = 20
@@ -432,12 +431,14 @@ def _withdrawTokens(
     assert legoAddr != empty(address) # dev: invalid lego
 
     # finalize amount, this will look at vault token balance (not always 1:1 with underlying asset)
-    withdrawAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_vaultToken, _vaultTokenAmount, False, _cd)
-    assert withdrawAmount != 0 # dev: nothing to withdraw
-
-    # some vault tokens require max value approval (comp v3)
+    withdrawAmount: uint256 = _vaultTokenAmount
     if _vaultToken != empty(address):
+        withdrawAmount = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_vaultToken, _vaultTokenAmount, False, _cd)
+
+        # some vault tokens require max value approval (comp v3)
         assert extcall IERC20(_vaultToken).approve(legoAddr, max_value(uint256), default_return_value=True) # dev: approval failed
+
+    assert withdrawAmount != 0 # dev: nothing to withdraw
 
     # withdraw from lego partner
     assetAmountReceived: uint256 = 0
@@ -533,9 +534,9 @@ def _rebalance(
 
     # withdraw from the first lego
     assetAmountReceived: uint256 = 0
-    vaultTokenAmountBurned: uint256 = 0
+    na: uint256 = 0
     withdrawUsdValue: uint256 = 0
-    assetAmountReceived, vaultTokenAmountBurned, withdrawUsdValue = self._withdrawTokens(_signer, _fromLegoId, _fromAsset, _fromVaultToken, _fromVaultTokenAmount, _isSignerAgent, _cd)
+    assetAmountReceived, na, withdrawUsdValue = self._withdrawTokens(_signer, _fromLegoId, _fromAsset, _fromVaultToken, _fromVaultTokenAmount, _isSignerAgent, _cd)
 
     # deposit the received assets into the second lego
     assetAmountDeposited: uint256 = 0
@@ -633,18 +634,17 @@ def _swapTokens(
     isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_tokenIn, _cd.trialFundsAsset, _cd.legoRegistry)
     
     # swap assets via lego partner
-    actualSwapAmount: uint256 = 0
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    actualSwapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
+    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # make sure they still have enough trial funds
     self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
     
-    log AgenticSwap(_signer, _tokenIn, _tokenOut, actualSwapAmount, toAmount, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
-    return actualSwapAmount, toAmount, usdValue
+    log AgenticSwap(_signer, _tokenIn, _tokenOut, swapAmount, toAmount, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    return swapAmount, toAmount, usdValue
 
 
 @internal
@@ -712,12 +712,12 @@ def _transferFunds(
     _isSignerAgent: bool,
     _cd: CoreData,
 ) -> (uint256, uint256):
+    amount: uint256 = 0
+    usdValue: uint256 = 0
+
     # validate recipient
     if _recipient != _cd.owner:
         assert staticcall WalletConfig(_cd.walletConfig).isRecipientAllowed(_recipient) # dev: recipient not allowed
-
-    amount: uint256 = 0
-    usdValue: uint256 = 0
 
     # handle eth
     if _asset == empty(address):

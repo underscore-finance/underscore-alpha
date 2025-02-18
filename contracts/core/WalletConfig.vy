@@ -13,10 +13,6 @@ interface LegoRegistry:
     def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
     def isValidLegoId(_legoId: uint256) -> bool: view
 
-interface WethContract:
-    def withdraw(_amount: uint256): nonpayable
-    def deposit(): payable
-
 interface WalletFunds:
     def trialFundsInitialAmount() -> uint256: view
     def trialFundsAsset() -> address: view
@@ -147,7 +143,6 @@ addyRegistry: public(address)
 initialized: public(bool)
 
 API_VERSION: constant(String[28]) = "0.0.1"
-
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
 
@@ -235,6 +230,12 @@ def apiVersion() -> String[28]:
 
 @view
 @external
+def isAgentActive(_agent: address) -> bool:
+    return self.agentSettings[_agent].isActive
+
+
+@view
+@external
 def canAgentAccess(
     _agent: address,
     _action: ActionType,
@@ -295,12 +296,6 @@ def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions)
         return _allowedActions.canConvert
     else:
         return True # no action specified
-
-
-@view
-@external
-def isAgentActive(_agent: address) -> bool:
-    return self.agentSettings[_agent].isActive
 
 
 ##########################
@@ -539,9 +534,6 @@ def getAvailableTxAmount(
     @param _cd The core data
     @return amount The maximum amount that can be sent
     """
-    if _asset == empty(address):
-        return max_value(uint256)
-
     cd: CoreData = _cd
     if cd.wallet == empty(address):
         cd = self._getCoreData()
