@@ -1,8 +1,9 @@
 import pytest
 import boa
 
+from eth_account import Account
 from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
-from contracts.core import WalletTemplate
+from contracts.core import WalletFunds
 
 
 # accounts
@@ -11,6 +12,26 @@ from contracts.core import WalletTemplate
 @pytest.fixture(scope="session")
 def deploy3r(env):
     return env.eoa
+
+
+@pytest.fixture(scope="package")
+def owner(env):
+    return env.generate_address("owner")
+
+
+@pytest.fixture(scope="package")
+def agent(agent_signer):
+    return agent_signer.address
+
+
+@pytest.fixture(scope="package")
+def agent_signer():
+    return Account.from_key('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+
+
+@pytest.fixture(scope="package")
+def broadcaster(env):
+    return env.generate_address("broadcaster")
 
 
 @pytest.fixture(scope="session")
@@ -41,7 +62,7 @@ def bob_ai_wallet(agent_factory, bob, bob_agent):
     w = agent_factory.createAgenticWallet(bob, bob_agent, sender=bob)
     assert w != ZERO_ADDRESS
     assert agent_factory.isAgenticWallet(w)
-    return WalletTemplate.at(w)
+    return WalletFunds.at(w)
 
 
 # mock asset: alpha token

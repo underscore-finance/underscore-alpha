@@ -2,7 +2,10 @@
 
 initializes: gov
 exports: gov.__interface__
+
+from ethereum.ercs import IERC20
 import contracts.modules.Governable as gov
+from interfaces import LegoYield
 
 interface LegoPartner:
     def setLegoId(_legoId: uint256) -> bool: nonpayable
@@ -52,6 +55,8 @@ numLegos: public(uint256)
 
 # config
 ADDY_REGISTRY: public(immutable(address))
+
+MAX_VAULTS: constant(uint256) = 15
 
 
 @deploy
@@ -359,6 +364,67 @@ def getLastLegoId() -> uint256:
     @return The ID of the last registered Lego
     """
     return self.numLegos - 1
+
+
+# underlying asset
+
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    """
+    @notice Get the underlying asset for a vault token
+    @dev Returns empty address if vault token is not registered
+    @param _vaultToken The address of the vault token to query
+    @return The underlying asset address
+    """
+    if _vaultToken == empty(address):
+        return empty(address)
+
+    numLegos: uint256 = self.numLegos
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = self.legoInfo[i]
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+
+        asset: address = staticcall LegoYield(legoInfo.addr).getUnderlyingAsset(_vaultToken)
+        if asset != empty(address):
+            return asset
+
+    return empty(address)
+
+
+@view
+@external
+def getUnderlyingForUser(_user: address, _asset: address) -> uint256:
+    """
+    @notice Get the total underlying amount for a user in a given asset
+    @dev Returns 0 if user or asset is empty
+    @param _user The address of the user to query
+    @param _asset The address of the asset to query
+    """
+    if empty(address) in [_user, _asset]:
+        return 0
+
+    totalDeposited: uint256 = 0
+    numLegos: uint256 = self.numLegos
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = self.legoInfo[i]
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+
+        legoVaultTokens: DynArray[address, MAX_VAULTS] = staticcall LegoYield(legoInfo.addr).getAssetOpportunities(_asset)
+        if len(legoVaultTokens) == 0:
+            continue
+
+        for vaultToken: address in legoVaultTokens:
+            if vaultToken == empty(address):
+                continue
+            vaultTokenBal: uint256 = staticcall IERC20(vaultToken).balanceOf(_user)
+            if vaultTokenBal != 0:
+                totalDeposited += staticcall LegoYield(legoInfo.addr).getUnderlyingAmount(vaultToken, vaultTokenBal)
+
+    return totalDeposited
 
 
 ###############

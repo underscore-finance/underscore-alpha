@@ -3,7 +3,7 @@ import boa
 
 from conf_utils import filter_logs
 from constants import ZERO_ADDRESS
-from contracts.core import AgentFactory
+from contracts.core import AgentFactory, WalletFunds
 
 
 #########
@@ -11,21 +11,23 @@ from contracts.core import AgentFactory
 #########
 
 
-def test_agent_factory_init(agent_factory, addy_registry, weth, wallet_template):
+def test_agent_factory_init(agent_factory, addy_registry, weth, wallet_funds_template, wallet_config_template):
     assert agent_factory.ADDY_REGISTRY() == addy_registry.address
     assert agent_factory.WETH_ADDR() == weth.address
     assert agent_factory.isActivated()
-    assert agent_factory.currentAgentTemplate() == wallet_template.address
+    assert agent_factory.currentMainWalletTemplate() == wallet_funds_template.address
+    assert agent_factory.currentWalletConfigTemplate() == wallet_config_template.address
 
 
 def test_init_with_zero_address(lego_registry, weth):
-    new_wallet_template = boa.load("contracts/core/WalletTemplate.vy", name="new_wallet_template")
+    new_wallet_template = boa.load("contracts/core/WalletFunds.vy", name="new_wallet_template")
+    new_wallet_config_template = boa.load("contracts/core/WalletFunds.vy", name="new_wallet_config_template")
 
     with boa.reverts("invalid addrs"):
-        AgentFactory.deploy(ZERO_ADDRESS, weth, new_wallet_template)
+        AgentFactory.deploy(ZERO_ADDRESS, weth, new_wallet_template, new_wallet_config_template)
     
     with boa.reverts("invalid addrs"):
-        AgentFactory.deploy(lego_registry.address, ZERO_ADDRESS, new_wallet_template.address)
+        AgentFactory.deploy(lego_registry.address, ZERO_ADDRESS, new_wallet_template, new_wallet_config_template)
 
 
 def test_create_agentic_wallet(agent_factory, owner, agent):
@@ -37,7 +39,8 @@ def test_create_agentic_wallet(agent_factory, owner, agent):
     assert wallet_addr != ZERO_ADDRESS
 
     log = filter_logs(agent_factory, "AgenticWalletCreated")[0]
-    assert log.addr == wallet_addr
+    assert log.mainAddr == wallet_addr
+    assert log.configAddr == WalletFunds.at(wallet_addr).walletConfig()
     assert log.owner == owner
     assert log.agent == agent
 
@@ -49,7 +52,6 @@ def test_create_wallet_with_defaults(agent_factory, owner):
     assert wallet_addr != ZERO_ADDRESS
     
     log = filter_logs(agent_factory, "AgenticWalletCreated")[0]
-    assert log.addr == wallet_addr
     assert log.owner == owner
     assert log.agent == ZERO_ADDRESS
     
@@ -63,36 +65,51 @@ def test_create_wallet_when_deactivated(agent_factory, owner, agent, governor):
         agent_factory.createAgenticWallet(owner, agent)
 
 
-def test_set_wallet_template(agent_factory, governor):
-    new_template = boa.load("contracts/core/WalletTemplate.vy", name="new_new_wallet")
-    
-    assert agent_factory.setAgenticWalletTemplate(new_template, sender=governor)
-    
-    log = filter_logs(agent_factory, "AgentTemplateSet")[0]
+def test_set_main_wallet_template(agent_factory, governor):
+    new_template = boa.load("contracts/core/WalletFunds.vy", name="new_new_wallet")
+
+    assert agent_factory.setMainWalletTemplate(new_template, sender=governor)
+
+    log = filter_logs(agent_factory, "MainWalletTemplateSet")[0]
     assert log.template == new_template.address
     assert log.version == 2
-    
-    info = agent_factory.agentTemplateInfo()
+
+    info = agent_factory.mainWalletTemplateInfo()
+    assert info.addr == new_template.address
+    assert info.version == 2
+    assert info.lastModified == boa.env.evm.patch.timestamp
+
+
+def test_set_wallet_config_template(agent_factory, governor):
+    new_template = boa.load("contracts/core/WalletConfig.vy", name="new_new_wallet_config")
+
+    assert agent_factory.setWalletConfigTemplate(new_template, sender=governor)
+
+    log = filter_logs(agent_factory, "WalletConfigTemplateSet")[0]
+    assert log.template == new_template.address
+    assert log.version == 2
+
+    info = agent_factory.walletConfigTemplateInfo()
     assert info.addr == new_template.address
     assert info.version == 2
     assert info.lastModified == boa.env.evm.patch.timestamp
 
 
 def test_set_template_validation(agent_factory, governor, agent):
-    new_template = boa.load("contracts/core/WalletTemplate.vy", name="new_new_wallet")
+    new_template = boa.load("contracts/core/WalletFunds.vy", name="new_new_wallet")
 
     with boa.reverts("no perms"):
-        agent_factory.setAgenticWalletTemplate(new_template.address, sender=agent)
+        agent_factory.setMainWalletTemplate(new_template.address, sender=agent)
 
     # Test with zero address
-    assert not agent_factory.setAgenticWalletTemplate(ZERO_ADDRESS, sender=governor)
+    assert not agent_factory.setMainWalletTemplate(ZERO_ADDRESS, sender=governor)
     
     # Test with current template address
-    current = agent_factory.currentAgentTemplate()
-    assert not agent_factory.setAgenticWalletTemplate(current, sender=governor)
+    current = agent_factory.currentMainWalletTemplate()
+    assert not agent_factory.setMainWalletTemplate(current, sender=governor)
     
     # Test with non-contract address
-    assert not agent_factory.setAgenticWalletTemplate(agent, sender=governor)
+    assert not agent_factory.setMainWalletTemplate(agent, sender=governor)
 
 
 def test_activation_control(agent_factory, governor, bob):

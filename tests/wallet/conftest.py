@@ -2,23 +2,8 @@ import pytest
 import boa
 
 from eth_account import Account
-from contracts.core import WalletTemplate
+from contracts.core import WalletFunds, WalletConfig
 from constants import ZERO_ADDRESS
-
-
-@pytest.fixture(scope="package")
-def owner(env):
-    return env.generate_address("owner")
-
-
-@pytest.fixture(scope="package")
-def agent(agent_signer):
-    return agent_signer.address
-
-
-@pytest.fixture(scope="package")
-def broadcaster(env):
-    return env.generate_address("broadcaster")
 
 
 @pytest.fixture(scope="package")
@@ -26,12 +11,12 @@ def ai_wallet(agent_factory, owner, agent):
     w = agent_factory.createAgenticWallet(owner, agent, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isAgenticWallet(w)
-    return WalletTemplate.at(w)
+    return WalletFunds.at(w)
 
 
 @pytest.fixture(scope="package")
-def agent_signer():
-    return Account.from_key('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+def ai_wallet_config(ai_wallet):
+    return WalletConfig.at(ai_wallet.walletConfig())
 
 
 @pytest.fixture(scope="package")
@@ -40,8 +25,8 @@ def signDeposit(agent_signer):
         _wallet,
         _lego_id,
         _asset,
-        _amount,
         _vault,
+        _amount,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -56,16 +41,16 @@ def signDeposit(agent_signer):
                 "Deposit": [
                     {"name": "legoId", "type": "uint256"},
                     {"name": "asset", "type": "address"},
-                    {"name": "amount", "type": "uint256"},
                     {"name": "vault", "type": "address"},
+                    {"name": "amount", "type": "uint256"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
             "message": {
                 "legoId": _lego_id,
                 "asset": _asset,
-                "amount": _amount,
                 "vault": _vault,
+                "amount": _amount,
                 "expiration": _expiration,
             }
         }
@@ -79,8 +64,8 @@ def signWithdrawal(agent_signer):
         _wallet,
         _lego_id,
         _asset,
-        _amount,
-        _vault,
+        _vaultToken,
+        _vaultTokenAmount,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -95,16 +80,16 @@ def signWithdrawal(agent_signer):
                 "Withdrawal": [
                     {"name": "legoId", "type": "uint256"},
                     {"name": "asset", "type": "address"},
-                    {"name": "amount", "type": "uint256"},
                     {"name": "vaultToken", "type": "address"},
+                    {"name": "vaultTokenAmount", "type": "uint256"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
             "message": {
                 "legoId": _lego_id,
                 "asset": _asset,
-                "amount": _amount,
-                "vaultToken": _vault,
+                "vaultToken": _vaultToken,
+                "vaultTokenAmount": _vaultTokenAmount,
                 "expiration": _expiration,
             }
         }
@@ -117,11 +102,11 @@ def signRebalance(agent_signer):
     def signRebalance(
         _wallet,
         _fromLegoId,
-        _toLegoId,
-        _asset,
-        _amount,
+        _fromAsset,
         _fromVaultToken,
+        _toLegoId,
         _toVault,
+        _fromVaultTokenAmount,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -135,21 +120,21 @@ def signRebalance(agent_signer):
             "types": {
                 "Rebalance": [
                     {"name": "fromLegoId", "type": "uint256"},
-                    {"name": "toLegoId", "type": "uint256"},
-                    {"name": "asset", "type": "address"},
-                    {"name": "amount", "type": "uint256"},
+                    {"name": "fromAsset", "type": "address"},
                     {"name": "fromVaultToken", "type": "address"},
+                    {"name": "toLegoId", "type": "uint256"},
                     {"name": "toVault", "type": "address"},
+                    {"name": "fromVaultTokenAmount", "type": "uint256"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
             "message": {
                 "fromLegoId": _fromLegoId,
-                "toLegoId": _toLegoId,
-                "asset": _asset,
-                "amount": _amount,
+                "fromAsset": _fromAsset,
                 "fromVaultToken": _fromVaultToken,
+                "toLegoId": _toLegoId,
                 "toVault": _toVault,
+                "fromVaultTokenAmount": _fromVaultTokenAmount,
                 "expiration": _expiration,
             }
         }

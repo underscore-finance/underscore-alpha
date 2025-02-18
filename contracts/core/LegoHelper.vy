@@ -182,6 +182,27 @@ def skyId() -> uint256:
 
 @view
 @external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if _assetAmount == 0 or _asset == empty(address) or _vaultToken == empty(address):
+        return 0
+
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
+        if legoInfo.legoType != LegoType.YIELD_OPP:
+            continue
+
+        vaultTokenAmount: uint256 = staticcall LegoYield(legoInfo.addr).getVaultTokenAmount(_asset, _assetAmount, _vaultToken)
+        if vaultTokenAmount != 0:
+            return vaultTokenAmount
+
+    return 0
+
+
+@view
+@external
 def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address, String[64]):
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
     numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
@@ -232,49 +253,3 @@ def getUnderlyingData(_asset: address, _amount: uint256) -> UnderlyingData:
         legoDesc="",
     )
 
-
-@view
-@external
-def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
-    if _assetAmount == 0 or _asset == empty(address) or _vaultToken == empty(address):
-        return 0
-
-    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
-    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
-        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.YIELD_OPP:
-            continue
-
-        vaultTokenAmount: uint256 = staticcall LegoYield(legoInfo.addr).getVaultTokenAmount(_asset, _assetAmount, _vaultToken)
-        if vaultTokenAmount != 0:
-            return vaultTokenAmount
-
-    return 0
-
-
-@view
-@external
-def getTotalUnderlyingForUser(_user: address, _underlyingAsset: address) -> uint256:
-    if empty(address) in [_user, _underlyingAsset]:
-        return 0
-
-    totalDeposited: uint256 = 0
-    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
-
-    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
-        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.YIELD_OPP:
-            continue
-
-        legoVaultTokens: DynArray[address, MAX_VAULTS] = staticcall LegoYield(legoInfo.addr).getAssetOpportunities(_underlyingAsset)
-        for vaultToken: address in legoVaultTokens:
-            if vaultToken == empty(address):
-                continue
-            vaultTokenBal: uint256 = staticcall IERC20(vaultToken).balanceOf(_user)
-            if vaultTokenBal != 0:
-                totalDeposited += staticcall LegoYield(legoInfo.addr).getUnderlyingAmount(vaultToken, vaultTokenBal)
-
-    return totalDeposited
