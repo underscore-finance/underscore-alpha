@@ -6,7 +6,9 @@ from interfaces import LegoDex
 from interfaces import LegoYield
 
 interface WalletConfig:
+    def aggregateBatchTxCostData(_aggProtocolCost: TxCostInfo, _aggAgentCost: TxCostInfo, _agent: address, _action: ActionType, _usdValue: uint256, _priceSheets: address, _oracleRegistry: address) -> (TxCostInfo, TxCostInfo): view
     def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo): nonpayable
+    def canAgentAccess(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool: view
     def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData = empty(CoreData)) -> uint256: view
     def getTransactionCosts(_agent: address, _action: ActionType, _usdValue: uint256, _cd: CoreData) -> (TxCostInfo, TxCostInfo): view
     def isRecipientAllowed(_recipient: address) -> bool: view
@@ -69,6 +71,18 @@ struct Signature:
 struct TrialFundsOpp:
     legoId: uint256
     vaultToken: address
+
+struct ActionInstruction:
+    action: ActionType
+    legoId: uint256
+    asset: address
+    vault: address
+    amount: uint256
+    recipient: address
+    altLegoId: uint256
+    altVault: address
+    altAsset: address
+    altAmount: uint256
 
 event AgenticDeposit:
     signer: indexed(address)
@@ -170,6 +184,7 @@ API_VERSION: constant(String[28]) = "0.0.1"
 
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
+MAX_INSTRUCTIONS: constant(uint256) = 20
 
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
@@ -886,7 +901,81 @@ def _getSignerOnWethToEth(
 #################
 
 
-# TODO
+@nonreentrant
+@external
+def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool:
+    """
+    @notice Performs multiple actions in a single transaction
+    @dev Executes a batch of instructions with proper permission checks
+    @param _instructions Array of action instructions to execute
+    @return bool True if all actions were executed successfully
+    """
+    assert len(_instructions) != 0 # dev: no instructions
+    cd: CoreData = self._getCoreData()
+
+    signer: address = msg.sender
+    # TODO: allow broadcaster to be different from signer
+
+    # pass in empty action, lego ids, and assets here
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, empty(ActionType), [], [], cd)
+
+    aggProtocolCost: TxCostInfo = empty(TxCostInfo)
+    aggAgentCost: TxCostInfo = empty(TxCostInfo)
+
+    # init vars
+    usdValue: uint256 = 0
+    naValueA: uint256 = 0
+    naAddyA: address = empty(address)
+    naValueB: uint256 = 0
+
+    # iterate through instructions
+    for i: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
+        instruction: ActionInstruction = _instructions[i]
+
+        # deposit
+        if instruction.action == ActionType.DEPOSIT:
+            if isSignerAgent:
+                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(signer, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
+            naValueA, naAddyA, naValueB, usdValue = self._depositTokens(signer, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent, cd)
+            if isSignerAgent and usdValue != 0:
+                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, signer, ActionType.DEPOSIT, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+        # withdraw
+        elif instruction.action == ActionType.WITHDRAWAL:
+            if isSignerAgent:
+                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(signer, ActionType.WITHDRAWAL, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
+            naValueA, naValueB, usdValue = self._withdrawTokens(signer, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent, cd)
+            if isSignerAgent and usdValue != 0:
+                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, signer, ActionType.WITHDRAWAL, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+        # rebalance
+        elif instruction.action == ActionType.REBALANCE:
+            if isSignerAgent:
+                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(signer, ActionType.REBALANCE, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: agent not allowed
+            naValueA, naAddyA, naValueB, usdValue = self._rebalance(signer, instruction.legoId, instruction.altLegoId, instruction.asset, instruction.amount, instruction.vault, instruction.altVault, isSignerAgent, cd)
+            if isSignerAgent and usdValue != 0:
+                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, signer, ActionType.REBALANCE, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+        # swap
+        elif instruction.action == ActionType.SWAP:
+            if isSignerAgent:
+                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(signer, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
+            naValueA, naValueB, usdValue = self._swapTokens(signer, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, isSignerAgent, cd)
+            if isSignerAgent and usdValue != 0:
+                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, signer, ActionType.SWAP, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+        # transfer
+        elif instruction.action == ActionType.TRANSFER:
+            if isSignerAgent:
+                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(signer, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
+            naValueA, usdValue = self._transferFunds(signer, instruction.recipient, instruction.amount, instruction.asset, isSignerAgent, cd)
+            if isSignerAgent and usdValue != 0:
+                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, signer, ActionType.TRANSFER, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+    # pay tx fees
+    self._payTransactionFees(aggProtocolCost, aggAgentCost, empty(ActionType))
+
+    return True
 
 
 #############
@@ -960,15 +1049,22 @@ def _handleTransactionFees(
     agentCost: TxCostInfo = empty(TxCostInfo)
     protocolCost, agentCost = staticcall WalletConfig(_cd.walletConfig).getTransactionCosts(_agent, _action, _usdValue, _cd)
 
+    # make payment
+    self._payTransactionFees(protocolCost, agentCost, _action)
+
+
+@internal
+def _payTransactionFees(_protocolCost: TxCostInfo, _agentCost: TxCostInfo, _action: ActionType):
+    
     # protocol tx fees
-    if protocolCost.amount != 0:
-        assert extcall IERC20(protocolCost.asset).transfer(protocolCost.recipient, protocolCost.amount, default_return_value=True) # dev: protocol tx fee payment failed
-        log TransactionFeePaid(protocolCost.recipient, protocolCost.asset, protocolCost.amount, protocolCost.usdValue, _action, False)
+    if _protocolCost.amount != 0:
+        assert extcall IERC20(_protocolCost.asset).transfer(_protocolCost.recipient, _protocolCost.amount, default_return_value=True) # dev: protocol tx fee payment failed
+        log TransactionFeePaid(_protocolCost.recipient, _protocolCost.asset, _protocolCost.amount, _protocolCost.usdValue, _action, False)
 
     # agent tx fees
-    if agentCost.amount != 0:
-        assert extcall IERC20(agentCost.asset).transfer(agentCost.recipient, agentCost.amount, default_return_value=True) # dev: agent tx fee payment failed
-        log TransactionFeePaid(agentCost.recipient, agentCost.asset, agentCost.amount, agentCost.usdValue, _action, True)
+    if _agentCost.amount != 0:
+        assert extcall IERC20(_agentCost.asset).transfer(_agentCost.recipient, _agentCost.amount, default_return_value=True) # dev: agent tx fee payment failed
+        log TransactionFeePaid(_agentCost.recipient, _agentCost.asset, _agentCost.amount, _agentCost.usdValue, _action, True)
 
 
 # trial funds

@@ -149,7 +149,7 @@ initialized: public(bool)
 API_VERSION: constant(String[28]) = "0.0.1"
 
 MAX_ASSETS: constant(uint256) = 25
-MAX_LEGOS: constant(uint256) = 10
+MAX_LEGOS: constant(uint256) = 20
 
 # registry ids
 LEGO_REGISTRY_ID: constant(uint256) = 2
@@ -294,7 +294,7 @@ def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions)
     elif _action == ActionType.CONVERSION:
         return _allowedActions.canConvert
     else:
-        return False
+        return True # no action specified
 
 
 @view
@@ -431,6 +431,44 @@ def canPayTransactionFees(_agent: address, _action: ActionType, _usdValue: uint2
     agentCost: TxCostInfo = empty(TxCostInfo)
     protocolCost, agentCost = staticcall PriceSheets(cd.priceSheets).getCombinedTxCostData(_agent, _action, _usdValue, cd.oracleRegistry)
     return self._checkIfSufficientFunds(protocolCost.asset, protocolCost.amount, agentCost.asset, agentCost.amount, cd)
+
+
+@view
+@external
+def aggregateBatchTxCostData(
+    _aggProtocolCost: TxCostInfo,
+    _aggAgentCost: TxCostInfo,
+    _agent: address,
+    _action: ActionType,
+    _usdValue: uint256,
+    _priceSheets: address,
+    _oracleRegistry: address,
+) -> (TxCostInfo, TxCostInfo):
+    aggProtocolCost: TxCostInfo = _aggProtocolCost
+    aggAgentCost: TxCostInfo = _aggAgentCost
+
+    # new transaction cost data
+    newProtocolCost: TxCostInfo = empty(TxCostInfo)
+    newAgentCost: TxCostInfo = empty(TxCostInfo)
+    newProtocolCost, newAgentCost = staticcall PriceSheets(_priceSheets).getCombinedTxCostData(_agent, _action, _usdValue, _oracleRegistry)
+
+    # protocol cost
+    aggProtocolCost.amount += newProtocolCost.amount
+    aggProtocolCost.usdValue += newProtocolCost.usdValue
+    if aggProtocolCost.asset == empty(address) and newProtocolCost.asset != empty(address):
+        aggProtocolCost.asset = newProtocolCost.asset
+    if aggProtocolCost.recipient == empty(address) and newProtocolCost.recipient != empty(address):
+        aggProtocolCost.recipient = newProtocolCost.recipient
+
+    # agent cost
+    aggAgentCost.amount += newAgentCost.amount
+    aggAgentCost.usdValue += newAgentCost.usdValue
+    if aggAgentCost.asset == empty(address) and newAgentCost.asset != empty(address):
+        aggAgentCost.asset = newAgentCost.asset
+    if aggAgentCost.recipient == empty(address) and newAgentCost.recipient != empty(address):
+        aggAgentCost.recipient = newAgentCost.recipient
+
+    return aggProtocolCost, aggAgentCost
 
 
 ####################

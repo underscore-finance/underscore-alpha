@@ -759,40 +759,43 @@ def test_transaction_fees_different_assets(new_ai_wallet, agent, oracle_custom, 
     assert alpha_token.balanceOf(agent) == pre_agent_wallet + logs[1].amount
 
 
-# def test_batch_transaction_fees(new_ai_wallet, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, agent):
-#     """Test transaction fees in batch operations"""
-#     # Enable both protocol and agent fees
-#     assert price_sheets.removeAgentSubPrice(agent, sender=governor)
-#     assert price_sheets.removeProtocolSubPrice(sender=governor)
+def test_batch_transaction_fees(new_ai_wallet, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, agent):
+    """Test transaction fees in batch operations"""
+    # Enable both protocol and agent fees
+    assert price_sheets.removeAgentSubPrice(agent, sender=governor)
+    assert price_sheets.removeProtocolSubPrice(sender=governor)
 
-#     # Fund wallet
-#     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
+    # Fund wallet
+    alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
 
-#     pre_protocol_wallet = alpha_token.balanceOf(governor)
-#     pre_agent_wallet = alpha_token.balanceOf(agent)
+    pre_protocol_wallet = alpha_token.balanceOf(governor)
+    pre_agent_wallet = alpha_token.balanceOf(agent)
 
-#     # Create batch instructions
-#     instructions = [
-#         # Deposit instruction
-#         (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),
-#         # Withdrawal instruction
-#         (WITHDRAWAL_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 50 * EIGHTEEN_DECIMALS, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0)
-#     ]
+    # Create batch instructions
+    instructions = [
+        # Deposit instruction
+        (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),
+        # Withdrawal instruction
+        (WITHDRAWAL_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 50 * EIGHTEEN_DECIMALS, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0)
+    ]
 
-#     # Execute batch
-#     assert new_ai_wallet.performManyActions(instructions, sender=agent)
+    # Execute batch
+    assert new_ai_wallet.performManyActions(instructions, sender=agent)
 
-#     # Verify batch fees
-#     log = filter_logs(new_ai_wallet, "BatchTransactionFeesPaid")[0]
-#     assert log.agent == agent
-#     # Protocol fees: (0.50% of 100) + (1.00% of 50) = 1 alpha
-#     assert log.asset == alpha_token.address
-#     assert log.amount == 1 * EIGHTEEN_DECIMALS
-#     assert log.usdValue == 1 * EIGHTEEN_DECIMALS
-#     # Agent fees: (1.00% of 100) + (2.00% of 50) = 2 alpha
-#     assert log.asset == alpha_token.address
-#     assert log.amount == 2 * EIGHTEEN_DECIMALS
-#     assert log.usdValue == 2 * EIGHTEEN_DECIMALS
+    # Verify batch fees
+    logs = filter_logs(new_ai_wallet, "TransactionFeePaid")
 
-#     assert alpha_token.balanceOf(governor) == pre_protocol_wallet + log.amount
-#     assert alpha_token.balanceOf(agent) == pre_agent_wallet + log.amount
+    # Protocol fees: (0.50% of 100) + (1.00% of 50) = 1 alpha
+    assert logs[0].asset == alpha_token.address
+    assert logs[0].amount == 1 * EIGHTEEN_DECIMALS
+    assert logs[0].usdValue == 1 * EIGHTEEN_DECIMALS
+    assert not logs[0].isAgent
+
+    # Agent fees: (1.00% of 100) + (2.00% of 50) = 2 alpha
+    assert logs[1].asset == alpha_token.address
+    assert logs[1].amount == 2 * EIGHTEEN_DECIMALS
+    assert logs[1].usdValue == 2 * EIGHTEEN_DECIMALS
+    assert logs[1].isAgent
+
+    assert alpha_token.balanceOf(governor) == pre_protocol_wallet + logs[0].amount
+    assert alpha_token.balanceOf(agent) == pre_agent_wallet + logs[1].amount

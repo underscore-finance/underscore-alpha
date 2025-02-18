@@ -3,7 +3,7 @@ import boa
 
 from eth_account import Account
 from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
-from contracts.core import WalletTemplate
+from contracts.core import WalletFunds
 
 
 # accounts
@@ -62,7 +62,7 @@ def bob_ai_wallet(agent_factory, bob, bob_agent):
     w = agent_factory.createAgenticWallet(bob, bob_agent, sender=bob)
     assert w != ZERO_ADDRESS
     assert agent_factory.isAgenticWallet(w)
-    return WalletTemplate.at(w)
+    return WalletFunds.at(w)
 
 
 # mock asset: alpha token
