@@ -156,6 +156,15 @@ def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> ui
     return _vaultTokenAmount
 
 
+@view
+@external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if yld.vaultToAsset[_vaultToken] != _asset:
+        return 0 # invalid vault token
+    # treated as 1:1
+    return _assetAmount
+
+
 # usd value
 
 

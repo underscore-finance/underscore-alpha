@@ -16,6 +16,7 @@ interface Erc4626Interface:
     def redeem(_vaultTokenAmount: uint256, _recipient: address, _owner: address) -> uint256: nonpayable
     def deposit(_assetAmount: uint256, _recipient: address) -> uint256: nonpayable
     def convertToAssets(_vaultTokenAmount: uint256) -> uint256: view
+    def convertToShares(_assetAmount: uint256) -> uint256: view
     def totalAssets() -> uint256: view
     def asset() -> address: view
 
@@ -141,6 +142,14 @@ def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uin
 @internal
 def _getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
     return staticcall Erc4626Interface(_vaultToken).convertToAssets(_vaultTokenAmount)
+
+
+@view
+@external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    if yld.vaultToAsset[_vaultToken] != _asset:
+        return 0 # invalid vault token
+    return staticcall Erc4626Interface(_vaultToken).convertToShares(_assetAmount)
 
 
 # usd value

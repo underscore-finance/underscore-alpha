@@ -252,3 +252,4 @@ def getUnderlyingData(_asset: address, _amount: uint256) -> UnderlyingData:
         legoAddr=empty(address),
         legoDesc="",
     )
+

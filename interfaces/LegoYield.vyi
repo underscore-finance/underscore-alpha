@@ -37,6 +37,11 @@ def getUnderlyingAsset(_vaultToken: address) -> address:
 
 @view
 @external
+def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
+    ...
+
+@view
+@external
 def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
     ...
 
