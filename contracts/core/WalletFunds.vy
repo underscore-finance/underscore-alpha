@@ -616,6 +616,9 @@ def _swapTokens(
     swapAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenIn, _amountIn, True, _cd)
     assert extcall IERC20(_tokenIn).approve(legoAddr, swapAmount, default_return_value=True) # dev: approval failed
 
+    # check if vault token of trial funds asset
+    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_tokenIn, _cd.trialFundsAsset, _cd.legoRegistry)
+    
     # swap assets via lego partner
     actualSwapAmount: uint256 = 0
     toAmount: uint256 = 0
@@ -624,6 +627,9 @@ def _swapTokens(
     actualSwapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
+    # make sure they still have enough trial funds
+    self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
+    
     log AgenticSwap(_signer, _tokenIn, _tokenOut, actualSwapAmount, toAmount, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
     return actualSwapAmount, toAmount, usdValue
 
@@ -711,10 +717,7 @@ def _transferFunds(
     else:
 
         # check if vault token of trial funds asset
-        isTrialFundsVaultToken: bool = False
-        if _cd.trialFundsAsset != empty(address):
-            underlyingAsset: address = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingAsset(_asset)
-            isTrialFundsVaultToken = underlyingAsset == _cd.trialFundsAsset
+        isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_asset, _cd.trialFundsAsset, _cd.legoRegistry)
 
         # perform transfer
         amount = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_asset, _amount, True, _cd)
@@ -722,9 +725,7 @@ def _transferFunds(
         usdValue = staticcall OracleRegistry(_cd.oracleRegistry).getUsdValue(_asset, amount)
 
         # make sure they still have enough trial funds
-        if isTrialFundsVaultToken:
-            postUnderlying: uint256 = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingForUser(self, _cd.trialFundsAsset)
-            assert postUnderlying >= _cd.trialFundsInitialAmount # dev: cannot transfer trial funds vault token
+        self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
 
     log WalletFundsTransferred(_signer, _recipient, _asset, amount, usdValue, msg.sender, _isSignerAgent)
     return amount, usdValue
@@ -970,7 +971,24 @@ def _handleTransactionFees(
         log TransactionFeePaid(agentCost.recipient, agentCost.asset, agentCost.amount, agentCost.usdValue, _action, True)
 
 
-# trial funds recovery
+# trial funds
+
+
+@view
+@internal
+def _isTrialFundsVaultToken(_asset: address, _trialFundsAsset: address, _legoRegistry: address) -> bool:
+    if _trialFundsAsset == empty(address) or _asset == _trialFundsAsset:
+        return False
+    return _trialFundsAsset == staticcall LegoRegistry(_legoRegistry).getUnderlyingAsset(_asset)
+
+
+@view
+@internal
+def _checkTrialFundsPostTx(_isTrialFundsVaultToken: bool, _trialFundsAsset: address, _trialFundsInitialAmount: uint256, _legoRegistry: address):
+    if not _isTrialFundsVaultToken:
+        return
+    postUnderlying: uint256 = staticcall LegoRegistry(_legoRegistry).getUnderlyingForUser(self, _trialFundsAsset)
+    assert postUnderlying >= _trialFundsInitialAmount # dev: cannot transfer trial funds vault token
 
 
 @external
