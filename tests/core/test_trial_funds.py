@@ -305,3 +305,74 @@ def test_trial_funds_recovery_complex(new_ai_wallet, agent_factory, alpha_token,
     assert new_ai_wallet.trialFundsAsset() == ZERO_ADDRESS
     assert new_ai_wallet.trialFundsInitialAmount() == 0
 
+
+def test_trial_funds_vault_token_transfer_restrictions(new_ai_wallet, alpha_token, agent, mock_lego_alpha, alpha_token_erc4626_vault, owner):
+    """Test restrictions on transferring vault tokens that represent trial funds"""
+    
+    # First deposit trial funds into mock lego to get vault tokens
+    assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
+        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+    assert vaultTokenAmountReceived == TRIAL_AMOUNT
+    
+    # Try to transfer vault tokens - should fail since they represent trial funds
+    with boa.reverts("cannot transfer trial funds vault token"):
+        new_ai_wallet.transferFunds(owner, vaultTokenAmountReceived, alpha_token_erc4626_vault, sender=owner)
+    
+    # Verify vault tokens are still in wallet
+    assert alpha_token_erc4626_vault.balanceOf(new_ai_wallet) == vaultTokenAmountReceived
+
+
+def test_trial_funds_vault_token_partial_transfer(lego_registry, new_ai_wallet, alpha_token, alpha_token_whale, agent, mock_lego_alpha, alpha_token_erc4626_vault, owner):
+    """Test partial transfers of vault tokens while maintaining minimum trial funds"""
+    
+    assert new_ai_wallet.trialFundsAsset() == alpha_token.address
+    assert new_ai_wallet.trialFundsInitialAmount() == TRIAL_AMOUNT
+
+    # First deposit trial funds into mock lego
+    assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
+        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+    
+    # Add extra funds on top of trial funds
+    extra_amount = TRIAL_AMOUNT // 2
+    alpha_token.transfer(new_ai_wallet, extra_amount, sender=alpha_token_whale)
+    
+    # Deposit extra funds to get more vault tokens
+    assetAmountDeposited, _, extra_vault_tokens, _ = new_ai_wallet.depositTokens(
+        mock_lego_alpha.legoId(), alpha_token, extra_amount, alpha_token_erc4626_vault, sender=agent)
+    
+    underlying = lego_registry.getUnderlyingAsset(alpha_token_erc4626_vault)
+    assert underlying == alpha_token.address
+
+    underlying_amount = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
+    print(f"underlying_amount: {underlying_amount}")
+
+    # Should be able to transfer the extra vault tokens
+    new_ai_wallet.transferFunds(owner, extra_vault_tokens, alpha_token_erc4626_vault, sender=owner)
+    
+    # But should not be able to transfer more
+    with boa.reverts("cannot transfer trial funds vault token"):
+        new_ai_wallet.transferFunds(owner, 1, alpha_token_erc4626_vault, sender=owner)
+
+
+def test_trial_funds_vault_token_transfer_different_vault(new_ai_wallet, alpha_token, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, owner):
+    """Test transfer restrictions apply across different vaults for same underlying asset"""
+    
+    # Split trial funds between two vaults
+    half_amount = TRIAL_AMOUNT // 2
+    
+    # Deposit into first vault
+    assetAmountDeposited, _, vault1_tokens, _ = new_ai_wallet.depositTokens(
+        mock_lego_alpha.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault, sender=agent)
+    
+    # Deposit into second vault
+    assetAmountDeposited, _, vault2_tokens, _ = new_ai_wallet.depositTokens(
+        mock_lego_alpha_another.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault_another, sender=agent)
+    
+    # Try to transfer vault tokens from first vault - should fail
+    with boa.reverts("cannot transfer trial funds vault token"):
+        new_ai_wallet.transferFunds(owner, vault1_tokens, alpha_token_erc4626_vault, sender=owner)
+    
+    # Try to transfer vault tokens from second vault - should also fail
+    with boa.reverts("cannot transfer trial funds vault token"):
+        new_ai_wallet.transferFunds(owner, vault2_tokens, alpha_token_erc4626_vault_another, sender=owner)
+

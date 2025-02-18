@@ -13,6 +13,11 @@ interface WalletConfig:
     def isAgentActive(_agent: address) -> bool: view
     def owner() -> address: view
 
+interface LegoRegistry:
+    def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
+    def getUnderlyingAsset(_vaultToken: address) -> address: view
+    def getLegoAddr(_legoId: uint256) -> address: view
+
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
     def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -20,9 +25,6 @@ interface OracleRegistry:
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
-
-interface LegoRegistry:
-    def getLegoAddr(_legoId: uint256) -> address: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -707,9 +709,22 @@ def _transferFunds(
 
     # erc20 tokens
     else:
+
+        # check if vault token of trial funds asset
+        isTrialFundsVaultToken: bool = False
+        if _cd.trialFundsAsset != empty(address):
+            underlyingAsset: address = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingAsset(_asset)
+            isTrialFundsVaultToken = underlyingAsset == _cd.trialFundsAsset
+
+        # perform transfer
         amount = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_asset, _amount, True, _cd)
         assert extcall IERC20(_asset).transfer(_recipient, amount, default_return_value=True) # dev: transfer failed
         usdValue = staticcall OracleRegistry(_cd.oracleRegistry).getUsdValue(_asset, amount)
+
+        # make sure they still have enough trial funds
+        if isTrialFundsVaultToken:
+            postUnderlying: uint256 = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingForUser(self, _cd.trialFundsAsset)
+            assert postUnderlying >= _cd.trialFundsInitialAmount # dev: cannot transfer trial funds vault token
 
     log WalletFundsTransferred(_signer, _recipient, _asset, amount, usdValue, msg.sender, _isSignerAgent)
     return amount, usdValue
