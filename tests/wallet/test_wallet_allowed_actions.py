@@ -64,7 +64,7 @@ def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, agent, m
 
     # Test withdrawal (not allowed)
     with boa.reverts("agent not allowed"):
-        ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, vaultTokenAmountReceived, alpha_token_erc4626_vault, sender=agent)
+        ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, vaultTokenAmountReceived, sender=agent)
 
     # Test transfer (allowed)
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
@@ -73,8 +73,7 @@ def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, agent, m
 
     # Test rebalance (not allowed)
     with boa.reverts("agent not allowed"):
-        ai_wallet.rebalance(mock_lego_alpha.legoId(), mock_lego_alpha.legoId(), alpha_token, 
-                          vaultTokenAmountReceived, alpha_token_erc4626_vault, alpha_token_erc4626_vault, sender=agent)
+        ai_wallet.rebalance(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, mock_lego_alpha.legoId(), alpha_token_erc4626_vault, vaultTokenAmountReceived, sender=agent)
 
     # Test swap (not allowed)
     with boa.reverts("agent not allowed"):

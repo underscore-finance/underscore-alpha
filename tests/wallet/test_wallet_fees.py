@@ -419,7 +419,7 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     pre_protocol_wallet = new_protocol_wallet
 
     # Test withdrawal fee (1.00%)
-    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, 100 * EIGHTEEN_DECIMALS, alpha_token_erc4626_vault, sender=agent)
+    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=agent)
     log = filter_logs(new_ai_wallet, "TransactionFeePaid")[0]
     assert log.action == WITHDRAWAL_UINT256  # WITHDRAWAL
     assert log.asset == alpha_token.address
@@ -432,7 +432,7 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     pre_protocol_wallet = new_protocol_wallet
 
     # Test rebalance fee (1.50%)
-    a, b, c, d = new_ai_wallet.rebalance(mock_lego_alpha.legoId(), mock_lego_alpha.legoId(), alpha_token, 100 * EIGHTEEN_DECIMALS, alpha_token_erc4626_vault, alpha_token_erc4626_vault, sender=agent)
+    a, b, c, d = new_ai_wallet.rebalance(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, mock_lego_alpha.legoId(), alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=agent)
     log = filter_logs(new_ai_wallet, "TransactionFeePaid")[0]
     assert log.action == REBALANCE_UINT256  # REBALANCE
     assert log.asset == alpha_token.address
@@ -499,7 +499,7 @@ def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alph
     pre_agent_wallet = new_agent_wallet
 
     # Test withdrawal fee (2.00%)
-    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, 100 * EIGHTEEN_DECIMALS, alpha_token_erc4626_vault, sender=agent)
+    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=agent)
     log = filter_logs(new_ai_wallet, "TransactionFeePaid")[0]
     assert log.action == WITHDRAWAL_UINT256  # WITHDRAWAL
     assert log.isAgent
@@ -512,7 +512,7 @@ def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alph
     pre_agent_wallet = new_agent_wallet
 
     # Test rebalance fee (3.00%)
-    a, b, c, d = new_ai_wallet.rebalance(mock_lego_alpha.legoId(), mock_lego_alpha.legoId(), alpha_token, 100 * EIGHTEEN_DECIMALS, alpha_token_erc4626_vault, alpha_token_erc4626_vault, sender=agent)
+    a, b, c, d = new_ai_wallet.rebalance(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, mock_lego_alpha.legoId(), alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=agent)
     log = filter_logs(new_ai_wallet, "TransactionFeePaid")[0]
     assert log.action == REBALANCE_UINT256  # REBALANCE
     assert log.isAgent
@@ -597,7 +597,7 @@ def test_combined_transaction_fees(new_ai_wallet, new_ai_wallet_config, alpha_to
     pre_agent_wallet = new_agent_wallet
 
     # Test withdrawal fees (protocol: 1.00% + agent: 2.00%)
-    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, 100 * EIGHTEEN_DECIMALS, alpha_token_erc4626_vault, sender=agent)
+    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=agent)
     log0 = filter_logs(new_ai_wallet, "TransactionFeePaid")[0]
     log1 = filter_logs(new_ai_wallet, "TransactionFeePaid")[1]
 

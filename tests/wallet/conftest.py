@@ -64,8 +64,8 @@ def signWithdrawal(agent_signer):
         _wallet,
         _lego_id,
         _asset,
-        _amount,
-        _vault,
+        _vaultToken,
+        _vaultTokenAmount,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -80,16 +80,16 @@ def signWithdrawal(agent_signer):
                 "Withdrawal": [
                     {"name": "legoId", "type": "uint256"},
                     {"name": "asset", "type": "address"},
-                    {"name": "amount", "type": "uint256"},
                     {"name": "vaultToken", "type": "address"},
+                    {"name": "vaultTokenAmount", "type": "uint256"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
             "message": {
                 "legoId": _lego_id,
                 "asset": _asset,
-                "amount": _amount,
-                "vaultToken": _vault,
+                "vaultToken": _vaultToken,
+                "vaultTokenAmount": _vaultTokenAmount,
                 "expiration": _expiration,
             }
         }
@@ -102,11 +102,11 @@ def signRebalance(agent_signer):
     def signRebalance(
         _wallet,
         _fromLegoId,
-        _toLegoId,
-        _asset,
-        _amount,
+        _fromAsset,
         _fromVaultToken,
+        _toLegoId,
         _toVault,
+        _fromVaultTokenAmount,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -120,21 +120,21 @@ def signRebalance(agent_signer):
             "types": {
                 "Rebalance": [
                     {"name": "fromLegoId", "type": "uint256"},
-                    {"name": "toLegoId", "type": "uint256"},
-                    {"name": "asset", "type": "address"},
-                    {"name": "amount", "type": "uint256"},
+                    {"name": "fromAsset", "type": "address"},
                     {"name": "fromVaultToken", "type": "address"},
+                    {"name": "toLegoId", "type": "uint256"},
                     {"name": "toVault", "type": "address"},
+                    {"name": "fromVaultTokenAmount", "type": "uint256"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
             "message": {
                 "fromLegoId": _fromLegoId,
-                "toLegoId": _toLegoId,
-                "asset": _asset,
-                "amount": _amount,
+                "fromAsset": _fromAsset,
                 "fromVaultToken": _fromVaultToken,
+                "toLegoId": _toLegoId,
                 "toVault": _toVault,
+                "fromVaultTokenAmount": _fromVaultTokenAmount,
                 "expiration": _expiration,
             }
         }

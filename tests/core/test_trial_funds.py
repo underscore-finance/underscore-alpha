@@ -220,7 +220,7 @@ def test_trial_funds_availability_edge_cases(new_ai_wallet, new_ai_wallet_config
     # Case 2: Partial deployment with additional deposits
     # First withdraw everything
     assetAmountReceived, vaultTokenAmountBurned, _ = new_ai_wallet.withdrawTokens(
-        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
     
     # Deploy half
     half_amount = TRIAL_AMOUNT // 2

@@ -539,6 +539,9 @@ def getAvailableTxAmount(
     @param _cd The core data
     @return amount The maximum amount that can be sent
     """
+    if _asset == empty(address):
+        return max_value(uint256)
+
     cd: CoreData = _cd
     if cd.wallet == empty(address):
         cd = self._getCoreData()

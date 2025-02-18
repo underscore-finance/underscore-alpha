@@ -45,11 +45,11 @@ def test_withdraw_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token,
         lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=agent)
 
     # signature
-    signature = signWithdrawal(ai_wallet, lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address)
+    signature = signWithdrawal(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
 
     # withdrawal
     assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
-        lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, signature, sender=broadcaster)
+        lego_id, alpha_token, alpha_token_erc4626_vault.address, MAX_UINT256, signature, sender=broadcaster)
 
     # withdrawal
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
@@ -73,11 +73,11 @@ def test_rebalance_with_signature(ai_wallet, owner, broadcaster, agent, mock_leg
         lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
 
     # signature
-    signature = signRebalance(ai_wallet, lego_id, alt_lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address, alpha_token_erc4626_vault_another.address)
+    signature = signRebalance(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256)
 
     # rebalance
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.rebalance(
-        lego_id, alt_lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address, alpha_token_erc4626_vault_another.address, signature, sender=broadcaster)
+        lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256, signature, sender=broadcaster)
     
     # rebalance
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
@@ -227,9 +227,9 @@ def test_signature_with_reserve_assets(ai_wallet, owner, ai_wallet_config, mock_
     assert assetAmountDeposited == amount - reserve_amount
 
     # Test withdrawal with signature (should respect reserve)
-    signature = signWithdrawal(ai_wallet, lego_id, alpha_token.address, MAX_UINT256, alpha_token_erc4626_vault.address)
+    signature = signWithdrawal(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
     assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
-        lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, signature, sender=broadcaster)
+        lego_id, alpha_token, alpha_token_erc4626_vault.address, MAX_UINT256, signature, sender=broadcaster)
     assert assetAmountReceived == assetAmountDeposited
 
     # Test transfer with signature (should respect reserve)

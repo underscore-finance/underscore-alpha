@@ -103,7 +103,7 @@ def test_withdrawal_operations(ai_wallet, ai_wallet_config, owner, agent, mock_l
 
     # Test withdrawal by owner
     assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
-        lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=owner)
+        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=owner)
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
     assert log.signer == owner
     assert log.asset == alpha_token.address
@@ -125,7 +125,7 @@ def test_withdrawal_operations(ai_wallet, ai_wallet_config, owner, agent, mock_l
 
     # Test withdrawal by agent
     assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
-        lego_id, alpha_token, vaultTokenAmountReceived, alpha_token_erc4626_vault, sender=agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, vaultTokenAmountReceived, sender=agent)
     log = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
     assert log.signer == agent
     assert log.isSignerAgent
@@ -136,10 +136,10 @@ def test_withdrawal_operations(ai_wallet, ai_wallet_config, owner, agent, mock_l
 
     # Test withdrawal permissions
     with boa.reverts("agent not allowed"):
-        ai_wallet.withdrawTokens(55, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=agent)
+        ai_wallet.withdrawTokens(55, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=agent)
 
     with boa.reverts("no funds available"):
-        ai_wallet.withdrawTokens(lego_id, alpha_token, 0, alpha_token_erc4626_vault, sender=owner)
+        ai_wallet.withdrawTokens(lego_id, alpha_token, alpha_token_erc4626_vault, 0, sender=owner)
 
 
 def test_rebalance_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, alpha_token_whale):
@@ -160,7 +160,7 @@ def test_rebalance_operations(ai_wallet, ai_wallet_config, owner, agent, mock_le
 
     # Test rebalance by owner
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.rebalance(
-        lego_id, alt_lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, sender=owner)
+        lego_id, alpha_token, alpha_token_erc4626_vault, alt_lego_id, alpha_token_erc4626_vault_another, MAX_UINT256, sender=owner)
     log_withdrawal = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
     log_deposit = filter_logs(ai_wallet, "AgenticDeposit")[0]
 
@@ -193,7 +193,7 @@ def test_rebalance_operations(ai_wallet, ai_wallet_config, owner, agent, mock_le
         lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
 
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.rebalance(
-        lego_id, alt_lego_id, alpha_token, origVaultTokenAmountReceived, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, sender=agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, alt_lego_id, alpha_token_erc4626_vault_another, origVaultTokenAmountReceived, sender=agent)
     log_withdrawal = filter_logs(ai_wallet, "AgenticWithdrawal")[0]
     log_deposit = filter_logs(ai_wallet, "AgenticDeposit")[0]
 
@@ -206,8 +206,7 @@ def test_rebalance_operations(ai_wallet, ai_wallet_config, owner, agent, mock_le
 
     # Test rebalance permissions
     with boa.reverts("agent not allowed"):
-        ai_wallet.rebalance(55, alt_lego_id, alpha_token, vaultTokenAmountReceived,
-                            alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, sender=agent)
+        ai_wallet.rebalance(55, alpha_token, alpha_token_erc4626_vault, alt_lego_id, alpha_token_erc4626_vault_another, vaultTokenAmountReceived, sender=agent)
 
 
 def test_fund_transfers(ai_wallet, ai_wallet_config, owner, agent, alpha_token, alpha_token_whale, sally, bob):
