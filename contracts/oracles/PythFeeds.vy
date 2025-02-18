@@ -2,10 +2,13 @@
 
 implements: OraclePartner
 initializes: gov
+initializes: oad
 exports: gov.__interface__
+exports: oad.__interface__
 
-import interfaces.OraclePartnerInterface as OraclePartner
 import contracts.modules.Governable as gov
+import contracts.modules.OracleAssetData as oad
+import interfaces.OraclePartnerInterface as OraclePartner
 
 interface PythNetwork:
     def getPriceUnsafe(_priceFeedId: bytes32) -> PythPrice: view
@@ -53,9 +56,10 @@ MAX_PRICE_UPDATES: constant(uint256) = 15
 @deploy
 def __init__(_addyRegistry: address, _pyth: address):
     assert empty(address) not in [_addyRegistry, _pyth] # dev: invalid addrs
-    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
     PYTH = _pyth
+    gov.__init__(_addyRegistry)
+    oad.__init__()
 
 
 @payable
@@ -181,8 +185,8 @@ def setPythFeed(_asset: address, _feedId: bytes32) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
     if not self._isValidPythFeed(_asset, _feedId):
         return False
-
     self.feedConfig[_asset] = _feedId
+    oad._addAsset(_asset)
     log PythFeedAdded(_asset, _feedId)
     return True
 
@@ -196,6 +200,7 @@ def disablePythPriceFeed(_asset: address) -> bool:
     if not self._hasPriceFeed(_asset):
         return False
     self.feedConfig[_asset] = empty(bytes32)
+    oad._removeAsset(_asset)
     log PythFeedDisabled(_asset)
     return True
 

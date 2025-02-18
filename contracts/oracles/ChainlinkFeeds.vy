@@ -2,10 +2,13 @@
 
 implements: OraclePartner
 initializes: gov
+initializes: oad
 exports: gov.__interface__
+exports: oad.__interface__
 
-import interfaces.OraclePartnerInterface as OraclePartner
 import contracts.modules.Governable as gov
+import contracts.modules.OracleAssetData as oad
+import interfaces.OraclePartnerInterface as OraclePartner
 
 interface ChainlinkFeed:
     def latestRoundData() -> ChainlinkRound: view
@@ -58,8 +61,9 @@ NORMALIZED_DECIMALS: constant(uint256) = 18
 @deploy
 def __init__(_addyRegistry: address, _shouldSetDefaultFeeds: bool):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
-    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
+    gov.__init__(_addyRegistry)
+    oad.__init__()
 
     # set default feeds
     if _shouldSetDefaultFeeds:
@@ -230,7 +234,7 @@ def _setChainlinkFeed(
         needsEthToUsd=_needsEthToUsd,
         needsBtcToUsd=_needsBtcToUsd,
     )
-
+    oad._addAsset(_asset)
     log ChainlinkFeedAdded(_asset, _feed, _needsEthToUsd, _needsBtcToUsd)
     return True
 
@@ -245,6 +249,7 @@ def disableChainlinkPriceFeed(_asset: address) -> bool:
     if not self._hasPriceFeed(_asset):
         return False
     self.feedConfig[_asset] = empty(ChainlinkConfig)
+    oad._removeAsset(_asset)
     log ChainlinkFeedDisabled(_asset)
     return True
 

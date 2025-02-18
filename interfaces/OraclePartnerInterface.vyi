@@ -25,3 +25,8 @@ def oraclePartnerId() -> uint256:
 @external
 def setOraclePartnerId(_oracleId: uint256) -> bool:
     ...
+
+@view
+@external
+def getConfiguredAssets() -> DynArray[address, 50]:
+    ...
