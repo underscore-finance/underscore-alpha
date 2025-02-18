@@ -7,8 +7,8 @@ from interfaces import LegoYield
 
 interface WalletConfig:
     def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo): nonpayable
+    def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData = empty(CoreData)) -> uint256: view
     def getTransactionCosts(_agent: address, _action: ActionType, _usdValue: uint256, _cd: CoreData) -> (TxCostInfo, TxCostInfo): view
-    def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData) -> uint256: view
     def isRecipientAllowed(_recipient: address) -> bool: view
     def isAgentActive(_agent: address) -> bool: view
     def owner() -> address: view
@@ -64,21 +64,9 @@ struct Signature:
     signer: address
     expiration: uint256
 
-event SubscriptionPaid:
-    recipient: indexed(address)
-    asset: indexed(address)
-    amount: uint256
-    usdValue: uint256
-    paidThroughBlock: uint256
-    isAgent: bool
-
-event TransactionFeePaid:
-    recipient: indexed(address)
-    asset: indexed(address)
-    amount: uint256
-    usdValue: uint256
-    action: ActionType
-    isAgent: bool
+struct TrialFundsOpp:
+    legoId: uint256
+    vaultToken: address
 
 event AgenticDeposit:
     signer: indexed(address)
@@ -143,6 +131,27 @@ event WethConvertedToEth:
     broadcaster: indexed(address)
     isSignerAgent: bool
 
+event SubscriptionPaid:
+    recipient: indexed(address)
+    asset: indexed(address)
+    amount: uint256
+    usdValue: uint256
+    paidThroughBlock: uint256
+    isAgent: bool
+
+event TransactionFeePaid:
+    recipient: indexed(address)
+    asset: indexed(address)
+    amount: uint256
+    usdValue: uint256
+    action: ActionType
+    isAgent: bool
+
+event TrialFundsRecovered:
+    asset: indexed(address)
+    amountRecovered: uint256
+    remainingAmount: uint256
+
 # core
 walletConfig: public(address)
 
@@ -158,9 +167,10 @@ initialized: public(bool)
 API_VERSION: constant(String[28]) = "0.0.1"
 
 MAX_ASSETS: constant(uint256) = 25
-MAX_LEGOS: constant(uint256) = 10
+MAX_LEGOS: constant(uint256) = 20
 
 # registry ids
+AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
@@ -943,6 +953,58 @@ def _handleTransactionFees(
     if agentCost.amount != 0:
         assert extcall IERC20(agentCost.asset).transfer(agentCost.recipient, agentCost.amount, default_return_value=True) # dev: agent tx fee payment failed
         log TransactionFeePaid(agentCost.recipient, agentCost.asset, agentCost.amount, agentCost.usdValue, _action, True)
+
+
+# trial funds recovery
+
+
+@external
+def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
+    cd: CoreData = self._getCoreData()
+    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
+    assert msg.sender == agentFactory # dev: no perms
+
+    # validation
+    assert cd.trialFundsAsset != empty(address) # dev: no trial funds asset
+    assert cd.trialFundsInitialAmount != 0 # dev: no trial funds amount
+
+    # iterate through clawback data
+    balanceAvail: uint256 = staticcall IERC20(cd.trialFundsAsset).balanceOf(self)
+    for i: uint256 in range(len(_opportunities), bound=MAX_LEGOS):
+        if balanceAvail >= cd.trialFundsInitialAmount:
+            break
+
+        # get vault token data
+        opp: TrialFundsOpp = _opportunities[i]
+        vaultTokenBal: uint256 = staticcall IERC20(opp.vaultToken).balanceOf(self)
+        if vaultTokenBal == 0:
+            continue
+
+        # withdraw from lego partner
+        assetAmountReceived: uint256 = 0
+        na1: uint256 = 0
+        na2: uint256 = 0
+        assetAmountReceived, na1, na2 = self._withdrawTokens(agentFactory, opp.legoId, cd.trialFundsAsset, vaultTokenBal, opp.vaultToken, False, cd)
+        balanceAvail += assetAmountReceived
+
+        # deposit any extra balance back lego
+        if balanceAvail > cd.trialFundsInitialAmount:
+            self._depositTokens(agentFactory, opp.legoId, cd.trialFundsAsset, balanceAvail - cd.trialFundsInitialAmount, opp.vaultToken, False, cd)
+            break
+
+    # transfer back to agent factory
+    amountRecovered: uint256 = min(cd.trialFundsInitialAmount, staticcall IERC20(cd.trialFundsAsset).balanceOf(self))
+    assert amountRecovered != 0 # dev: no funds to transfer
+    assert extcall IERC20(cd.trialFundsAsset).transfer(agentFactory, amountRecovered, default_return_value=True) # dev: trial funds transfer failed
+
+    # update trial funds data
+    remainingTrialFunds: uint256 = cd.trialFundsInitialAmount - amountRecovered
+    self.trialFundsInitialAmount = remainingTrialFunds
+    if remainingTrialFunds == 0:
+        self.trialFundsAsset = empty(address)
+
+    log TrialFundsRecovered(cd.trialFundsAsset, amountRecovered, remainingTrialFunds)
+    return True
 
 
 # eip 712

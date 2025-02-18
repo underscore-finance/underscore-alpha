@@ -7,6 +7,7 @@ from ethereum.ercs import IERC20
 
 interface MainWallet:
     def initialize(_walletConfig: address, _addyRegistry: address, _wethAddr: address, _trialFundsAsset: address, _trialFundsInitialAmount: uint256) -> bool: nonpayable
+    def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS]) -> bool: nonpayable
 
 interface WalletConfig:
     def initialize(_wallet: address, _addyRegistry: address, _owner: address, _initialAgent: address) -> bool: nonpayable
@@ -19,6 +20,10 @@ struct TemplateInfo:
 struct TrialFundsData:
     asset: address
     amount: uint256
+
+struct TrialFundsOpp:
+    legoId: uint256
+    vaultToken: address
 
 event AgenticWalletCreated:
     mainAddr: indexed(address)
@@ -75,6 +80,8 @@ numAgenticWalletsAllowed: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 WETH_ADDR: public(immutable(address))
+
+MAX_LEGOS: constant(uint256) = 20
 
 
 @deploy
@@ -165,16 +172,18 @@ def createAgenticWallet(_owner: address = msg.sender, _agent: address = empty(ad
     mainWalletAddr: address = create_minimal_proxy_to(mainWalletTemplate)
     walletConfigAddr: address = create_minimal_proxy_to(walletConfigTemplate)
 
-    # initalize main wallet and wallet config
+    # initial trial funds asset + amount
     trialFundsData: TrialFundsData = self.trialFundsData
+    if trialFundsData.asset != empty(address):
+        trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
+
+    # initalize main wallet and wallet config
     assert extcall MainWallet(mainWalletAddr).initialize(walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount) # dev: could not initialize main wallet
     assert extcall WalletConfig(walletConfigAddr).initialize(mainWalletAddr, ADDY_REGISTRY, _owner, _agent) # dev: could not initialize wallet config
 
-    # transfer initial trial funds asset + amount
-    if trialFundsData.asset != empty(address):
-        trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
-        if trialFundsData.amount != 0:
-            assert extcall IERC20(trialFundsData.asset).transfer(mainWalletAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
+    # transfer after initialization
+    if trialFundsData.amount != 0:
+        assert extcall IERC20(trialFundsData.asset).transfer(mainWalletAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
 
     # update data
     self.isAgenticWallet[mainWalletAddr] = True
@@ -391,6 +400,12 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
     log FundsRecovered(_asset, _recipient, balance)
     return True
+
+
+@external
+def recoverTrialFunds(_wallet: address, _opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    return extcall MainWallet(_wallet).recoverTrialFunds(_opportunities)
 
 
 ############

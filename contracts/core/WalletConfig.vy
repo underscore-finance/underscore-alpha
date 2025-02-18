@@ -491,7 +491,7 @@ def getAvailableTxAmount(
     _asset: address,
     _wantedAmount: uint256,
     _shouldCheckTrialFunds: bool,
-    _cd: CoreData,
+    _cd: CoreData = empty(CoreData),
 ) -> uint256:
     """
     @notice Returns the maximum amount that can be sent from the wallet
@@ -501,12 +501,16 @@ def getAvailableTxAmount(
     @param _cd The core data
     @return amount The maximum amount that can be sent
     """
-    availableAmount: uint256 = staticcall IERC20(_asset).balanceOf(_cd.wallet)
+    cd: CoreData = _cd
+    if cd.wallet == empty(address):
+        cd = self._getCoreData()
+
+    availableAmount: uint256 = staticcall IERC20(_asset).balanceOf(cd.wallet)
 
     # check if asset is trial funds asset
-    if _shouldCheckTrialFunds and _asset == _cd.trialFundsAsset:
-        trialFundsDeployed: uint256 = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingForUser(_cd.wallet, _asset)
-        availableAmount = self._getAvailBalAfterTrialFunds(_asset, _cd.wallet, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, availableAmount, trialFundsDeployed)
+    if _shouldCheckTrialFunds and _asset == cd.trialFundsAsset:
+        trialFundsDeployed: uint256 = staticcall LegoRegistry(cd.legoRegistry).getUnderlyingForUser(cd.wallet, _asset)
+        availableAmount = self._getAvailBalAfterTrialFunds(_asset, cd.wallet, cd.trialFundsAsset, cd.trialFundsInitialAmount, availableAmount, trialFundsDeployed)
 
     # check if any reserve is set
     reservedAmount: uint256 = self.reserveAssets[_asset]
