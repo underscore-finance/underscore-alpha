@@ -2,18 +2,23 @@ from scripts.deployment.utils import deploy_contract, Tokens
 from utils import log
 
 
-def deploy_core(deployer):
+def deploy_core(governor):
     log.h1("Deploying core...")
 
     addy_registry = deploy_contract(
         'AddyRegistry',
         'contracts/core/AddyRegistry.vy',
-        deployer,
+        governor,
     )
 
-    wallet_template = deploy_contract(
-        'WalletTemplate',
-        'contracts/core/WalletTemplate.vy',
+    wallet_funds = deploy_contract(
+        'WalletFunds',
+        'contracts/core/WalletFunds.vy',
+    )
+
+    wallet_config = deploy_contract(
+        'WalletConfig',
+        'contracts/core/WalletConfig.vy',
     )
 
     agent_factory = deploy_contract(
@@ -21,7 +26,8 @@ def deploy_core(deployer):
         'contracts/core/AgentFactory.vy',
         addy_registry,
         Tokens.WETH,
-        wallet_template,
+        wallet_funds,
+        wallet_config,
     )
 
     lego_registry = deploy_contract(
