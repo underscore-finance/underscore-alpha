@@ -11,7 +11,7 @@ def setupWithdrawal(getTokenAndWhale, bob_ai_wallet, bob_agent):
     def setupWithdrawal(_legoId, _token_str, _vaultToken):
         asset, whale = getTokenAndWhale(_token_str)
         asset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[_token_str] * (10 ** asset.decimals()), sender=whale)
-        _a, _b, vault_tokens_received, _c = bob_ai_wallet.depositTokens(_legoId, asset.address, MAX_UINT256, _vaultToken, sender=bob_agent)
+        _a, _b, vault_tokens_received, _c = bob_ai_wallet.depositTokens(_legoId, asset.address, _vaultToken, MAX_UINT256, sender=bob_agent)
         return asset, vault_tokens_received
 
     yield setupWithdrawal
@@ -34,7 +34,7 @@ def testLegoDeposit(bob_ai_wallet, bob_agent, lego_registry, _test):
         pre_lego_vault_bal = _vaultToken.balanceOf(lego_addr)
 
         # deposit
-        deposit_amount, vault_token, vault_tokens_received, usd_value = bob_ai_wallet.depositTokens(_legoId, _asset.address, _amount, _vaultToken, sender=bob_agent)
+        deposit_amount, vault_token, vault_tokens_received, usd_value = bob_ai_wallet.depositTokens(_legoId, _asset.address, _vaultToken, _amount, sender=bob_agent)
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticDeposit")[0]

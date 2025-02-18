@@ -32,7 +32,7 @@ def test_deposit_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego
 
     # Test deposit by owner
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=owner)
+        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=owner)
     log = filter_logs(ai_wallet, "AgenticDeposit")[0]
     assert log.signer == owner
     assert log.asset == alpha_token.address
@@ -51,7 +51,7 @@ def test_deposit_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego
     # Test deposit by agent
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=agent)
     log = filter_logs(ai_wallet, "AgenticDeposit")[0]
     assert log.signer == agent
     assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
@@ -64,7 +64,7 @@ def test_deposit_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego
     # Test deposit with transfer
     alpha_token.approve(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokensWithTransfer(
-        lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=alpha_token_whale)
+        lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=alpha_token_whale)
     log = filter_logs(ai_wallet, "AgenticDeposit")[0]
     assert log.signer == alpha_token_whale
     assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
@@ -77,12 +77,10 @@ def test_deposit_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego
     assert not ai_wallet_config.canAgentAccess(agent, DEPOSIT_UINT256, [bravo_token.address], [mock_lego_bravo.legoId()])
 
     with boa.reverts("agent not allowed"):
-        ai_wallet.depositTokens(mock_lego_bravo.legoId(), bravo_token, deposit_amount,
-                                bravo_token_erc4626_vault, sender=agent)
+        ai_wallet.depositTokens(mock_lego_bravo.legoId(), bravo_token, bravo_token_erc4626_vault, deposit_amount, sender=agent)
 
     with boa.reverts("no funds available"):
-        ai_wallet.depositTokens(mock_lego_bravo.legoId(), bravo_token, deposit_amount,
-                                bravo_token_erc4626_vault, sender=owner)
+        ai_wallet.depositTokens(mock_lego_bravo.legoId(), bravo_token, bravo_token_erc4626_vault, deposit_amount, sender=owner)
 
 
 def test_withdrawal_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale):
@@ -94,7 +92,7 @@ def test_withdrawal_operations(ai_wallet, ai_wallet_config, owner, agent, mock_l
     ai_wallet_config.addLegoIdForAgent(agent, lego_id, sender=owner)
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        lego_id, alpha_token, MAX_UINT256, alpha_token_erc4626_vault, sender=agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=agent)
     assert assetAmountDeposited == deposit_amount
 
     # Get vault token balance
@@ -121,7 +119,7 @@ def test_withdrawal_operations(ai_wallet, ai_wallet_config, owner, agent, mock_l
     # Setup for agent withdrawal
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
+        lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=owner)
 
     # Test withdrawal by agent
     assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
@@ -155,7 +153,7 @@ def test_rebalance_operations(ai_wallet, ai_wallet_config, owner, agent, mock_le
     # Initial deposit
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, origVaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
+        lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=owner)
     assert vaultToken == alpha_token_erc4626_vault.address
 
     # Test rebalance by owner
@@ -190,7 +188,7 @@ def test_rebalance_operations(ai_wallet, ai_wallet_config, owner, agent, mock_le
     # Test rebalance by agent
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, origVaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        lego_id, alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=owner)
+        lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=owner)
 
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.rebalance(
         lego_id, alpha_token, alpha_token_erc4626_vault, alt_lego_id, alpha_token_erc4626_vault_another, origVaultTokenAmountReceived, sender=agent)
@@ -343,7 +341,7 @@ def test_weth_to_eth_withdraw(
         assert lego_aave_v3.addAssetOpportunity(asset, sender=governor)
 
     deposit_amount, _, vault_tokens_received, usd_value = ai_wallet.depositTokens(
-        lego_id, asset, MAX_UINT256, vault_token, sender=agent)
+        lego_id, asset, vault_token, MAX_UINT256, sender=agent)
     assert deposit_amount != 0 and vault_tokens_received != 0
 
     assert ai_wallet.wethAddr() == asset.address
@@ -417,7 +415,7 @@ def test_eth_weth_conversion_edge_cases(ai_wallet, ai_wallet_config, owner, agen
 
     # Test WETH to ETH with withdrawal from vault
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        lego_id, weth, eth_amount, vault_token, sender=agent)
+        lego_id, weth, vault_token, eth_amount, sender=agent)
     
     amount = ai_wallet.convertWethToEth(MAX_UINT256, owner, lego_id, vault_token, sender=agent)
     assert amount == eth_amount

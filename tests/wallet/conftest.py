@@ -25,8 +25,8 @@ def signDeposit(agent_signer):
         _wallet,
         _lego_id,
         _asset,
-        _amount,
         _vault,
+        _amount,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -41,16 +41,16 @@ def signDeposit(agent_signer):
                 "Deposit": [
                     {"name": "legoId", "type": "uint256"},
                     {"name": "asset", "type": "address"},
-                    {"name": "amount", "type": "uint256"},
                     {"name": "vault", "type": "address"},
+                    {"name": "amount", "type": "uint256"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
             "message": {
                 "legoId": _lego_id,
                 "asset": _asset,
-                "amount": _amount,
                 "vault": _vault,
+                "amount": _amount,
                 "expiration": _expiration,
             }
         }

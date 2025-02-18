@@ -94,7 +94,7 @@ def test_trial_funds_restrictions(new_ai_wallet, alpha_token, owner, agent, mock
     
     # Try to deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
     assert assetAmountDeposited == TRIAL_AMOUNT
     assert vaultTokenAmountReceived == TRIAL_AMOUNT
     
@@ -114,7 +114,7 @@ def test_get_total_underlying_user(new_ai_wallet, alpha_token, agent, lego_regis
     
     # Deposit into first lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
     
     # Check total underlying after first deposit
     total_underlying = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
@@ -122,7 +122,7 @@ def test_get_total_underlying_user(new_ai_wallet, alpha_token, agent, lego_regis
     
     # Deposit into second lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault_another, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent)
     
     # Check total underlying after second deposit
     total_underlying = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
@@ -134,7 +134,7 @@ def test_trial_funds_clawback(new_ai_wallet, agent_factory, alpha_token, agent, 
 
     # Deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
     assert assetAmountDeposited == TRIAL_AMOUNT
     assert vaultTokenAmountReceived == TRIAL_AMOUNT
     
@@ -150,7 +150,7 @@ def test_partial_trial_funds_deployment(new_ai_wallet, agent_factory, alpha_toke
     # Deploy half of trial funds
     half_amount = TRIAL_AMOUNT // 2
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
     assert assetAmountDeposited == half_amount
     assert vaultTokenAmountReceived == half_amount
     
@@ -193,11 +193,11 @@ def test_trial_funds_balance_calculations(new_ai_wallet, agent_factory, alpha_to
     
     # Deploy to first lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, third_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, third_amount, sender=agent)
     
     # Deploy to second lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, third_amount, alpha_token_erc4626_vault_another, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, third_amount, sender=agent)
     
     # Verify balances
     deployed_balance = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
@@ -211,7 +211,7 @@ def test_trial_funds_availability_edge_cases(new_ai_wallet, new_ai_wallet_config
     
     # Case 1: All funds deployed
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
     
     # Verify no funds available for transfer
     with boa.reverts():  # Should revert due to no available funds
@@ -225,7 +225,7 @@ def test_trial_funds_availability_edge_cases(new_ai_wallet, new_ai_wallet_config
     # Deploy half
     half_amount = TRIAL_AMOUNT // 2
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
     
     # Add extra funds from external source
     alpha_token.transfer(new_ai_wallet, TRIAL_AMOUNT, sender=alpha_token_whale)
@@ -279,15 +279,15 @@ def test_trial_funds_recovery_complex(new_ai_wallet, agent_factory, alpha_token,
     
     # Deploy to first lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, third_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, third_amount, sender=agent)
     
     # Deploy to second lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, third_amount, alpha_token_erc4626_vault_another, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, third_amount, sender=agent)
     
     # Deploy to third lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_third.legoId(), alpha_token, third_amount, alpha_token_erc4626_vault_third, sender=agent)
+        mock_lego_alpha_third.legoId(), alpha_token, alpha_token_erc4626_vault_third, third_amount, sender=agent)
     
     # Prepare recovery data
     clawback_data = [
@@ -311,7 +311,7 @@ def test_trial_funds_vault_token_transfer_restrictions(new_ai_wallet, alpha_toke
     
     # First deposit trial funds into mock lego to get vault tokens
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
     assert vaultTokenAmountReceived == TRIAL_AMOUNT
     
     # Try to transfer vault tokens - should fail since they represent trial funds
@@ -330,7 +330,7 @@ def test_trial_funds_vault_token_partial_transfer(lego_registry, new_ai_wallet, 
 
     # First deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, TRIAL_AMOUNT, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
     
     # Add extra funds on top of trial funds
     extra_amount = TRIAL_AMOUNT // 2
@@ -338,7 +338,7 @@ def test_trial_funds_vault_token_partial_transfer(lego_registry, new_ai_wallet, 
     
     # Deposit extra funds to get more vault tokens
     assetAmountDeposited, _, extra_vault_tokens, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, extra_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, extra_amount, sender=agent)
     
     underlying = lego_registry.getUnderlyingAsset(alpha_token_erc4626_vault)
     assert underlying == alpha_token.address
@@ -362,11 +362,11 @@ def test_trial_funds_vault_token_transfer_different_vault(new_ai_wallet, alpha_t
     
     # Deposit into first vault
     assetAmountDeposited, _, vault1_tokens, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
     
     # Deposit into second vault
     assetAmountDeposited, _, vault2_tokens, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, half_amount, alpha_token_erc4626_vault_another, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent)
     
     # Try to transfer vault tokens from first vault - should fail
     with boa.reverts("cannot transfer trial funds vault token"):

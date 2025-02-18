@@ -59,7 +59,7 @@ def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, agent, m
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, deposit_amount, alpha_token_erc4626_vault, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=agent)
     assert assetAmountDeposited == deposit_amount
 
     # Test withdrawal (not allowed)

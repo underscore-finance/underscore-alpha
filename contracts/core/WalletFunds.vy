@@ -196,7 +196,7 @@ ORACLE_REGISTRY_ID: constant(uint256) = 4
 usedSignatures: public(HashMap[Bytes[65], bool])
 ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
 DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
-DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address asset,uint256 amount,address vault,uint256 expiration)')
+DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
 SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,uint256 expiration)')
@@ -272,16 +272,16 @@ def apiVersion() -> String[28]:
 def depositTokens(
     _legoId: uint256,
     _asset: address,
+    _vault: address,
     _amount: uint256 = max_value(uint256),
-    _vault: address = empty(address),
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256, uint256):
     """
     @notice Deposits tokens into a specified lego integration and vault
     @param _legoId The ID of the lego to use for deposit
     @param _asset The address of the token to deposit
+    @param _vault The target vault address
     @param _amount The amount to deposit (defaults to max)
-    @param _vault The target vault address (optional)
     @param _sig The signature of agent or owner (optional)
     @return uint256 The amount of assets deposited
     @return address The vault token address
@@ -291,7 +291,7 @@ def depositTokens(
     cd: CoreData = self._getCoreData()
 
     # check permissions / subscription data
-    signer: address = self._getSignerOnDeposit(_legoId, _asset, _amount, _vault, _sig)
+    signer: address = self._getSignerOnDeposit(_legoId, _asset, _vault, _amount, _sig)
     isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.DEPOSIT, [_asset], [_legoId], cd)
 
     # deposit tokens
@@ -299,7 +299,7 @@ def depositTokens(
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
     usdValue: uint256 = 0
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = self._depositTokens(signer, _legoId, _asset, _amount, _vault, isSignerAgent, cd)
+    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = self._depositTokens(signer, _legoId, _asset, _vault, _amount, isSignerAgent, cd)
 
     self._handleTransactionFees(signer, isSignerAgent, ActionType.DEPOSIT, usdValue, cd)
     return assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue
@@ -310,15 +310,15 @@ def depositTokens(
 def depositTokensWithTransfer(
     _legoId: uint256,
     _asset: address,
+    _vault: address,
     _amount: uint256 = max_value(uint256),
-    _vault: address = empty(address),
 ) -> (uint256, address, uint256, uint256):
     """
     @notice Transfers tokens from sender and deposits them into a specified lego integration and vault
     @param _legoId The ID of the lego to use for deposit
     @param _asset The address of the token to deposit
+    @param _vault The target vault address
     @param _amount The amount to deposit (defaults to max)
-    @param _vault The target vault address (optional)
     @return uint256 The amount of assets deposited
     @return address The vault token address
     @return uint256 The amount of vault tokens received
@@ -327,7 +327,7 @@ def depositTokensWithTransfer(
     amount: uint256 = min(_amount, staticcall IERC20(_asset).balanceOf(msg.sender))
     assert extcall IERC20(_asset).transferFrom(msg.sender, self, amount, default_return_value=True) # dev: transfer failed
     cd: CoreData = self._getCoreData()
-    return self._depositTokens(msg.sender, _legoId, _asset, amount, _vault, staticcall WalletConfig(cd.walletConfig).isAgentActive(msg.sender), cd)
+    return self._depositTokens(msg.sender, _legoId, _asset, _vault, amount, staticcall WalletConfig(cd.walletConfig).isAgentActive(msg.sender), cd)
 
 
 @internal
@@ -335,8 +335,8 @@ def _depositTokens(
     _signer: address,
     _legoId: uint256,
     _asset: address,
-    _amount: uint256,
     _vault: address,
+    _amount: uint256,
     _isSignerAgent: bool,
     _cd: CoreData,
 ) -> (uint256, address, uint256, uint256):
@@ -364,15 +364,15 @@ def _depositTokens(
 def _getSignerOnDeposit(
     _legoId: uint256,
     _asset: address,
-    _amount: uint256,
     _vault: address,
+    _amount: uint256,
     _sig: Signature,
 ) -> address:
     if _sig.signer == empty(address) or _sig.signature == empty(Bytes[65]):
         return msg.sender
 
     # check if signature is valid
-    self._isValidSignature(abi_encode(DEPOSIT_TYPE_HASH, _legoId, _asset, _amount, _vault, _sig.expiration), _sig)
+    self._isValidSignature(abi_encode(DEPOSIT_TYPE_HASH, _legoId, _asset, _vault, _amount, _sig.expiration), _sig)
 
     return _sig.signer
 
@@ -542,7 +542,7 @@ def _rebalance(
     newVaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
     depositUsdValue: uint256 = 0
-    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(_signer, _toLegoId, _fromAsset, assetAmountReceived, _toVault, _isSignerAgent, _cd)
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(_signer, _toLegoId, _fromAsset, _toVault, assetAmountReceived, _isSignerAgent, _cd)
 
     return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, max(withdrawUsdValue, depositUsdValue)
 
@@ -805,7 +805,7 @@ def convertEthToWeth(
     vaultTokenAmountReceived: uint256 = 0
     if _depositLegoId != 0:
         depositUsdValue: uint256 = 0
-        amount, vaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(signer, _depositLegoId, weth, amount, _depositVault, isSignerAgent, cd)
+        amount, vaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(signer, _depositLegoId, weth, _depositVault, amount, isSignerAgent, cd)
         self._handleTransactionFees(signer, isSignerAgent, ActionType.DEPOSIT, depositUsdValue, cd)
 
     return amount, vaultToken, vaultTokenAmountReceived
@@ -934,7 +934,7 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         if instruction.action == ActionType.DEPOSIT:
             if isSignerAgent:
                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(signer, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, naAddyA, naValueB, usdValue = self._depositTokens(signer, instruction.legoId, instruction.asset, instruction.amount, instruction.vault, isSignerAgent, cd)
+            naValueA, naAddyA, naValueB, usdValue = self._depositTokens(signer, instruction.legoId, instruction.asset, instruction.vault, instruction.amount, isSignerAgent, cd)
             if isSignerAgent and usdValue != 0:
                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, signer, ActionType.DEPOSIT, usdValue, cd.priceSheets, cd.oracleRegistry)
 
@@ -1116,7 +1116,7 @@ def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -
 
         # deposit any extra balance back lego
         if balanceAvail > cd.trialFundsInitialAmount:
-            self._depositTokens(agentFactory, opp.legoId, cd.trialFundsAsset, balanceAvail - cd.trialFundsInitialAmount, opp.vaultToken, False, cd)
+            self._depositTokens(agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, balanceAvail - cd.trialFundsInitialAmount, False, cd)
             break
 
     # transfer back to agent factory
