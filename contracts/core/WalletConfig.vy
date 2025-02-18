@@ -17,6 +17,10 @@ interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
 
+interface WalletFunds:
+    def trialFundsInitialAmount() -> uint256: view
+    def trialFundsAsset() -> address: view
+
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
@@ -150,6 +154,7 @@ MAX_LEGOS: constant(uint256) = 10
 # registry ids
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
+ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 
 @deploy
@@ -303,6 +308,39 @@ def isAgentActive(_agent: address) -> bool:
 ##########################
 
 
+# subscriptions
+
+
+@view
+@external
+def getAgentSubscriptionStatus(_agent: address) -> SubPaymentInfo:
+    cd: CoreData = self._getCoreData()
+    na: SubPaymentInfo = empty(SubPaymentInfo)
+    agentSub: SubPaymentInfo = empty(SubPaymentInfo)
+    na, agentSub = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(_agent, self.agentSettings[_agent].paidThroughBlock, 0, cd.oracleRegistry)
+    return agentSub
+
+
+@view
+@external
+def getProtocolSubscriptionStatus() -> SubPaymentInfo:
+    cd: CoreData = self._getCoreData()
+    protocolSub: SubPaymentInfo = empty(SubPaymentInfo)
+    na: SubPaymentInfo = empty(SubPaymentInfo)
+    protocolSub, na = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(empty(address), 0, self.protocolSub.paidThroughBlock, cd.oracleRegistry)
+    return protocolSub
+
+
+@view
+@external
+def canMakeSubscriptionPayments(_agent: address) -> (bool, bool):
+    cd: CoreData = self._getCoreData()
+    protocolSub: SubPaymentInfo = empty(SubPaymentInfo)
+    agentSub: SubPaymentInfo = empty(SubPaymentInfo)
+    protocolSub, agentSub = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(_agent, self.agentSettings[_agent].paidThroughBlock, self.protocolSub.paidThroughBlock, cd.oracleRegistry)
+    return self._checkIfSufficientFunds(protocolSub.asset, protocolSub.amount, agentSub.asset, agentSub.amount, cd)
+
+
 @external
 def handleSubscriptionsAndPermissions(
     _agent: address,
@@ -337,7 +375,11 @@ def handleSubscriptionsAndPermissions(
     protocolSub, agentSub = staticcall PriceSheets(_cd.priceSheets).getCombinedSubData(_agent, userAgentData.paidThroughBlock, userProtocolData.paidThroughBlock, _cd.oracleRegistry)
 
     # check if sufficient funds
-    self._checkIfSufficientFunds(protocolSub.asset, protocolSub.amount, agentSub.asset, agentSub.amount, _cd)
+    canPayProtocol: bool = False
+    canPayAgent: bool = False
+    canPayProtocol, canPayAgent = self._checkIfSufficientFunds(protocolSub.asset, protocolSub.amount, agentSub.asset, agentSub.amount, _cd)
+    assert canPayProtocol # dev: insufficient balance for protocol subscription payment
+    assert canPayAgent # dev: insufficient balance for agent subscription payment
 
     # update and save new data
     if protocolSub.didChange:
@@ -349,6 +391,9 @@ def handleSubscriptionsAndPermissions(
 
     # actual payments will happen from wallet
     return protocolSub, agentSub
+
+
+# transaction fees
 
 
 @view
@@ -368,15 +413,53 @@ def getTransactionCosts(_agent: address, _action: ActionType, _usdValue: uint256
     protocolCost, agentCost = staticcall PriceSheets(_cd.priceSheets).getCombinedTxCostData(_agent, _action, _usdValue, _cd.oracleRegistry)
 
     # check if sufficient funds
-    self._checkIfSufficientFunds(protocolCost.asset, protocolCost.amount, agentCost.asset, agentCost.amount, _cd)
+    canPayProtocol: bool = False
+    canPayAgent: bool = False
+    canPayProtocol, canPayAgent = self._checkIfSufficientFunds(protocolCost.asset, protocolCost.amount, agentCost.asset, agentCost.amount, _cd)
+    assert canPayProtocol # dev: insufficient balance for protocol tx fee
+    assert canPayAgent # dev: insufficient balance for agent tx fee
 
     # actual payments will happen from wallet
     return protocolCost, agentCost
 
 
 @view
+@external
+def canPayTransactionFees(_agent: address, _action: ActionType, _usdValue: uint256) -> (bool, bool):
+    cd: CoreData = self._getCoreData()
+    protocolCost: TxCostInfo = empty(TxCostInfo)
+    agentCost: TxCostInfo = empty(TxCostInfo)
+    protocolCost, agentCost = staticcall PriceSheets(cd.priceSheets).getCombinedTxCostData(_agent, _action, _usdValue, cd.oracleRegistry)
+    return self._checkIfSufficientFunds(protocolCost.asset, protocolCost.amount, agentCost.asset, agentCost.amount, cd)
+
+
+####################
+# Random Utilities #
+####################
+
+
+@view
 @internal
-def _checkIfSufficientFunds(_protocolAsset: address, _protocolAmount: uint256, _agentAsset: address, _agentAmount: uint256, _cd: CoreData):
+def _getCoreData() -> CoreData:
+    addyRegistry: address = self.addyRegistry
+    wallet: address = self.wallet
+    return CoreData(
+        owner=self.owner,
+        wallet=wallet,
+        walletConfig=self,
+        legoRegistry=staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID),
+        priceSheets=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_SHEETS_ID),
+        oracleRegistry=staticcall AddyRegistry(addyRegistry).getAddy(ORACLE_REGISTRY_ID),
+        trialFundsAsset=staticcall WalletFunds(wallet).trialFundsAsset(),
+        trialFundsInitialAmount=staticcall WalletFunds(wallet).trialFundsInitialAmount(),
+    )
+
+
+@view
+@internal
+def _checkIfSufficientFunds(_protocolAsset: address, _protocolAmount: uint256, _agentAsset: address, _agentAmount: uint256, _cd: CoreData) -> (bool, bool):
+    canPayProtocol: bool = True
+    canPayAgent: bool = True
 
     # check if any of these assets are also trial funds asset
     trialFundsCurrentBal: uint256 = 0
@@ -388,21 +471,18 @@ def _checkIfSufficientFunds(_protocolAsset: address, _protocolAmount: uint256, _
     # check if can make protocol payment
     if _protocolAmount != 0:
         availBalForProtocol: uint256 = self._getAvailBalAfterTrialFunds(_protocolAsset, _cd.wallet, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, trialFundsCurrentBal, trialFundsDeployed)
-        assert availBalForProtocol >= _protocolAmount # dev: insufficient balance for protocol subscription payment
+        canPayProtocol = availBalForProtocol >= _protocolAmount
 
         # update trial funds balance
-        if _protocolAsset == _cd.trialFundsAsset:
+        if _protocolAsset != empty(address) and _protocolAsset == _cd.trialFundsAsset:
             trialFundsCurrentBal -= _protocolAmount
 
     # check if can make agent payment
     if _agentAmount != 0:
         availBalForAgent: uint256 = self._getAvailBalAfterTrialFunds(_agentAsset, _cd.wallet, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, trialFundsCurrentBal, trialFundsDeployed)
-        assert availBalForAgent >= _agentAmount # dev: insufficient balance for agent subscription payment
+        canPayAgent = availBalForAgent >= _agentAmount
 
-
-####################
-# Random Utilities #
-####################
+    return canPayProtocol, canPayAgent
 
 
 @view
@@ -421,23 +501,24 @@ def getAvailableTxAmount(
     @param _cd The core data
     @return amount The maximum amount that can be sent
     """
-    tokenBalance: uint256 = staticcall IERC20(_asset).balanceOf(_cd.wallet)
+    availableAmount: uint256 = staticcall IERC20(_asset).balanceOf(_cd.wallet)
 
     # check if asset is trial funds asset
     if _shouldCheckTrialFunds and _asset == _cd.trialFundsAsset:
         trialFundsDeployed: uint256 = staticcall LegoRegistry(_cd.legoRegistry).getUnderlyingForUser(_cd.wallet, _asset)
-        tokenBalance = self._getAvailBalAfterTrialFunds(_asset, _cd.wallet, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, tokenBalance, trialFundsDeployed)
+        availableAmount = self._getAvailBalAfterTrialFunds(_asset, _cd.wallet, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, availableAmount, trialFundsDeployed)
 
     # check if any reserve is set
     reservedAmount: uint256 = self.reserveAssets[_asset]
-    assert tokenBalance > reservedAmount # dev: insufficient balance after reserve
-    availableAmount: uint256 = tokenBalance - reservedAmount
+    if reservedAmount != 0:
+        assert availableAmount > reservedAmount # dev: insufficient balance after reserve
+        availableAmount -= reservedAmount
 
     # return min of wanted amount and available amount
-    amount: uint256 = min(_wantedAmount, availableAmount)
-    assert amount != 0 # dev: no funds available
+    availableAmount = min(_wantedAmount, availableAmount)
+    assert availableAmount != 0 # dev: no funds available
 
-    return amount
+    return availableAmount
 
 
 @view
@@ -459,7 +540,7 @@ def _getAvailBalAfterTrialFunds(
 
     lockedAmount: uint256 = _trialFundsInitialAmount - _trialFundsDeployed
     availAmount: uint256 = 0
-    if lockedAmount < _trialFundsCurrentBal:
+    if _trialFundsCurrentBal > lockedAmount:
         availAmount = _trialFundsCurrentBal - lockedAmount
 
     return availAmount

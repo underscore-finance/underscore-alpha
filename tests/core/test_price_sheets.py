@@ -266,25 +266,29 @@ def test_agent_transaction_price(price_sheets, governor, bob_agent, oracle_custo
     
     # Test fee calculations
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)  # DEPOSIT
-    assert cost[0] == alpha_token.address  # asset
-    assert cost[1] == 10 * EIGHTEEN_DECIMALS # assetAmount (0.1 alpha tokens)
-    assert cost[2] == 10000000000000000000 # usdValue (10)
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 10 * EIGHTEEN_DECIMALS # assetAmount (0.1 alpha tokens)
+    assert cost.usdValue == 10000000000000000000 # usdValue (10)
     
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, WITHDRAWAL_UINT256, 1000 * EIGHTEEN_DECIMALS)  # WITHDRAWAL
-    assert cost[1] == 20 * EIGHTEEN_DECIMALS # assetAmount (0.2 alpha tokens)
-    assert cost[2] == 20 * EIGHTEEN_DECIMALS # usdValue (20)
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 20 * EIGHTEEN_DECIMALS # assetAmount (0.2 alpha tokens)
+    assert cost.usdValue == 20 * EIGHTEEN_DECIMALS # usdValue (20)
     
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, REBALANCE_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REBALANCE
-    assert cost[1] == 30 * EIGHTEEN_DECIMALS # assetAmount (0.3 alpha tokens)
-    assert cost[2] == 30 * EIGHTEEN_DECIMALS # usdValue (30)
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 30 * EIGHTEEN_DECIMALS # assetAmount (0.3 alpha tokens)
+    assert cost.usdValue == 30 * EIGHTEEN_DECIMALS # usdValue (30)
     
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, TRANSFER_UINT256, 1000 * EIGHTEEN_DECIMALS)  # TRANSFER
-    assert cost[1] == 40 * EIGHTEEN_DECIMALS # assetAmount (0.4 alpha tokens)
-    assert cost[2] == 40 * EIGHTEEN_DECIMALS # usdValue (40)
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 40 * EIGHTEEN_DECIMALS # assetAmount (0.4 alpha tokens)
+    assert cost.usdValue == 40 * EIGHTEEN_DECIMALS # usdValue (40)
     
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, SWAP_UINT256, 1000 * EIGHTEEN_DECIMALS)  # SWAP
-    assert cost[1] == 50 * EIGHTEEN_DECIMALS # assetAmount (0.5 alpha tokens)
-    assert cost[2] == 50 * EIGHTEEN_DECIMALS # usdValue (50)
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 50 * EIGHTEEN_DECIMALS # assetAmount (0.5 alpha tokens)
+    assert cost.usdValue == 50 * EIGHTEEN_DECIMALS # usdValue (50)
     
     # Remove price sheet
     assert price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
@@ -337,25 +341,26 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     
     # Test fee calculations
     cost = price_sheets.getProtocolTransactionFeeData(DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)  # DEPOSIT
-    assert cost[0] == alpha_token.address  # asset
-    assert cost[1] == 5 * EIGHTEEN_DECIMALS  # assetAmount (0.05 alpha tokens)
-    assert cost[2] == 5 * EIGHTEEN_DECIMALS  # usdValue (5)
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 5 * EIGHTEEN_DECIMALS  # assetAmount (0.05 alpha tokens)
+    assert cost.usdValue == 5 * EIGHTEEN_DECIMALS  # usdValue (5)
     
     cost = price_sheets.getProtocolTransactionFeeData(WITHDRAWAL_UINT256, 1000 * EIGHTEEN_DECIMALS)  # WITHDRAWAL
-    assert cost[1] == 10 * EIGHTEEN_DECIMALS  # assetAmount (0.1 alpha tokens)
-    assert cost[2] == 10 * EIGHTEEN_DECIMALS  # usdValue (10)
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 10 * EIGHTEEN_DECIMALS  # assetAmount (0.1 alpha tokens)
+    assert cost.usdValue == 10 * EIGHTEEN_DECIMALS  # usdValue (10)
     
     cost = price_sheets.getProtocolTransactionFeeData(REBALANCE_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REBALANCE
-    assert cost[1] == 15 * EIGHTEEN_DECIMALS  # assetAmount (0.15 alpha tokens)
-    assert cost[2] == 15 * EIGHTEEN_DECIMALS  # usdValue (15)
+    assert cost.amount == 15 * EIGHTEEN_DECIMALS  # assetAmount (0.15 alpha tokens)
+    assert cost.usdValue == 15 * EIGHTEEN_DECIMALS  # usdValue (15)
     
     cost = price_sheets.getProtocolTransactionFeeData(TRANSFER_UINT256, 1000 * EIGHTEEN_DECIMALS)  # TRANSFER
-    assert cost[1] == 20 * EIGHTEEN_DECIMALS  # assetAmount (0.2 alpha tokens)
-    assert cost[2] == 20 * EIGHTEEN_DECIMALS  # usdValue (20)
+    assert cost.amount == 20 * EIGHTEEN_DECIMALS  # assetAmount (0.2 alpha tokens)
+    assert cost.usdValue == 20 * EIGHTEEN_DECIMALS  # usdValue (20)
     
     cost = price_sheets.getProtocolTransactionFeeData(SWAP_UINT256, 1000 * EIGHTEEN_DECIMALS)  # SWAP
-    assert cost[1] == 25 * EIGHTEEN_DECIMALS  # assetAmount (0.25 alpha tokens)
-    assert cost[2] == 25 * EIGHTEEN_DECIMALS  # usdValue (25)
+    assert cost.amount == 25 * EIGHTEEN_DECIMALS  # assetAmount (0.25 alpha tokens)
+    assert cost.usdValue == 25 * EIGHTEEN_DECIMALS  # usdValue (25)
     
     # Remove price sheet
     assert price_sheets.removeProtocolTxPriceSheet(sender=governor)
@@ -405,36 +410,44 @@ def test_combined_transaction_costs(price_sheets, governor, bob_agent, oracle_cu
     )
 
     # Test combined fees
-    cost = price_sheets.getTransactionCost(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost.protocolRecipient == price_sheets.protocolRecipient()
-    assert cost.protocolAsset == alpha_token.address
-    assert cost.protocolAssetAmount == 5 * EIGHTEEN_DECIMALS  # 0.50% of 1000
-    assert cost.protocolUsdValue == 5 * EIGHTEEN_DECIMALS
-    assert cost.agentAsset == alpha_token.address
-    assert cost.agentAssetAmount == 10 * EIGHTEEN_DECIMALS  # 1.00% of 1000
-    assert cost.agentUsdValue == 10 * EIGHTEEN_DECIMALS
+    protocol_cost, agent_cost = price_sheets.getCombinedTxCostData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS, oracle_registry)
+
+    assert protocol_cost.recipient == price_sheets.protocolRecipient()
+    assert protocol_cost.asset == alpha_token.address
+    assert protocol_cost.amount == 5 * EIGHTEEN_DECIMALS  # 0.50% of 1000
+    assert protocol_cost.usdValue == 5 * EIGHTEEN_DECIMALS
+
+    assert agent_cost.recipient == bob_agent
+    assert agent_cost.asset == alpha_token.address
+    assert agent_cost.amount == 10 * EIGHTEEN_DECIMALS  # 1.00% of 1000
+    assert agent_cost.usdValue == 10 * EIGHTEEN_DECIMALS
 
     # Test with zero protocol fee
     price_sheets.removeProtocolTxPriceSheet(sender=governor)
-    cost = price_sheets.getTransactionCost(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost.protocolRecipient == ZERO_ADDRESS
-    assert cost.protocolAsset == ZERO_ADDRESS
-    assert cost.protocolAssetAmount == 0
-    assert cost.protocolUsdValue == 0
-    assert cost.agentAsset == alpha_token.address
-    assert cost.agentAssetAmount == 10 * EIGHTEEN_DECIMALS
-    assert cost.agentUsdValue == 10 * EIGHTEEN_DECIMALS
+    protocol_cost, agent_cost = price_sheets.getCombinedTxCostData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS, oracle_registry)
+
+    assert protocol_cost.recipient == ZERO_ADDRESS
+    assert protocol_cost.asset == ZERO_ADDRESS
+    assert protocol_cost.amount == 0
+    assert protocol_cost.usdValue == 0
+
+    assert agent_cost.recipient == bob_agent
+    assert agent_cost.asset == alpha_token.address
+    assert agent_cost.amount == 10 * EIGHTEEN_DECIMALS
+    assert agent_cost.usdValue == 10 * EIGHTEEN_DECIMALS
 
     # Test with zero agent fee
     price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
-    cost = price_sheets.getTransactionCost(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost.protocolRecipient == ZERO_ADDRESS
-    assert cost.protocolAsset == ZERO_ADDRESS
-    assert cost.protocolAssetAmount == 0
-    assert cost.protocolUsdValue == 0
-    assert cost.agentAsset == ZERO_ADDRESS
-    assert cost.agentAssetAmount == 0
-    assert cost.agentUsdValue == 0
+    protocol_cost, agent_cost = price_sheets.getCombinedTxCostData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS, oracle_registry)
+    assert protocol_cost.recipient == ZERO_ADDRESS
+    assert protocol_cost.asset == ZERO_ADDRESS
+    assert protocol_cost.amount == 0
+    assert protocol_cost.usdValue == 0
+    
+    assert agent_cost.recipient == bob_agent
+    assert agent_cost.asset == ZERO_ADDRESS
+    assert agent_cost.amount == 0
+    assert agent_cost.usdValue == 0
 
 
 def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally):
@@ -487,8 +500,9 @@ def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custo
 
     # Test with zero USD value
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 0)
-    assert cost[1] == 0  # assetAmount
-    assert cost[2] == 0  # usdValue
+    assert cost.asset == ZERO_ADDRESS
+    assert cost.amount == 0
+    assert cost.usdValue == 0
 
     # Test removing non-existent price sheets
     assert not price_sheets.removeAgentTxPriceSheet(sally, sender=governor)  # non-existent agent
@@ -542,9 +556,9 @@ def test_transaction_fee_edge_cases(price_sheets, governor, bob_agent, alpha_tok
         1000 * EIGHTEEN_DECIMALS
     )
     # Verify handles zero price gracefully
-    assert cost[0] == alpha_token.address
-    assert cost[1] == 0  # Asset amount should be zero
-    assert cost[2] == 100000000000000000  # USD value should still be calculated
+    assert cost.asset == alpha_token.address
+    assert cost.amount == 0  # Asset amount should be zero
+    assert cost.usdValue == 0.1 * EIGHTEEN_DECIMALS  # USD value should still be calculated
 
 
 def test_subscription_period_boundaries(price_sheets, governor, bob_agent, alpha_token):
@@ -712,8 +726,8 @@ def test_agent_tx_pricing_enable_disable(price_sheets, governor, bob_agent, orac
     
     # Verify fees are returned when enabled
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000)
-    assert cost[0] == alpha_token.address
-    assert cost[1] > 0  # Should have non-zero fee
+    assert cost.asset == alpha_token.address
+    assert cost.amount > 0  # Should have non-zero fee
     
     # Disable agent tx pricing
     assert price_sheets.setAgentTxPricingEnabled(False, sender=governor)
@@ -723,8 +737,8 @@ def test_agent_tx_pricing_enable_disable(price_sheets, governor, bob_agent, orac
     
     # Verify no fees are returned when disabled
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000)
-    assert cost[0] == ZERO_ADDRESS
-    assert cost[1] == 0  # Should have zero fee
+    assert cost.asset == ZERO_ADDRESS
+    assert cost.amount == 0  # Should have zero fee
 
 
 def test_agent_sub_pricing_enable_disable(price_sheets, governor, bob_agent, alpha_token, sally):
@@ -804,8 +818,8 @@ def test_agent_pricing_combined_states(price_sheets, governor, bob_agent, alpha_
     
     # Verify both types of pricing are active
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost[0] == alpha_token.address
-    assert cost[1] > 0
+    assert cost.asset == alpha_token.address
+    assert cost.amount > 0
     
     info = price_sheets.getAgentSubPriceData(bob_agent)
     assert info.asset == alpha_token.address
@@ -816,8 +830,8 @@ def test_agent_pricing_combined_states(price_sheets, governor, bob_agent, alpha_
     
     # Verify only subscription pricing remains active
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost[0] == ZERO_ADDRESS
-    assert cost[1] == 0
+    assert cost.asset == ZERO_ADDRESS
+    assert cost.amount == 0
     
     info = price_sheets.getAgentSubPriceData(bob_agent)
     assert info.asset == alpha_token.address
@@ -829,8 +843,8 @@ def test_agent_pricing_combined_states(price_sheets, governor, bob_agent, alpha_
     
     # Verify only transaction pricing remains active
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost[0] == alpha_token.address
-    assert cost[1] > 0
+    assert cost.asset == alpha_token.address
+    assert cost.amount > 0
     
     info = price_sheets.getAgentSubPriceData(bob_agent)
     assert info.asset == ZERO_ADDRESS

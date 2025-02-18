@@ -7,21 +7,6 @@ from constants import ZERO_ADDRESS
 
 
 @pytest.fixture(scope="package")
-def owner(env):
-    return env.generate_address("owner")
-
-
-@pytest.fixture(scope="package")
-def agent(agent_signer):
-    return agent_signer.address
-
-
-@pytest.fixture(scope="package")
-def broadcaster(env):
-    return env.generate_address("broadcaster")
-
-
-@pytest.fixture(scope="package")
 def ai_wallet(agent_factory, owner, agent):
     w = agent_factory.createAgenticWallet(owner, agent, sender=owner)
     assert w != ZERO_ADDRESS
@@ -32,11 +17,6 @@ def ai_wallet(agent_factory, owner, agent):
 @pytest.fixture(scope="package")
 def ai_wallet_config(ai_wallet):
     return WalletConfig.at(ai_wallet.walletConfig())
-
-
-@pytest.fixture(scope="package")
-def agent_signer():
-    return Account.from_key('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
 
 
 @pytest.fixture(scope="package")

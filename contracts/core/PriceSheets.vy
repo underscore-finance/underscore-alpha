@@ -221,6 +221,7 @@ def getCombinedSubData(_agent: address, _agentPaidThru: uint256, _protocolPaidTh
 @internal
 def _updatePaidThroughBlock(_paidThroughBlock: uint256, _subData: SubscriptionInfo, _oracleRegistry: address) -> SubPaymentInfo:
     data: SubPaymentInfo = empty(SubPaymentInfo)
+    data.paidThroughBlock = _paidThroughBlock
 
     # subscription was added (since last checked)
     if _paidThroughBlock == 0 and _subData.usdValue != 0:

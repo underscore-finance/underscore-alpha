@@ -93,13 +93,24 @@ def __init__(_addyRegistry: address, _wethAddr: address, _mainWalletTemplate: ad
 
 @view
 @external
-def currentAgentTemplate() -> address:
+def currentMainWalletTemplate() -> address:
     """
     @notice Get the current wallet template address being used by the factory
     @dev This is a simple getter for the current template address stored in mainWalletTemplateInfo
     @return The address of the current wallet template
     """
     return self.mainWalletTemplateInfo.addr
+
+
+@view
+@external
+def currentWalletConfigTemplate() -> address:
+    """
+    @notice Get the current wallet config template address being used by the factory
+    @dev This is a simple getter for the current template address stored in walletConfigTemplateInfo
+    @return The address of the current wallet config template
+    """
+    return self.walletConfigTemplateInfo.addr
 
 
 #########################
