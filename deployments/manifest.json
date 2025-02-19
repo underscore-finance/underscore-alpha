@@ -14025,6 +14025,11 @@
           },
           {
             "indexed": false,
+            "name": "pool",
+            "type": "address"
+          },
+          {
+            "indexed": false,
             "name": "refundAssetAmount",
             "type": "uint256"
           },
@@ -14948,6 +14953,55 @@
             "type": "uint256"
           },
           {
+            "name": "_pool",
+            "type": "address"
+          }
+        ],
+        "name": "swapTokens",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          },
+          {
+            "name": "",
+            "type": "uint256"
+          },
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "name": "_legoId",
+            "type": "uint256"
+          },
+          {
+            "name": "_tokenIn",
+            "type": "address"
+          },
+          {
+            "name": "_tokenOut",
+            "type": "address"
+          },
+          {
+            "name": "_amountIn",
+            "type": "uint256"
+          },
+          {
+            "name": "_minAmountOut",
+            "type": "uint256"
+          },
+          {
+            "name": "_pool",
+            "type": "address"
+          },
+          {
             "components": [
               {
                 "name": "signature",
@@ -15458,6 +15512,10 @@
               {
                 "name": "altAmount",
                 "type": "uint256"
+              },
+              {
+                "name": "pool",
+                "type": "address"
               }
             ],
             "name": "_instructions",
@@ -15621,7 +15679,7 @@
         "type": "constructor"
       }
     ],
-    "address": "0x92aF90e71fEa18bF7C26De3d77B378ec889f0c81",
+    "address": "0x4eb6E21937cFC3c8351dE7f2124c8A250B6eAd68",
     "path": "contracts/core/WalletFunds.vy"
   }
 }
