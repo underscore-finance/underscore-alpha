@@ -152,12 +152,10 @@ def swapTokens(
     # perform swap
     toAmount: uint256 = 0
     if _pool != empty(address):
-        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _recipient)
+        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     else:
         toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
-
     assert toAmount != 0 # dev: no tokens swapped
-    assert toAmount >= _minAmountOut # dev: insufficient output
 
     # refund if full swap didn't get through
     currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -183,11 +181,13 @@ def _swapTokensInPool(
     _tokenIn: address,
     _tokenOut: address,
     _amountIn: uint256,
+    _minAmountOut: uint256,
     _recipient: address,
 ) -> uint256:
     tokens: address[2] = [staticcall UniV3Pool(_pool).token0(), staticcall UniV3Pool(_pool).token1()]
     assert _tokenIn in tokens # dev: invalid tokenIn
     assert _tokenOut in tokens # dev: invalid tokenOut
+    assert _tokenIn != _tokenOut # dev: cannot use same token
 
     # params
     zeroForOne: bool = True
@@ -214,6 +214,8 @@ def _swapTokensInPool(
         toAmount = convert(-amount1, uint256)
     else:
         toAmount = convert(-amount0, uint256)
+
+    assert toAmount >= _minAmountOut # dev: insufficient output
     return toAmount
 
 

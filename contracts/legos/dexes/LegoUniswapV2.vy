@@ -8,6 +8,12 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
+interface IUniswapV2Pair:
+    def swap(_amount0Out: uint256, _amount1Out: uint256, _to: address, _data: Bytes[256]): nonpayable
+    def getReserves() -> (uint112, uint112, uint32): view
+    def token0() -> address: view
+    def token1() -> address: view
+
 interface UniV2Router:
     def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[address, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
 
@@ -101,8 +107,6 @@ def swapTokens(
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
 
-    assert staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut) != empty(address) # dev: no pool found
-
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
 
@@ -110,16 +114,15 @@ def swapTokens(
     transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
     assert transferAmount != 0 # dev: nothing to transfer
     assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
 
-    # swap assets via lego partner
-    swapRouter: address = UNISWAP_V2_ROUTER
-    fromAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
-    assert extcall IERC20(_tokenIn).approve(swapRouter, fromAmount, default_return_value=True) # dev: approval failed
-    amounts: DynArray[uint256, MAX_ASSETS] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(fromAmount, _minAmountOut, [_tokenIn, _tokenOut], _recipient, block.timestamp)
-    
-    toAmount: uint256 = amounts[1]
+    # perform swap
+    toAmount: uint256 = 0
+    if _pool != empty(address):
+        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+    else:
+        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     assert toAmount != 0 # dev: no tokens swapped
-    assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
 
     # refund if full swap didn't get through
     currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -127,12 +130,101 @@ def swapTokens(
     if currentLegoBalance > preLegoBalance:
         refundAssetAmount = currentLegoBalance - preLegoBalance
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        swapAmount -= refundAssetAmount
 
-    actualSwapAmount: uint256 = fromAmount - refundAssetAmount
-    usdValue: uint256 = self._getUsdValue(_tokenIn, actualSwapAmount, _tokenOut, toAmount, _oracleRegistry)
+    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, _oracleRegistry)
+    log UniswapV2Swap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
+    return swapAmount, toAmount, refundAssetAmount, usdValue
 
-    log UniswapV2Swap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, usdValue, _recipient)
-    return actualSwapAmount, toAmount, refundAssetAmount, usdValue
+
+################
+# Swap In Pool #
+################
+
+
+@internal
+def _swapTokensInPool(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+) -> uint256:
+    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
+    assert _tokenIn in tokens # dev: invalid tokenIn
+    assert _tokenOut in tokens # dev: invalid tokenOut
+    assert _tokenIn != _tokenOut # dev: cannot use same token
+
+    zeroForOne: bool = _tokenIn == tokens[0]
+    preRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
+
+    # get reserves
+    reserve0: uint112 = 0
+    reserve1: uint112 = 0
+    na: uint32 = 0
+    reserve0, reserve1, na = staticcall IUniswapV2Pair(_pool).getReserves()
+
+    # determine reserves based on input and output tokens
+    reserveIn: uint112 = reserve1
+    reserveOut: uint112 = reserve0
+    if zeroForOne:
+        reserveIn = reserve0
+        reserveOut = reserve1
+
+    # finalize amount outs
+    amountOut: uint256 = self._getAmountOut(_amountIn, convert(reserveIn, uint256), convert(reserveOut, uint256))
+    assert amountOut >= _minAmountOut # dev: insufficient output
+
+    amount0Out: uint256 = amountOut
+    amount1Out: uint256 = 0
+    if zeroForOne:
+        amount0Out = 0
+        amount1Out = amountOut
+
+    # perform swap
+    assert extcall IERC20(_tokenIn).transfer(_pool, _amountIn, default_return_value=True) # dev: transfer failed
+    extcall IUniswapV2Pair(_pool).swap(amount0Out, amount1Out, _recipient, b"")
+
+    # get post-swap recipient balance
+    toAmount: uint256 = 0
+    postRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
+    if postRecipientBalance > preRecipientBalance:
+        toAmount = postRecipientBalance - preRecipientBalance
+
+    assert toAmount == amountOut # dev: incorrect amount out
+    return toAmount
+
+
+@view
+@internal
+def _getAmountOut(_amountIn: uint256, _reserveIn: uint256, _reserveOut: uint256) -> uint256:
+    amountInWithFee: uint256 = _amountIn * 997 # 1000 - 3 (0.3% fee)
+    numerator: uint256 = amountInWithFee * _reserveOut
+    denominator: uint256 = (_reserveIn * 1000) + amountInWithFee
+    return numerator // denominator
+
+
+################
+# Swap Generic #
+################
+
+
+@internal
+def _swapTokensGeneric(
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256, 
+    _recipient: address,
+) -> uint256:
+    assert staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut) != empty(address) # dev: no pool found
+
+    swapRouter: address = UNISWAP_V2_ROUTER
+    assert extcall IERC20(_tokenIn).approve(swapRouter, _amountIn, default_return_value=True) # dev: approval failed
+    amounts: DynArray[uint256, MAX_ASSETS] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, [_tokenIn, _tokenOut], _recipient, block.timestamp)
+    assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
+    return amounts[1]
 
 
 #################
