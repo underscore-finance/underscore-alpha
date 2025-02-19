@@ -1,5 +1,6 @@
 # @version 0.4.0
 
+implements: IUniswapV3Callback
 implements: LegoDex
 initializes: gov
 exports: gov.__interface__
@@ -12,10 +13,13 @@ interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface UniV3Pool:
-    def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[1024]) -> (int256, int256): nonpayable
+    def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[256]) -> (int256, int256): nonpayable
     def liquidity() -> uint128: view
     def token0() -> address: view
     def token1() -> address: view
+
+interface IUniswapV3Callback:
+    def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
 
 interface UniV3Factory:
     def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view
@@ -34,6 +38,11 @@ struct ExactInputSingleParams:
     amountIn: uint256
     amountOutMinimum: uint256
     sqrtPriceLimitX96: uint160
+
+struct PoolSwapData:
+    pool: address
+    tokenIn: address
+    amountIn: uint256
 
 event UniswapV3Swap:
     sender: indexed(address)
@@ -64,6 +73,9 @@ event UniswapV3LegoIdSet:
 
 event UniswapV3Activated:
     isActivated: bool
+
+# transient
+poolSwapData: transient(PoolSwapData)
 
 # config
 legoId: public(uint256)
@@ -184,21 +196,34 @@ def _swapTokensInPool(
         zeroForOne = False
         sqrtPriceLimitX96 = MAX_SQRT_RATIO_MINUS_ONE
 
+    # save in transient storage (for use in callback)
+    self.poolSwapData = PoolSwapData(
+        pool=_pool,
+        tokenIn=_tokenIn,
+        amountIn=_amountIn,
+    )
+
     # perform swap
     amount0: int256 = 0
     amount1: int256 = 0
-    assert extcall IERC20(_tokenIn).approve(_pool, _amountIn, default_return_value=True) # dev: approval failed
-    amount0, amount1 = extcall UniV3Pool(_pool).swap(_recipient, zeroForOne, convert(_amountIn, int256), sqrtPriceLimitX96, empty(Bytes[1024]))
+    amount0, amount1 = extcall UniV3Pool(_pool).swap(_recipient, zeroForOne, convert(_amountIn, int256), sqrtPriceLimitX96, b"")
 
     # check swap results
     toAmount: uint256 = 0
     if zeroForOne:
-        toAmount = convert(amount1, uint256)
+        toAmount = convert(-amount1, uint256)
     else:
-        toAmount = convert(amount0, uint256)
-
-    assert extcall IERC20(_tokenIn).approve(_pool, 0, default_return_value=True) # dev: approval failed
+        toAmount = convert(-amount0, uint256)
     return toAmount
+
+
+@external
+def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]):
+    poolSwapData: PoolSwapData = self.poolSwapData
+    assert msg.sender == poolSwapData.pool # dev: no perms
+
+    # transfer tokens to pool
+    assert extcall IERC20(poolSwapData.tokenIn).transfer(poolSwapData.pool, poolSwapData.amountIn, default_return_value=True) # dev: transfer failed
 
 
 ################

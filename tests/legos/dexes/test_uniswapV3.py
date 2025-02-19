@@ -117,3 +117,24 @@ def test_uniswapV3_swap_max_with_pool(
 
     pool = getPool(token_str)
     testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
+
+
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_uniswapV3_swap_partial_with_pool(
+    token_str,
+    testLegoSwap,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_uniswap_v3,
+    getToToken,
+    getPool,
+):
+    # setup
+    fromAsset, whale = getTokenAndWhale(token_str)
+    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+    toToken = getToToken(token_str)
+
+    pool = getPool(token_str)
+    testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)

@@ -630,6 +630,7 @@ def _swapTokens(
     legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
     assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
+    assert _tokenIn != _tokenOut # dev: invalid tokens
 
     # finalize amount
     swapAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenIn, _amountIn, True, _cd)
@@ -637,7 +638,7 @@ def _swapTokens(
 
     # check if vault token of trial funds asset
     isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_tokenIn, _cd.trialFundsAsset, _cd.legoRegistry)
-    
+
     # swap assets via lego partner
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
