@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import EIGHTEEN_DECIMALS, MAX_UINT256
+from constants import EIGHTEEN_DECIMALS, MAX_UINT256, ZERO_ADDRESS
 
 
 #########
@@ -104,11 +104,11 @@ def test_swap_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, alp
     bravo_token.transfer(mock_lego_alpha.address, deposit_amount, sender=bravo_token_whale)
 
     # signature
-    signature = signSwap(ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0)
+    signature = signSwap(ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS)
 
     # swap
     actualSwapAmount, toAmount, usdValue = ai_wallet.swapTokens(
-        lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, signature, sender=broadcaster)
+        lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS, signature, sender=broadcaster)
     
     # swap
     log = filter_logs(ai_wallet, "AgenticSwap")[0]
