@@ -488,13 +488,13 @@ def test_batch_actions(ai_wallet, ai_wallet_config, owner, agent, mock_lego_alph
     # Create batch instructions
     instructions = [
         # Deposit
-        (DEPOSIT_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),  # ActionType.DEPOSIT = 0
+        (DEPOSIT_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.DEPOSIT = 0
         # Withdrawal
-        (WITHDRAWAL_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),  # ActionType.WITHDRAWAL = 1
+        (WITHDRAWAL_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.WITHDRAWAL = 1
         # Rebalance
-        (REBALANCE_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, alt_lego_id, alpha_token_erc4626_vault_another, ZERO_ADDRESS, 0),  # ActionType.REBALANCE = 2
+        (REBALANCE_UINT256, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, alt_lego_id, alpha_token_erc4626_vault_another, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.REBALANCE = 2
         # Transfer
-        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, MAX_UINT256, sally, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),  # ActionType.TRANSFER = 3
+        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, MAX_UINT256, sally, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),  # ActionType.TRANSFER = 3
     ]
 
     # Test batch actions by owner

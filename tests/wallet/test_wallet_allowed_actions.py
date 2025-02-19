@@ -101,9 +101,9 @@ def test_allowed_actions_batch_operations(ai_wallet, ai_wallet_config, owner, ag
     # Create batch instructions with mix of allowed and disallowed actions
     instructions = [
         # Deposit (allowed)
-        (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),
+        (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
         # Withdrawal (not allowed)
-        (WITHDRAWAL_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),
+        (WITHDRAWAL_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
     ]
 
     # Test batch operations fail if any action is not allowed
@@ -113,9 +113,9 @@ def test_allowed_actions_batch_operations(ai_wallet, ai_wallet_config, owner, ag
     # Test batch operations with only allowed actions
     allowed_instructions = [
         # Deposit (allowed)
-        (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),
+        (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
         # Transfer (allowed)
-        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, amount // 2, sally, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0),
+        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, amount // 2, sally, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
     ]
 
     assert ai_wallet.performManyActions(allowed_instructions, sender=agent) 

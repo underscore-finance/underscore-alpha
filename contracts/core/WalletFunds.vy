@@ -83,6 +83,7 @@ struct ActionInstruction:
     altVault: address
     altAsset: address
     altAmount: uint256
+    pool: address
 
 event AgenticDeposit:
     signer: indexed(address)
@@ -116,6 +117,7 @@ event AgenticSwap:
     tokenOut: indexed(address)
     swapAmount: uint256
     toAmount: uint256
+    pool: address
     refundAssetAmount: uint256
     usdValue: uint256
     legoId: uint256
@@ -198,7 +200,7 @@ DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string
 DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
-SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,uint256 expiration)')
+SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
 WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
@@ -580,6 +582,7 @@ def swapTokens(
     _tokenOut: address,
     _amountIn: uint256 = max_value(uint256),
     _minAmountOut: uint256 = 0,
+    _pool: address = empty(address),
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256):
     """
@@ -590,6 +593,7 @@ def swapTokens(
     @param _tokenOut The address of the token to swap to
     @param _amountIn The amount of input tokens to swap (defaults to max balance)
     @param _minAmountOut The minimum amount of output tokens to receive (defaults to 0)
+    @param _pool The pool address to use for swapping (optional)
     @param _sig The signature of agent or owner (optional)
     @return uint256 The actual amount of input tokens swapped
     @return uint256 The amount of output tokens received
@@ -598,14 +602,14 @@ def swapTokens(
     cd: CoreData = self._getCoreData()
 
     # check permissions / subscription data
-    signer: address = self._getSignerOnSwap(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _sig)
+    signer: address = self._getSignerOnSwap(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _sig)
     isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId], cd)
 
     # swap
     actualSwapAmount: uint256 = 0
     toAmount: uint256 = 0
     usdValue: uint256 = 0
-    actualSwapAmount, toAmount, usdValue = self._swapTokens(signer, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, isSignerAgent, cd)
+    actualSwapAmount, toAmount, usdValue = self._swapTokens(signer, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, isSignerAgent, cd)
 
     self._handleTransactionFees(signer, isSignerAgent, ActionType.SWAP, usdValue, cd)
     return actualSwapAmount, toAmount, usdValue
@@ -618,7 +622,8 @@ def _swapTokens(
     _tokenIn: address,
     _tokenOut: address,
     _amountIn: uint256,
-    _minAmountOut: uint256, 
+    _minAmountOut: uint256,
+    _pool: address,
     _isSignerAgent: bool,
     _cd: CoreData,
 ) -> (uint256, uint256, uint256):
@@ -637,13 +642,13 @@ def _swapTokens(
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, self)
+    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, self)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # make sure they still have enough trial funds
     self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
     
-    log AgenticSwap(_signer, _tokenIn, _tokenOut, swapAmount, toAmount, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    log AgenticSwap(_signer, _tokenIn, _tokenOut, swapAmount, toAmount, _pool, refundAssetAmount, usdValue, _legoId, legoAddr, msg.sender, _isSignerAgent)
     return swapAmount, toAmount, usdValue
 
 
@@ -654,13 +659,14 @@ def _getSignerOnSwap(
     _tokenOut: address,
     _amountIn: uint256,
     _minAmountOut: uint256,
+    _pool: address,
     _sig: Signature,
 ) -> address:
     if _sig.signer == empty(address) or _sig.signature == empty(Bytes[65]):
         return msg.sender
 
     # check if signature is valid
-    self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _sig.expiration), _sig)
+    self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _sig.expiration), _sig)
 
     return _sig.signer
 
@@ -958,7 +964,7 @@ def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIO
         elif instruction.action == ActionType.SWAP:
             if isSignerAgent:
                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(signer, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, naValueB, usdValue = self._swapTokens(signer, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, isSignerAgent, cd)
+            naValueA, naValueB, usdValue = self._swapTokens(signer, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, instruction.pool, isSignerAgent, cd)
             if isSignerAgent and usdValue != 0:
                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, signer, ActionType.SWAP, usdValue, cd.priceSheets, cd.oracleRegistry)
 
