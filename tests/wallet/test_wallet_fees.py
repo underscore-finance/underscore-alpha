@@ -390,7 +390,7 @@ def test_subscription_state_transitions(new_ai_wallet, new_ai_wallet_config, age
     assert protocol_log.amount == 12 * EIGHTEEN_DECIMALS
 
 
-def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, agent):
+def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, agent):
     """Test protocol transaction fees"""
     # Remove agent pricing to isolate protocol fees
     assert price_sheets.setAgentTxPricingEnabled(False, sender=governor)
@@ -458,7 +458,8 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     pre_protocol_wallet = new_protocol_wallet
     
     # Test swap fee (2.50%)
-    a, b, c = new_ai_wallet.swapTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token, 100 * EIGHTEEN_DECIMALS, sender=agent)
+    bravo_token.transfer(mock_lego_alpha.address, 1000 * EIGHTEEN_DECIMALS, sender=bravo_token_whale)
+    a, b, c = new_ai_wallet.swapTokens(mock_lego_alpha.legoId(), alpha_token, bravo_token, 100 * EIGHTEEN_DECIMALS, sender=agent)
     log = filter_logs(new_ai_wallet, "TransactionFeePaid")[0]
     assert log.action == SWAP_UINT256  # SWAP
     assert log.asset == alpha_token.address
@@ -470,7 +471,7 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     assert new_protocol_wallet == pre_protocol_wallet + log.amount
 
 
-def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, agent):
+def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, agent):
     """Test agent transaction fees"""
     # Remove protocol pricing to isolate agent fees
     assert price_sheets.removeProtocolTxPriceSheet(sender=governor)
@@ -538,7 +539,8 @@ def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alph
     pre_agent_wallet = new_agent_wallet
 
     # Test swap fee (5.00%)
-    a, b, c = new_ai_wallet.swapTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token, 100 * EIGHTEEN_DECIMALS, sender=agent)
+    bravo_token.transfer(mock_lego_alpha.address, 1000 * EIGHTEEN_DECIMALS, sender=bravo_token_whale)
+    a, b, c = new_ai_wallet.swapTokens(mock_lego_alpha.legoId(), alpha_token, bravo_token, 100 * EIGHTEEN_DECIMALS, sender=agent)
     log = filter_logs(new_ai_wallet, "TransactionFeePaid")[0]
     assert log.action == SWAP_UINT256  # SWAP
     assert log.isAgent
