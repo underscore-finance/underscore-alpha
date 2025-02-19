@@ -151,6 +151,7 @@ def signSwap(agent_signer):
         _tokenOut,
         _amountIn,
         _minAmountOut,
+        _pool,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -168,6 +169,7 @@ def signSwap(agent_signer):
                     {"name": "tokenOut", "type": "address"},
                     {"name": "amountIn", "type": "uint256"},
                     {"name": "minAmountOut", "type": "uint256"},
+                    {"name": "pool", "type": "address"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
@@ -177,6 +179,7 @@ def signSwap(agent_signer):
                 "tokenOut": _tokenOut,
                 "amountIn": _amountIn,
                 "minAmountOut": _minAmountOut,
+                "pool": _pool,
                 "expiration": _expiration,
             }
         }

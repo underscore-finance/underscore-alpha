@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import MAX_UINT256
+from constants import MAX_UINT256, ZERO_ADDRESS
 from conf_utils import filter_logs
 from conf_tokens import TEST_AMOUNTS
 
@@ -129,7 +129,8 @@ def testLegoSwap(bob_ai_wallet, bob_agent, lego_registry, _test):
         _tokenIn,
         _tokenOut,
         _amountIn = MAX_UINT256,
-        _minAmountOut = 0, 
+        _minAmountOut = 0,
+        _pool = ZERO_ADDRESS,
     ):
         # pre balances
         pre_user_from_bal = _tokenIn.balanceOf(bob_ai_wallet)
@@ -140,7 +141,7 @@ def testLegoSwap(bob_ai_wallet, bob_agent, lego_registry, _test):
         pre_lego_to_bal = _tokenOut.balanceOf(lego_addr)
 
         # swap
-        fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(_legoId, _tokenIn.address, _tokenOut.address, _amountIn, _minAmountOut, sender=bob_agent)
+        fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(_legoId, _tokenIn.address, _tokenOut.address, _amountIn, _minAmountOut, _pool, sender=bob_agent)
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticSwap")[0]
@@ -149,6 +150,7 @@ def testLegoSwap(bob_ai_wallet, bob_agent, lego_registry, _test):
         assert log_wallet.tokenOut == _tokenOut.address
         assert log_wallet.swapAmount == fromSwapAmount
         assert log_wallet.toAmount == toAmount
+        assert log_wallet.pool == _pool
         assert log_wallet.legoId == _legoId
         assert log_wallet.legoAddr == lego_addr
         assert log_wallet.isSignerAgent == True

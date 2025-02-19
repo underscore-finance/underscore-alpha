@@ -11,6 +11,12 @@ from interfaces import LegoDex
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
+interface UniV3Pool:
+    def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[1024]) -> (int256, int256): nonpayable
+    def liquidity() -> uint128: view
+    def token0() -> address: view
+    def token1() -> address: view
+
 interface UniV3Factory:
     def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view
 
@@ -19,9 +25,6 @@ interface UniV3SwapRouter:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-
-interface UniV3Pool:
-    def liquidity() -> uint128: view
 
 struct ExactInputSingleParams:
     tokenIn: address
@@ -36,6 +39,16 @@ event UniswapV3Swap:
     sender: indexed(address)
     tokenIn: indexed(address)
     tokenOut: indexed(address)
+    amountIn: uint256
+    amountOut: uint256
+    usdValue: uint256
+    recipient: address
+
+event UniswapV3SwapInPool:
+    sender: indexed(address)
+    pool: indexed(address)
+    tokenIn: indexed(address)
+    tokenOut: address
     amountIn: uint256
     amountOut: uint256
     usdValue: uint256
@@ -61,6 +74,8 @@ UNISWAP_V3_FACTORY: public(immutable(address))
 UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
 
 FEE_TIERS: constant(uint24[4]) = [100, 500, 3000, 10000] # 0.01%, 0.05%, 0.3%, 1%
+MIN_SQRT_RATIO_PLUS_ONE: constant(uint160) = 4295128740
+MAX_SQRT_RATIO_MINUS_ONE: constant(uint160) = 1461446703485210103287273052203988822378723970341
 
 
 @deploy
@@ -101,6 +116,96 @@ def _getUsdValue(
 ########
 
 
+@external
+def swapTokens(
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _pool: address,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
+    # pre balances
+    preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+
+    # transfer deposit asset to this contract
+    transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
+    assert transferAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
+
+    # perform swap
+    toAmount: uint256 = 0
+    if _pool != empty(address):
+        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _recipient)
+    else:
+        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+
+    assert toAmount != 0 # dev: no tokens swapped
+    assert toAmount >= _minAmountOut # dev: insufficient output
+
+    # refund if full swap didn't get through
+    currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+    refundAssetAmount: uint256 = 0
+    if currentLegoBalance > preLegoBalance:
+        refundAssetAmount = currentLegoBalance - preLegoBalance
+        assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        swapAmount -= refundAssetAmount
+
+    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, _oracleRegistry)
+    log UniswapV3SwapInPool(msg.sender, _pool, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
+    return swapAmount, toAmount, refundAssetAmount, usdValue
+
+
+################
+# Swap In Pool #
+################
+
+
+@internal
+def _swapTokensInPool(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _recipient: address,
+) -> uint256:
+    tokens: address[2] = [staticcall UniV3Pool(_pool).token0(), staticcall UniV3Pool(_pool).token1()]
+    assert _tokenIn in tokens # dev: invalid tokenIn
+    assert _tokenOut in tokens # dev: invalid tokenOut
+
+    # params
+    zeroForOne: bool = True
+    sqrtPriceLimitX96: uint160 = MIN_SQRT_RATIO_PLUS_ONE
+    if _tokenIn != tokens[0]:
+        zeroForOne = False
+        sqrtPriceLimitX96 = MAX_SQRT_RATIO_MINUS_ONE
+
+    # perform swap
+    amount0: int256 = 0
+    amount1: int256 = 0
+    assert extcall IERC20(_tokenIn).approve(_pool, _amountIn, default_return_value=True) # dev: approval failed
+    amount0, amount1 = extcall UniV3Pool(_pool).swap(_recipient, zeroForOne, convert(_amountIn, int256), sqrtPriceLimitX96, empty(Bytes[1024]))
+
+    # check swap results
+    toAmount: uint256 = 0
+    if zeroForOne:
+        toAmount = convert(amount1, uint256)
+    else:
+        toAmount = convert(amount0, uint256)
+
+    assert extcall IERC20(_tokenIn).approve(_pool, 0, default_return_value=True) # dev: approval failed
+    return toAmount
+
+
+################
+# Swap Generic #
+################
+
+
 @view
 @internal
 def _getBestFeeTier(_tokenA: address, _tokenB: address) -> uint24:
@@ -120,58 +225,32 @@ def _getBestFeeTier(_tokenA: address, _tokenB: address) -> uint24:
     return bestFeeTier
 
 
-@external
-def swapTokens(
+@internal
+def _swapTokensGeneric(
     _tokenIn: address,
     _tokenOut: address,
     _amountIn: uint256,
     _minAmountOut: uint256, 
     _recipient: address,
-    _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256):
-    assert self.isActivated # dev: not activated
-
+) -> uint256:
     bestFeeTier: uint24 = self._getBestFeeTier(_tokenIn, _tokenOut)
     assert bestFeeTier != 0 # dev: no pool found
 
-    # pre balances
-    preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
-
-    # transfer deposit asset to this contract
-    transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
-    assert transferAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
-
-    # swap assets via lego partner
     swapRouter: address = UNISWAP_V3_SWAP_ROUTER
-    fromAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
-    assert extcall IERC20(_tokenIn).approve(swapRouter, fromAmount, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenIn).approve(swapRouter, _amountIn, default_return_value=True) # dev: approval failed
     toAmount: uint256 = extcall UniV3SwapRouter(swapRouter).exactInputSingle(
         ExactInputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
             fee=bestFeeTier,
             recipient=_recipient,
-            amountIn=fromAmount,
+            amountIn=_amountIn,
             amountOutMinimum=_minAmountOut,
             sqrtPriceLimitX96=0,
         )
     )
-    assert toAmount != 0 # dev: no tokens swapped
     assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
-
-    # refund if full swap didn't get through
-    currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
-    refundAssetAmount: uint256 = 0
-    if currentLegoBalance > preLegoBalance:
-        refundAssetAmount = currentLegoBalance - preLegoBalance
-        assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
-
-    actualSwapAmount: uint256 = fromAmount - refundAssetAmount
-    usdValue: uint256 = self._getUsdValue(_tokenIn, actualSwapAmount, _tokenOut, toAmount, _oracleRegistry)
-
-    log UniswapV3Swap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, usdValue, _recipient)
-    return actualSwapAmount, toAmount, refundAssetAmount, usdValue
+    return toAmount
 
 
 #################

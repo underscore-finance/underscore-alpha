@@ -94,7 +94,8 @@ def swapTokens(
     _tokenIn: address,
     _tokenOut: address,
     _amountIn: uint256,
-    _minAmountOut: uint256, 
+    _minAmountOut: uint256,
+    _pool: address,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
