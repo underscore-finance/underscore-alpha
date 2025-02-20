@@ -204,12 +204,17 @@ def mock_aave_v3_pool():
     return boa.load("contracts/mock/MockAaveV3Pool.vy", name="mock_aave_v3_pool")
 
 
-# mock pyth
+# mock pyth / stork
 
 
 @pytest.fixture(scope="session")
 def mock_pyth():
     return boa.load("contracts/mock/MockPyth.vy", name="mock_pyth")
+
+
+@pytest.fixture(scope="session")
+def mock_stork():
+    return boa.load("contracts/mock/MockStork.vy", name="mock_stork")
 
 
 @pytest.fixture
