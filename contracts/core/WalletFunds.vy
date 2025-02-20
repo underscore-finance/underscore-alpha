@@ -629,8 +629,6 @@ def _swapTokens(
 ) -> (uint256, uint256, uint256):
     legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
-    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
-    assert _tokenIn != _tokenOut # dev: invalid tokens
 
     # finalize amount
     swapAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenIn, _amountIn, True, _cd)

@@ -107,6 +107,9 @@ def swapTokens(
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
 
+    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
+    assert _tokenIn != _tokenOut # dev: invalid tokens
+
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
 
@@ -154,7 +157,6 @@ def _swapTokensInPool(
     tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
     assert _tokenIn in tokens # dev: invalid tokenIn
     assert _tokenOut in tokens # dev: invalid tokenOut
-    assert _tokenIn != _tokenOut # dev: cannot use same token
 
     zeroForOne: bool = _tokenIn == tokens[0]
     preRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
