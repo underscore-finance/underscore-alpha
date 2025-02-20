@@ -8,6 +8,12 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
+interface AeroSlipStreamPool:
+    def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[256]) -> (int256, int256): nonpayable
+    def liquidity() -> uint128: view
+    def token0() -> address: view
+    def token1() -> address: view
+
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
@@ -20,8 +26,10 @@ interface AeroSlipStreamRouter:
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
-interface AeroSlipStreamPool:
-    def liquidity() -> uint128: view
+struct PoolSwapData:
+    pool: address
+    tokenIn: address
+    amountIn: uint256
 
 struct ExactInputSingleParams:
     tokenIn: address
@@ -53,6 +61,9 @@ event AeroSlipStreamLegoIdSet:
 event AeroSlipStreamActivated:
     isActivated: bool
 
+# transient
+poolSwapData: transient(PoolSwapData)
+
 # config
 legoId: public(uint256)
 isActivated: public(bool)
@@ -62,6 +73,8 @@ AERO_SLIPSTREAM_FACTORY: public(immutable(address))
 AERO_SLIPSTREAM_ROUTER: public(immutable(address))
 
 TICK_SPACING: constant(int24[5]) = [1, 50, 100, 200, 2000]
+MIN_SQRT_RATIO_PLUS_ONE: constant(uint160) = 4295128740
+MAX_SQRT_RATIO_MINUS_ONE: constant(uint160) = 1461446703485210103287273052203988822378723970341
 
 
 @deploy
@@ -102,25 +115,6 @@ def _getUsdValue(
 ########
 
 
-@view
-@internal
-def _getBestTickSpacing(_tokenA: address, _tokenB: address) -> int24:
-    bestLiquidity: uint128 = 0
-    bestTickSpacing: int24 = 0
-
-    factory: address = AERO_SLIPSTREAM_FACTORY
-    for i: uint256 in range(5):
-        tickSpacing: int24 = TICK_SPACING[i]
-        pool: address = staticcall AeroSlipStreamFactory(factory).getPool(_tokenA, _tokenB, tickSpacing)
-        if pool != empty(address):
-            liquidity: uint128 = staticcall AeroSlipStreamPool(pool).liquidity()
-            if liquidity > bestLiquidity:
-                bestLiquidity = liquidity
-                bestTickSpacing = tickSpacing
-
-    return bestTickSpacing
-
-
 @external
 def swapTokens(
     _tokenIn: address,
@@ -133,8 +127,8 @@ def swapTokens(
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
 
-    bestTickSpacing: int24 = self._getBestTickSpacing(_tokenIn, _tokenOut)
-    assert bestTickSpacing != 0 # dev: no pool found
+    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
+    assert _tokenIn != _tokenOut # dev: invalid tokens
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -143,25 +137,15 @@ def swapTokens(
     transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
     assert transferAmount != 0 # dev: nothing to transfer
     assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
 
-    # swap assets via lego partner
-    swapRouter: address = AERO_SLIPSTREAM_ROUTER
-    fromAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
-    assert extcall IERC20(_tokenIn).approve(swapRouter, fromAmount, default_return_value=True) # dev: approval failed
-    toAmount: uint256 = extcall AeroSlipStreamRouter(swapRouter).exactInputSingle(
-        ExactInputSingleParams(
-            tokenIn=_tokenIn,
-            tokenOut=_tokenOut,
-            tickSpacing=bestTickSpacing,
-            recipient=_recipient,
-            deadline=block.timestamp,
-            amountIn=fromAmount,
-            amountOutMinimum=_minAmountOut,
-            sqrtPriceLimitX96=0,
-        )
-    )
+    # perform swap
+    toAmount: uint256 = 0
+    if _pool != empty(address):
+        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+    else:
+        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     assert toAmount != 0 # dev: no tokens swapped
-    assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
 
     # refund if full swap didn't get through
     currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -169,12 +153,121 @@ def swapTokens(
     if currentLegoBalance > preLegoBalance:
         refundAssetAmount = currentLegoBalance - preLegoBalance
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        swapAmount -= refundAssetAmount
 
-    actualSwapAmount: uint256 = fromAmount - refundAssetAmount
-    usdValue: uint256 = self._getUsdValue(_tokenIn, actualSwapAmount, _tokenOut, toAmount, _oracleRegistry)
+    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, _oracleRegistry)
+    log AeroSlipStreamSwap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
+    return swapAmount, toAmount, refundAssetAmount, usdValue
 
-    log AeroSlipStreamSwap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, usdValue, _recipient)
-    return actualSwapAmount, toAmount, refundAssetAmount, usdValue
+
+################
+# Swap In Pool #
+################
+
+
+@internal
+def _swapTokensInPool(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+) -> uint256:
+    tokens: address[2] = [staticcall AeroSlipStreamPool(_pool).token0(), staticcall AeroSlipStreamPool(_pool).token1()]
+    assert _tokenIn in tokens # dev: invalid tokenIn
+    assert _tokenOut in tokens # dev: invalid tokenOut
+
+    # params
+    zeroForOne: bool = True
+    sqrtPriceLimitX96: uint160 = MIN_SQRT_RATIO_PLUS_ONE
+    if _tokenIn != tokens[0]:
+        zeroForOne = False
+        sqrtPriceLimitX96 = MAX_SQRT_RATIO_MINUS_ONE
+
+    # save in transient storage (for use in callback)
+    self.poolSwapData = PoolSwapData(
+        pool=_pool,
+        tokenIn=_tokenIn,
+        amountIn=_amountIn,
+    )
+
+    # perform swap
+    amount0: int256 = 0
+    amount1: int256 = 0
+    amount0, amount1 = extcall AeroSlipStreamPool(_pool).swap(_recipient, zeroForOne, convert(_amountIn, int256), sqrtPriceLimitX96, b"")
+
+    # check swap results
+    toAmount: uint256 = 0
+    if zeroForOne:
+        toAmount = convert(-amount1, uint256)
+    else:
+        toAmount = convert(-amount0, uint256)
+
+    assert toAmount >= _minAmountOut # dev: insufficient output
+    return toAmount
+
+
+@external
+def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]):
+    poolSwapData: PoolSwapData = self.poolSwapData
+    assert msg.sender == poolSwapData.pool # dev: no perms
+
+    # transfer tokens to pool
+    assert extcall IERC20(poolSwapData.tokenIn).transfer(poolSwapData.pool, poolSwapData.amountIn, default_return_value=True) # dev: transfer failed
+
+
+################
+# Swap Generic #
+################
+
+
+@view
+@internal
+def _getBestTickSpacing(_tokenIn: address, _tokenOut: address) -> int24:
+    bestLiquidity: uint128 = 0
+    bestTickSpacing: int24 = 0
+
+    factory: address = AERO_SLIPSTREAM_FACTORY
+    for i: uint256 in range(5):
+        tickSpacing: int24 = TICK_SPACING[i]
+        pool: address = staticcall AeroSlipStreamFactory(factory).getPool(_tokenIn, _tokenOut, tickSpacing)
+        if pool != empty(address):
+            liquidity: uint128 = staticcall AeroSlipStreamPool(pool).liquidity()
+            if liquidity > bestLiquidity:
+                bestLiquidity = liquidity
+                bestTickSpacing = tickSpacing
+
+    return bestTickSpacing
+
+
+@internal
+def _swapTokensGeneric(
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256, 
+    _recipient: address,
+) -> uint256:
+    bestTickSpacing: int24 = self._getBestTickSpacing(_tokenIn, _tokenOut)
+    assert bestTickSpacing != 0 # dev: no pool found
+
+    swapRouter: address = AERO_SLIPSTREAM_ROUTER
+    assert extcall IERC20(_tokenIn).approve(swapRouter, _amountIn, default_return_value=True) # dev: approval failed
+    toAmount: uint256 = extcall AeroSlipStreamRouter(swapRouter).exactInputSingle(
+        ExactInputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            tickSpacing=bestTickSpacing,
+            recipient=_recipient,
+            deadline=block.timestamp,
+            amountIn=_amountIn,
+            amountOutMinimum=_minAmountOut,
+            sqrtPriceLimitX96=0,
+        )
+    )
+    assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
+    return toAmount
 
 
 #################
