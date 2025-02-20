@@ -8,6 +8,11 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
+interface AeroClassicPool:
+    def swap(_amount0Out: uint256, _amount1Out: uint256, _recipient: address, _data: Bytes[256]): nonpayable
+    def getAmountOut(_amountIn: uint256, _tokenIn: address) -> uint256: view
+    def tokens() -> (address, address): view
+
 interface AeroRouter:
     def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[Route, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
 
@@ -95,18 +100,6 @@ def _getUsdValue(
 ########
 
 
-@view
-@internal
-def _getBestPoolData(_tokenA: address, _tokenB: address, _factory: address) -> bool:
-    pool: address = staticcall AeroFactory(_factory).getPool(_tokenA, _tokenB, True)
-    if pool != empty(address):
-        return True
-
-    pool = staticcall AeroFactory(_factory).getPool(_tokenA, _tokenB, False)
-    assert pool != empty(address) # dev: no pool found
-    return False
-
-
 @external
 def swapTokens(
     _tokenIn: address,
@@ -119,8 +112,8 @@ def swapTokens(
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
 
-    factory: address = AERODROME_FACTORY
-    isStable: bool = self._getBestPoolData(_tokenIn, _tokenOut, factory)
+    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
+    assert _tokenIn != _tokenOut # dev: invalid tokens
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -129,22 +122,15 @@ def swapTokens(
     transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
     assert transferAmount != 0 # dev: nothing to transfer
     assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
 
-    # swap assets via lego partner
-    swapRouter: address = AERODROME_ROUTER
-    fromAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
-    assert extcall IERC20(_tokenIn).approve(swapRouter, fromAmount, default_return_value=True) # dev: approval failed
-    route: Route = Route(
-        from_=_tokenIn,
-        to=_tokenOut,
-        stable=isStable,
-        factory=factory,
-    )
-    amounts: DynArray[uint256, MAX_ASSETS] = extcall AeroRouter(swapRouter).swapExactTokensForTokens(fromAmount, _minAmountOut, [route], _recipient, block.timestamp)
-    
-    toAmount: uint256 = amounts[1]
+    # perform swap
+    toAmount: uint256 = 0
+    if _pool != empty(address):
+        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+    else:
+        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     assert toAmount != 0 # dev: no tokens swapped
-    assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
 
     # refund if full swap didn't get through
     currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -152,12 +138,102 @@ def swapTokens(
     if currentLegoBalance > preLegoBalance:
         refundAssetAmount = currentLegoBalance - preLegoBalance
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        swapAmount -= refundAssetAmount
 
-    actualSwapAmount: uint256 = fromAmount - refundAssetAmount
-    usdValue: uint256 = self._getUsdValue(_tokenIn, actualSwapAmount, _tokenOut, toAmount, _oracleRegistry)
+    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, _oracleRegistry)
+    log AerodromeSwap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
+    return swapAmount, toAmount, refundAssetAmount, usdValue
 
-    log AerodromeSwap(msg.sender, _tokenIn, _tokenOut, actualSwapAmount, toAmount, usdValue, _recipient)
-    return actualSwapAmount, toAmount, refundAssetAmount, usdValue
+
+################
+# Swap In Pool #
+################
+
+
+@internal
+def _swapTokensInPool(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+) -> uint256:
+    token0: address = empty(address)
+    token1: address = empty(address)
+    token0, token1 = staticcall AeroClassicPool(_pool).tokens()
+
+    tokens: address[2] = [token0, token1]
+    assert _tokenIn in tokens # dev: invalid tokenIn
+    assert _tokenOut in tokens # dev: invalid tokenOut
+
+    zeroForOne: bool = _tokenIn == token0
+    preRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
+
+    # finalize amount out
+    amountOut: uint256 = staticcall AeroClassicPool(_pool).getAmountOut(_amountIn, _tokenIn)
+    assert amountOut >= _minAmountOut # dev: insufficient output
+
+    amount0Out: uint256 = amountOut
+    amount1Out: uint256 = 0
+    if zeroForOne:
+        amount0Out = 0
+        amount1Out = amountOut
+
+    # perform swap
+    assert extcall IERC20(_tokenIn).transfer(_pool, _amountIn, default_return_value=True) # dev: transfer failed
+    extcall AeroClassicPool(_pool).swap(amount0Out, amount1Out, _recipient, b"")
+
+    # get post-swap recipient balance
+    toAmount: uint256 = 0
+    postRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
+    if postRecipientBalance > preRecipientBalance:
+        toAmount = postRecipientBalance - preRecipientBalance
+
+    assert toAmount == amountOut # dev: incorrect amount out
+    return toAmount
+
+
+################
+# Swap Generic #
+################
+
+
+@internal
+def _swapTokensGeneric(
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256, 
+    _recipient: address,
+) -> uint256:
+    factory: address = AERODROME_FACTORY
+    swapRouter: address = AERODROME_ROUTER
+    assert extcall IERC20(_tokenIn).approve(swapRouter, _amountIn, default_return_value=True) # dev: approval failed
+
+    # perform swap
+    route: Route = Route(
+        from_=_tokenIn,
+        to=_tokenOut,
+        stable=self._isStablePair(_tokenIn, _tokenOut, factory),
+        factory=factory,
+    )
+    amounts: DynArray[uint256, MAX_ASSETS] = extcall AeroRouter(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, [route], _recipient, block.timestamp)
+
+    assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
+    return amounts[1]
+
+
+@view
+@internal
+def _isStablePair(_tokenA: address, _tokenB: address, _factory: address) -> bool:
+    pool: address = staticcall AeroFactory(_factory).getPool(_tokenA, _tokenB, True)
+    if pool != empty(address):
+        return True
+
+    pool = staticcall AeroFactory(_factory).getPool(_tokenA, _tokenB, False)
+    assert pool != empty(address) # dev: no pool found
+    return False
 
 
 #################

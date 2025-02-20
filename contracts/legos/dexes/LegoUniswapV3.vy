@@ -9,9 +9,6 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
-interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
-
 interface UniV3Pool:
     def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[256]) -> (int256, int256): nonpayable
     def liquidity() -> uint128: view
@@ -20,6 +17,9 @@ interface UniV3Pool:
 
 interface IUniswapV3Callback:
     def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
+
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface UniV3Factory:
     def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view

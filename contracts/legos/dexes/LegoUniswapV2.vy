@@ -9,7 +9,7 @@ from ethereum.ercs import IERC20
 from interfaces import LegoDex
 
 interface IUniswapV2Pair:
-    def swap(_amount0Out: uint256, _amount1Out: uint256, _to: address, _data: Bytes[256]): nonpayable
+    def swap(_amount0Out: uint256, _amount1Out: uint256, _recipient: address, _data: Bytes[256]): nonpayable
     def getReserves() -> (uint112, uint112, uint32): view
     def token0() -> address: view
     def token1() -> address: view
