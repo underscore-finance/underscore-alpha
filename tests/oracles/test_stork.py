@@ -21,37 +21,28 @@ def new_oracle_stork(addy_registry, mock_stork, fork):
 
 
 @pytest.base
-def test_stork_basic(new_oracle_stork):
-    data_feed_id = bytes.fromhex("7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c") # usdc
-    data = new_oracle_stork.debugStork(data_feed_id)
-    print("stork data: ", data)
-
-    assert True == False
-
-
-@pytest.base
 def test_set_stork_feed(
     new_oracle_stork,
     bob,
     governor,
     fork,
 ):
-    usdc = TOKENS["usdc"][fork]
-    data_feed_id = bytes.fromhex("7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c")
+    cbbtc = TOKENS["cbbtc"][fork]
+    data_feed_id = bytes.fromhex("7404e3d104ea7841c3d9e6fd20adfe99b4ad586bc08d8f3bd3afef894cf184de") # btc
 
     # no perms
     with boa.reverts("no perms"):
-        new_oracle_stork.setStorkFeed(usdc, data_feed_id, sender=bob)
+        new_oracle_stork.setStorkFeed(cbbtc, data_feed_id, sender=bob)
 
     # set feed
-    new_oracle_stork.setStorkFeed(usdc, data_feed_id, sender=governor)
+    new_oracle_stork.setStorkFeed(cbbtc, data_feed_id, sender=governor)
 
     log = filter_logs(new_oracle_stork, 'StorkFeedAdded')[0]
-    assert log.asset == usdc
+    assert log.asset == cbbtc
     assert log.feedId == data_feed_id
 
-    assert new_oracle_stork.feedConfig(usdc) == data_feed_id
-    assert int(1.02 * 10 ** 18) > new_oracle_stork.getPrice(usdc) > int(0.98 * 10 ** 18)
+    assert new_oracle_stork.feedConfig(cbbtc) == data_feed_id
+    assert int(102_000 * 10 ** 18) > new_oracle_stork.getPrice(cbbtc) > int(97_000 * 10 ** 18)
 
 
 @pytest.base
@@ -60,19 +51,19 @@ def test_disable_stork_feed(
     governor,
     fork,
 ):
-    usdc = TOKENS["usdc"][fork]
-    data_feed_id = bytes.fromhex("7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c")
-    new_oracle_stork.setStorkFeed(usdc, data_feed_id, sender=governor)
-    assert new_oracle_stork.getPrice(usdc) != 0
+    cbbtc = TOKENS["cbbtc"][fork]
+    data_feed_id = bytes.fromhex("7404e3d104ea7841c3d9e6fd20adfe99b4ad586bc08d8f3bd3afef894cf184de") # btc
+    new_oracle_stork.setStorkFeed(cbbtc, data_feed_id, sender=governor)
+    assert new_oracle_stork.getPrice(cbbtc) != 0
 
     # disable feed
-    assert new_oracle_stork.disableStorkPriceFeed(usdc, sender=governor)
+    assert new_oracle_stork.disableStorkPriceFeed(cbbtc, sender=governor)
 
     log = filter_logs(new_oracle_stork, 'StorkFeedDisabled')[0]
-    assert log.asset == usdc
+    assert log.asset == cbbtc
 
-    assert new_oracle_stork.feedConfig(usdc) == bytes.fromhex("00" * 32)
-    assert new_oracle_stork.getPrice(usdc) == 0
+    assert new_oracle_stork.feedConfig(cbbtc) == bytes.fromhex("00" * 32)
+    assert new_oracle_stork.getPrice(cbbtc) == 0
 
 
 def test_local_update_prices(

@@ -139,12 +139,6 @@ def updateStorkPrices(_payloads: DynArray[Bytes[2048], MAX_PRICE_UPDATES]):
 #####################
 
 
-@view
-@external
-def debugStork(_feedId: bytes32) -> TemporalNumericValue:
-    return staticcall StorkNetwork(STORK).getTemporalNumericValueUnsafeV1(_feedId)
-
-
 # set price feed
 
 
