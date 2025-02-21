@@ -327,7 +327,8 @@ def addLiquidity(
     _tokenB: address,
     _amountA: uint256,
     _amountB: uint256,
-    _minAmountOut: uint256,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256, uint256, uint256):

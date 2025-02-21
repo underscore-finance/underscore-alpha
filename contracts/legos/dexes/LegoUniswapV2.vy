@@ -266,7 +266,8 @@ def addLiquidity(
     _tokenB: address,
     _amountA: uint256,
     _amountB: uint256,
-    _minAmountOut: uint256,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256, uint256, uint256):
@@ -303,13 +304,12 @@ def addLiquidity(
         _tokenB,
         liqAmountA,
         liqAmountB,
-        0,
-        0,
+        _minAmountA,
+        _minAmountB,
         _recipient,
         block.timestamp,
     )
     assert lpAmountReceived != 0 # dev: no liquidity added
-    assert lpAmountReceived >= _minAmountOut # dev: insufficient liquidity added
 
     # reset approvals
     assert extcall IERC20(_tokenA).approve(swapRouter, 0, default_return_value=True) # dev: approval failed

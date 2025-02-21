@@ -62,6 +62,11 @@ struct TxCostInfo:
     amount: uint256
     usdValue: uint256
 
+struct Signature:
+    signature: Bytes[65]
+    signer: address
+    expiration: uint256
+
 struct ProtocolSub:
     installBlock: uint256
     paidThroughBlock: uint256
@@ -156,6 +161,11 @@ MAX_LEGOS: constant(uint256) = 20
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
+
+# eip-712
+usedSignatures: public(HashMap[Bytes[65], bool])
+ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
+DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
 
 
 @deploy
@@ -880,3 +890,53 @@ def recoverFunds(_asset: address) -> bool:
     assert extcall IERC20(_asset).transfer(wallet, balance, default_return_value=True) # dev: recovery failed
     log FundsRecovered(_asset, wallet, balance)
     return True
+
+
+###########
+# EIP 712 #
+###########
+
+
+@view
+@external
+def DOMAIN_SEPARATOR() -> bytes32:
+    return self._domainSeparator()
+
+
+@view
+@internal
+def _domainSeparator() -> bytes32:
+    return keccak256(
+        concat(
+            DOMAIN_TYPE_HASH,
+            keccak256('AgenticWallet'),
+            keccak256(API_VERSION),
+            abi_encode(chain.id, self)
+        )
+    )
+
+
+@external
+def isValidSignature(_encodedValue: Bytes[512], _sig: Signature):
+    assert msg.sender == self.wallet # dev: no perms
+
+    assert not self.usedSignatures[_sig.signature] # dev: signature already used
+    assert _sig.expiration >= block.timestamp # dev: signature expired
+    
+    digest: bytes32 = keccak256(concat(b'\x19\x01', self._domainSeparator(), keccak256(_encodedValue)))
+
+    # NOTE: signature is packed as r, s, v
+    r: bytes32 = convert(slice(_sig.signature, 0, 32), bytes32)
+    s: bytes32 = convert(slice(_sig.signature, 32, 32), bytes32)
+    v: uint8 = convert(slice(_sig.signature, 64, 1), uint8)
+    
+    response: Bytes[32] = raw_call(
+        ECRECOVER_PRECOMPILE,
+        abi_encode(digest, v, r, s),
+        max_outsize=32,
+        is_static_call=True # This is a view function
+    )
+    
+    assert len(response) == 32 # dev: invalid ecrecover response length
+    assert abi_decode(response, address) == _sig.signer # dev: invalid signature
+    self.usedSignatures[_sig.signature] = True

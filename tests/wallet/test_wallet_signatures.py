@@ -10,14 +10,14 @@ from constants import EIGHTEEN_DECIMALS, MAX_UINT256, ZERO_ADDRESS
 #########
 
 
-def test_deposit_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, broadcaster, signDeposit):
+def test_deposit_with_signature(ai_wallet, ai_wallet_config, agent, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, broadcaster, signDeposit):
     # setup
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
 
     # signature
-    signature = signDeposit(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
+    signature = signDeposit(ai_wallet_config, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
 
     # deposit
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
@@ -34,7 +34,7 @@ def test_deposit_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, 
     assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == vaultTokenAmountReceived
 
 
-def test_withdraw_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, broadcaster, signWithdrawal):
+def test_withdraw_with_signature(ai_wallet, ai_wallet_config, agent, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, broadcaster, signWithdrawal):
     # setup
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
@@ -45,7 +45,7 @@ def test_withdraw_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token,
         lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=agent)
 
     # signature
-    signature = signWithdrawal(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
+    signature = signWithdrawal(ai_wallet_config, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
 
     # withdrawal
     assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
@@ -61,7 +61,7 @@ def test_withdraw_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token,
     assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == 0
 
 
-def test_rebalance_with_signature(ai_wallet, owner, broadcaster, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, alpha_token_whale, signRebalance):
+def test_rebalance_with_signature(ai_wallet, ai_wallet_config, owner, broadcaster, agent, mock_lego_alpha, mock_lego_alpha_another, alpha_token, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another, alpha_token_whale, signRebalance):
     # setup
     lego_id = mock_lego_alpha.legoId()
     alt_lego_id = mock_lego_alpha_another.legoId()
@@ -73,7 +73,7 @@ def test_rebalance_with_signature(ai_wallet, owner, broadcaster, agent, mock_leg
         lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=owner)
 
     # signature
-    signature = signRebalance(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256)
+    signature = signRebalance(ai_wallet_config, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256)
 
     # rebalance
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.rebalance(
@@ -94,7 +94,7 @@ def test_rebalance_with_signature(ai_wallet, owner, broadcaster, agent, mock_leg
     assert alpha_token_erc4626_vault_another.balanceOf(ai_wallet) == vaultTokenAmountReceived
 
 
-def test_swap_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, alpha_token_whale, broadcaster, signSwap, bravo_token, bravo_token_whale):
+def test_swap_with_signature(ai_wallet, ai_wallet_config, agent, mock_lego_alpha, alpha_token, alpha_token_whale, broadcaster, signSwap, bravo_token, bravo_token_whale):
     # setup
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
@@ -104,7 +104,7 @@ def test_swap_with_signature(ai_wallet, agent, mock_lego_alpha, alpha_token, alp
     bravo_token.transfer(mock_lego_alpha.address, deposit_amount, sender=bravo_token_whale)
 
     # signature
-    signature = signSwap(ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS)
+    signature = signSwap(ai_wallet_config, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS)
 
     # swap
     actualSwapAmount, toAmount, usdValue = ai_wallet.swapTokens(
@@ -131,7 +131,7 @@ def test_transfer_with_signature(ai_wallet, ai_wallet_config, sally, agent, owne
     assert ai_wallet_config.setWhitelistAddr(sally, True, sender=owner)
 
     # signature
-    signature = signTransfer(ai_wallet, sally, MAX_UINT256, alpha_token.address)
+    signature = signTransfer(ai_wallet_config, sally, MAX_UINT256, alpha_token.address)
 
     # transfer
     amount, usdValue = ai_wallet.transferFunds(
@@ -148,7 +148,7 @@ def test_transfer_with_signature(ai_wallet, ai_wallet_config, sally, agent, owne
     assert alpha_token.balanceOf(sally) == deposit_amount
 
 
-def test_signature_expiration_and_reuse(ai_wallet, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, broadcaster, signDeposit):
+def test_signature_expiration_and_reuse(ai_wallet, ai_wallet_config, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, broadcaster, signDeposit):
     """Test signature expiration and reuse prevention"""
     # Setup
     lego_id = mock_lego_alpha.legoId()
@@ -157,7 +157,7 @@ def test_signature_expiration_and_reuse(ai_wallet, mock_lego_alpha, alpha_token,
 
     # Test expired signature
     expired_signature = signDeposit(
-        ai_wallet, 
+        ai_wallet_config, 
         lego_id, 
         alpha_token.address, 
         alpha_token_erc4626_vault.address,
@@ -177,7 +177,7 @@ def test_signature_expiration_and_reuse(ai_wallet, mock_lego_alpha, alpha_token,
 
     # Test signature reuse
     valid_signature = signDeposit(
-        ai_wallet, 
+        ai_wallet_config, 
         lego_id, 
         alpha_token.address, 
         alpha_token_erc4626_vault.address,
@@ -221,23 +221,23 @@ def test_signature_with_reserve_assets(ai_wallet, owner, ai_wallet_config, mock_
     assert ai_wallet_config.setWhitelistAddr(sally, True, sender=owner)
 
     # Test deposit with signature (should work with reserve)
-    signature = signDeposit(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
+    signature = signDeposit(ai_wallet_config, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
         lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, signature, sender=broadcaster)
     assert assetAmountDeposited == amount - reserve_amount
 
     # Test withdrawal with signature (should respect reserve)
-    signature = signWithdrawal(ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
+    signature = signWithdrawal(ai_wallet_config, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, MAX_UINT256)
     assetAmountReceived, vaultTokenAmountBurned, usdValue = ai_wallet.withdrawTokens(
         lego_id, alpha_token, alpha_token_erc4626_vault.address, MAX_UINT256, signature, sender=broadcaster)
     assert assetAmountReceived == assetAmountDeposited
 
     # Test transfer with signature (should respect reserve)
-    signature = signTransfer(ai_wallet, sally, MAX_UINT256, alpha_token.address)
+    signature = signTransfer(ai_wallet_config, sally, MAX_UINT256, alpha_token.address)
     ai_wallet.transferFunds(sally, MAX_UINT256, alpha_token, signature, sender=broadcaster)
     assert alpha_token.balanceOf(ai_wallet) == reserve_amount
 
     # Test transfer, only has reserve amount
-    signature = signTransfer(ai_wallet, sally, amount, alpha_token.address)
+    signature = signTransfer(ai_wallet_config, sally, amount, alpha_token.address)
     with boa.reverts("insufficient balance after reserve"):
         ai_wallet.transferFunds(sally, amount, alpha_token, signature, sender=broadcaster)
