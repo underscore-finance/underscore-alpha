@@ -38,6 +38,8 @@ flag ActionType:
     TRANSFER
     SWAP
     CONVERSION
+    ADD_LIQ
+    REMOVE_LIQ
 
 struct CoreData:
     owner: address
@@ -125,6 +127,37 @@ event AgenticSwap:
     broadcaster: address
     isSignerAgent: bool
 
+event AgenticLiquidityAdded:
+    signer: indexed(address)
+    tokenA: indexed(address)
+    tokenB: indexed(address)
+    liqAmountA: uint256
+    liqAmountB: uint256
+    lpAmountReceived: uint256
+    pool: address
+    usdValue: uint256
+    refundAssetAmountA: uint256
+    refundAssetAmountB: uint256
+    legoId: uint256
+    legoAddr: address
+    broadcaster: address
+    isSignerAgent: bool
+
+event AgenticLiquidityRemoved:
+    signer: indexed(address)
+    lpToken: indexed(address)
+    lpAmountBurned: uint256
+    tokenA: indexed(address)
+    tokenB: address
+    removedAmountA: uint256
+    removedAmountB: uint256
+    usdValue: uint256
+    refundedLpAmount: uint256
+    legoId: uint256
+    legoAddr: address
+    broadcaster: address
+    isSignerAgent: bool
+
 event WalletFundsTransferred:
     signer: indexed(address)
     recipient: indexed(address)
@@ -201,6 +234,8 @@ DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
 SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
+ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(uint256 legoId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,uint256 minAmountOut,uint256 expiration)')
+REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(uint256 legoId,address lpToken,uint256 lpAmount,address tokenA,address tokenB,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
 WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
@@ -641,7 +676,7 @@ def _swapTokens(
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, self)
+    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, self, _cd.oracleRegistry)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # make sure they still have enough trial funds
@@ -666,6 +701,196 @@ def _getSignerOnSwap(
 
     # check if signature is valid
     self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _sig.expiration), _sig)
+
+    return _sig.signer
+
+
+#################
+# Add Liquidity #
+#################
+
+
+@nonreentrant
+@external
+def addLiquidity(
+    _legoId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256 = max_value(uint256),
+    _amountB: uint256 = max_value(uint256),
+    _minAmountOut: uint256 = 0,
+    _sig: Signature = empty(Signature),
+) -> (uint256, uint256, uint256, uint256):
+    cd: CoreData = self._getCoreData()
+
+    # check permissions / subscription data
+    signer: address = self._getSignerOnAddLiq(_legoId, _pool, _tokenA, _tokenB, _amountA, _amountB, _minAmountOut, _sig)
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.ADD_LIQ, [_tokenA, _tokenB], [_legoId], cd)
+
+    # add liquidity
+    lpAmountReceived: uint256 = 0
+    liqAmountA: uint256 = 0
+    liqAmountB: uint256 = 0
+    usdValue: uint256 = 0
+    lpAmountReceived, liqAmountA, liqAmountB, usdValue = self._addLiquidity(signer, _legoId, _pool, _tokenA, _tokenB, _amountA, _amountB, _minAmountOut, isSignerAgent, cd)
+
+    self._handleTransactionFees(signer, isSignerAgent, ActionType.ADD_LIQ, usdValue, cd)
+    return lpAmountReceived, liqAmountA, liqAmountB, usdValue
+
+
+@internal
+def _addLiquidity(
+    _signer: address,
+    _legoId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256,
+    _amountB: uint256,
+    _minAmountOut: uint256,
+    _isSignerAgent: bool,
+    _cd: CoreData,
+) -> (uint256, uint256, uint256, uint256):
+    legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
+    assert legoAddr != empty(address) # dev: invalid lego
+
+    # token a
+    amountA: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenA, _amountA, True, _cd)
+    assert extcall IERC20(_tokenA).approve(legoAddr, amountA, default_return_value=True) # dev: approval failed
+    isTrialFundsVaultTokenA: bool = self._isTrialFundsVaultToken(_tokenA, _cd.trialFundsAsset, _cd.legoRegistry)
+
+    # token b
+    amountB: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenB, _amountB, True, _cd)
+    assert extcall IERC20(_tokenB).approve(legoAddr, amountB, default_return_value=True) # dev: approval failed
+    isTrialFundsVaultTokenB: bool = self._isTrialFundsVaultToken(_tokenB, _cd.trialFundsAsset, _cd.legoRegistry)
+
+    # add liquidity via lego partner
+    lpAmountReceived: uint256 = 0
+    liqAmountA: uint256 = 0
+    liqAmountB: uint256 = 0
+    usdValue: uint256 = 0
+    refundAssetAmountA: uint256 = 0
+    refundAssetAmountB: uint256 = 0
+    lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB = extcall LegoDex(legoAddr).addLiquidity(_pool, _tokenA, _tokenB, amountA, amountB, _minAmountOut, self, _cd.oracleRegistry)
+    
+    # reset approvals
+    self._checkTrialFundsPostTx(isTrialFundsVaultTokenA, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
+    assert extcall IERC20(_tokenA).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+    self._checkTrialFundsPostTx(isTrialFundsVaultTokenB, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
+    assert extcall IERC20(_tokenB).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    log AgenticLiquidityAdded(_signer, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, _pool, usdValue, refundAssetAmountA, refundAssetAmountB, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    return lpAmountReceived, liqAmountA, liqAmountB, usdValue
+
+
+@internal
+def _getSignerOnAddLiq(
+    _legoId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256,
+    _amountB: uint256,
+    _minAmountOut: uint256,
+    _sig: Signature,
+) -> address:
+    if _sig.signer == empty(address) or _sig.signature == empty(Bytes[65]):
+        return msg.sender
+
+    # check if signature is valid
+    self._isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _legoId, _pool, _tokenA, _tokenB, _amountA, _amountB, _minAmountOut, _sig.expiration), _sig)
+
+    return _sig.signer
+
+
+####################
+# Remove Liquidity #
+####################
+
+
+@nonreentrant
+@external
+def removeLiquidity(
+    _legoId: uint256,
+    _lpToken: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256 = max_value(uint256),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+    _sig: Signature = empty(Signature),
+) -> (uint256, uint256, uint256, uint256):
+    cd: CoreData = self._getCoreData()
+
+    # check permissions / subscription data
+    signer: address = self._getSignerOnRemoveLiq(_legoId, _lpToken, _lpAmount, _tokenA, _tokenB, _minAmountA, _minAmountB, _sig)
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.REMOVE_LIQ, [_lpToken, _tokenA, _tokenB], [_legoId], cd)
+
+    # remove liquidity
+    lpAmountBurned: uint256 = 0
+    removedAmountA: uint256 = 0
+    removedAmountB: uint256 = 0
+    usdValue: uint256 = 0
+    lpAmountBurned, removedAmountA, removedAmountB, usdValue = self._removeLiquidity(signer, _legoId, _lpToken, _lpAmount, _tokenA, _tokenB, _minAmountA, _minAmountB, isSignerAgent, cd)
+
+    self._handleTransactionFees(signer, isSignerAgent, ActionType.REMOVE_LIQ, usdValue, cd)
+    return lpAmountBurned, removedAmountA, removedAmountB, usdValue
+
+
+@internal
+def _removeLiquidity(
+    _signer: address,
+    _legoId: uint256,
+    _lpToken: address,
+    _lpAmount: uint256,
+    _tokenA: address,
+    _tokenB: address,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
+    _isSignerAgent: bool,
+    _cd: CoreData,
+) -> (uint256, uint256, uint256, uint256):
+    legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
+    assert legoAddr != empty(address) # dev: invalid lego
+
+    # lp token
+    lpAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_lpToken, _lpAmount, True, _cd)
+    assert extcall IERC20(_lpToken).approve(legoAddr, lpAmount, default_return_value=True) # dev: approval failed
+    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_lpToken, _cd.trialFundsAsset, _cd.legoRegistry)
+
+    # remove liquidity via lego partner
+    lpAmountBurned: uint256 = 0
+    removedAmountA: uint256 = 0
+    removedAmountB: uint256 = 0
+    usdValue: uint256 = 0
+    refundedLpAmount: uint256 = 0
+    lpAmountBurned, removedAmountA, removedAmountB, usdValue, refundedLpAmount = extcall LegoDex(legoAddr).removeLiquidity(_lpToken, lpAmount, _tokenA, _tokenB, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
+    
+    # reset approvals
+    self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
+    assert extcall IERC20(_lpToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    log AgenticLiquidityRemoved(_signer, _lpToken, lpAmountBurned, _tokenA, _tokenB, removedAmountA, removedAmountB, usdValue, refundedLpAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    return lpAmountBurned, removedAmountA, removedAmountB, usdValue
+
+
+@internal
+def _getSignerOnRemoveLiq(
+    _legoId: uint256,
+    _lpToken: address,
+    _lpAmount: uint256,
+    _tokenA: address,
+    _tokenB: address,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
+    _sig: Signature,
+) -> address:
+    if _sig.signer == empty(address) or _sig.signature == empty(Bytes[65]):
+        return msg.sender
+
+    # check if signature is valid
+    self._isValidSignature(abi_encode(REMOVE_LIQ_TYPE_HASH, _legoId, _lpToken, _lpAmount, _tokenA, _tokenB, _minAmountA, _minAmountB, _sig.expiration), _sig)
 
     return _sig.signer
 
@@ -1162,7 +1387,7 @@ def _domainSeparator() -> bytes32:
 
 
 @internal
-def _isValidSignature(_encodedValue: Bytes[256], _sig: Signature):
+def _isValidSignature(_encodedValue: Bytes[512], _sig: Signature):
     assert not self.usedSignatures[_sig.signature] # dev: signature already used
     assert _sig.expiration >= block.timestamp # dev: signature expired
     

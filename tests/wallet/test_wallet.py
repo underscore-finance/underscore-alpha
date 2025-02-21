@@ -396,7 +396,7 @@ def test_eth_weth_conversion_edge_cases(ai_wallet, ai_wallet_config, owner, agen
     assert amount == eth_amount  # Should only convert available balance
 
     # Test non-agent cannot convert when agent permissions set
-    allowed_actions = (True, True, False, False, True, False, False)  # No conversion permission
+    allowed_actions = (True, True, False, False, True, False, False, False, False)  # No conversion permission
     ai_wallet_config.modifyAllowedActions(agent, allowed_actions, sender=owner)
     with boa.reverts("agent not allowed"):
         ai_wallet.convertEthToWeth(eth_amount, sender=agent)
@@ -452,6 +452,8 @@ def test_eth_weth_conversion_with_fees(ai_wallet, owner, agent, lego_aave_v3, ge
         150,    # rebalanceFee (1.50%)
         200,    # transferFee (2.00%)
         250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
         sender=governor
     )
 

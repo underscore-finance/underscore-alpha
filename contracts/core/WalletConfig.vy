@@ -27,6 +27,8 @@ flag ActionType:
     TRANSFER
     SWAP
     CONVERSION
+    ADD_LIQ
+    REMOVE_LIQ
 
 struct AgentInfo:
     isActive: bool
@@ -72,6 +74,8 @@ struct AllowedActions:
     canTransfer: bool
     canSwap: bool
     canConvert: bool
+    canAddLiq: bool
+    canRemoveLiq: bool
 
 struct ReserveAsset:
     asset: address
@@ -114,6 +118,8 @@ event AllowedActionsModified:
     canTransfer: bool
     canSwap: bool
     canConvert: bool
+    canAddLiq: bool
+    canRemoveLiq: bool
 
 event WhitelistAddrSet:
     addr: indexed(address)
@@ -294,6 +300,10 @@ def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions)
         return _allowedActions.canSwap
     elif _action == ActionType.CONVERSION:
         return _allowedActions.canConvert
+    elif _action == ActionType.ADD_LIQ:
+        return _allowedActions.canAddLiq
+    elif _action == ActionType.REMOVE_LIQ:
+        return _allowedActions.canRemoveLiq
     else:
         return True # no action specified
 
@@ -781,7 +791,7 @@ def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empt
     agentInfo.allowedActions.isSet = self._hasAllowedActionsSet(_allowedActions)
     self.agentSettings[_agent] = agentInfo
 
-    log AllowedActionsModified(_agent, _allowedActions.canDeposit, _allowedActions.canWithdraw, _allowedActions.canRebalance, _allowedActions.canTransfer, _allowedActions.canSwap, _allowedActions.canConvert)
+    log AllowedActionsModified(_agent, _allowedActions.canDeposit, _allowedActions.canWithdraw, _allowedActions.canRebalance, _allowedActions.canTransfer, _allowedActions.canSwap, _allowedActions.canConvert, _allowedActions.canAddLiq, _allowedActions.canRemoveLiq)
     return True
 
 

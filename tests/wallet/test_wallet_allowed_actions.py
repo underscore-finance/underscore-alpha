@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256, CONVERSION_UINT256
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256, CONVERSION_UINT256, ADD_LIQ_UINT256, REMOVE_LIQ_UINT256
 
 
 def test_modify_allowed_actions(ai_wallet, ai_wallet_config, owner, agent, sally):
@@ -21,9 +21,11 @@ def test_modify_allowed_actions(ai_wallet, ai_wallet_config, owner, agent, sally
     assert ai_wallet_config.canAgentAccess(agent, TRANSFER_UINT256, [], [])
     assert ai_wallet_config.canAgentAccess(agent, SWAP_UINT256, [], [])
     assert ai_wallet_config.canAgentAccess(agent, CONVERSION_UINT256, [], [])
+    assert ai_wallet_config.canAgentAccess(agent, ADD_LIQ_UINT256, [], [])
+    assert ai_wallet_config.canAgentAccess(agent, REMOVE_LIQ_UINT256, [], [])
 
     # Test setting specific allowed actions
-    allowed_actions = (True, True, False, False, True, False, True)
+    allowed_actions = (True, True, False, False, True, False, True, True, False)
     assert ai_wallet_config.modifyAllowedActions(agent, allowed_actions, sender=owner)
 
     # Verify event
@@ -35,6 +37,8 @@ def test_modify_allowed_actions(ai_wallet, ai_wallet_config, owner, agent, sally
     assert log.canTransfer == True
     assert log.canSwap == False
     assert log.canConvert == True
+    assert log.canAddLiq == True
+    assert log.canRemoveLiq == False
 
     # Verify permissions
     assert ai_wallet_config.canAgentAccess(agent, DEPOSIT_UINT256, [], [])
@@ -43,6 +47,8 @@ def test_modify_allowed_actions(ai_wallet, ai_wallet_config, owner, agent, sally
     assert ai_wallet_config.canAgentAccess(agent, TRANSFER_UINT256, [], [])
     assert not ai_wallet_config.canAgentAccess(agent, SWAP_UINT256, [], [])
     assert ai_wallet_config.canAgentAccess(agent, CONVERSION_UINT256, [], [])
+    assert ai_wallet_config.canAgentAccess(agent, ADD_LIQ_UINT256, [], [])
+    assert not ai_wallet_config.canAgentAccess(agent, REMOVE_LIQ_UINT256, [], [])
 
 
 def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, sally):
@@ -51,8 +57,8 @@ def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, agent, m
     ai_wallet_config.addLegoIdForAgent(agent, mock_lego_alpha.legoId(), sender=owner)
     ai_wallet_config.setWhitelistAddr(sally, True, sender=owner)
 
-    # Set restricted permissions - only allow deposits and transfers
-    allowed_actions = (True, True, False, False, True, False, False)
+    # Set restricted permissions - only allow deposits, transfers, and add liquidity
+    allowed_actions = (True, True, False, False, True, False, False, True, False)
     ai_wallet_config.modifyAllowedActions(agent, allowed_actions, sender=owner)
 
     # Test deposit (allowed)
@@ -90,8 +96,8 @@ def test_allowed_actions_batch_operations(ai_wallet, ai_wallet_config, owner, ag
     ai_wallet_config.addLegoIdForAgent(agent, mock_lego_alpha.legoId(), sender=owner)
     ai_wallet_config.setWhitelistAddr(sally, True, sender=owner)
 
-    # Set restricted permissions - only allow deposits and transfers
-    allowed_actions = (True, True, False, False, True, False, False)
+    # Set restricted permissions - only allow deposits, transfers, and add liquidity
+    allowed_actions = (True, True, False, False, True, False, False, True, False)
     ai_wallet_config.modifyAllowedActions(agent, allowed_actions, sender=owner)
 
     # Transfer tokens to wallet
@@ -104,6 +110,10 @@ def test_allowed_actions_batch_operations(ai_wallet, ai_wallet_config, owner, ag
         (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, MAX_UINT256, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
         # Withdrawal (not allowed)
         (WITHDRAWAL_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
+        # Add Liquidity (allowed)
+        (ADD_LIQ_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 4, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
+        # Remove Liquidity (not allowed)
+        (REMOVE_LIQ_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 4, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
     ]
 
     # Test batch operations fail if any action is not allowed
@@ -113,9 +123,11 @@ def test_allowed_actions_batch_operations(ai_wallet, ai_wallet_config, owner, ag
     # Test batch operations with only allowed actions
     allowed_instructions = [
         # Deposit (allowed)
-        (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 2, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
+        (DEPOSIT_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 3, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
         # Transfer (allowed)
-        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, amount // 2, sally, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
+        (TRANSFER_UINT256, 0, alpha_token, ZERO_ADDRESS, amount // 3, sally, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
+        # Add Liquidity (allowed)
+        (ADD_LIQ_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 3, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
     ]
 
     assert ai_wallet.performManyActions(allowed_instructions, sender=agent) 

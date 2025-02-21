@@ -320,6 +320,39 @@ def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAm
     return tokenInAmount, tokenInAmount, 0, usdValue
 
 
+@external
+def addLiquidity(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256,
+    _amountB: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256, uint256):
+    # not implemented
+    return 0, 0, 0, 0, 0, 0
+
+
+# remove liq
+
+
+@external
+def removeLiquidity(
+    _lpToken: address,
+    _lpAmount: uint256,
+    _tokenA: address,
+    _tokenB: address,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256):
+    # not implemented
+    return 0, 0, 0, 0, 0
+
+
 ##################
 # Asset Registry #
 ##################

@@ -34,6 +34,8 @@ def setup_pricing(price_sheets, governor, alpha_token, agent, oracle_custom, ora
         150,    # rebalanceFee (1.50%)
         200,    # transferFee (2.00%)
         250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
         sender=governor
     )
 
@@ -60,6 +62,8 @@ def setup_pricing(price_sheets, governor, alpha_token, agent, oracle_custom, ora
         300,    # rebalanceFee (3.00%)
         400,    # transferFee (4.00%)
         500,    # swapFee (5.00%)
+        600,    # addLiqFee (6.00%)
+        700,    # removeLiqFee (7.00%)
         sender=governor
     )
 
@@ -725,6 +729,8 @@ def test_transaction_fees_different_assets(new_ai_wallet, agent, oracle_custom, 
         150,    # rebalanceFee (1.50%)
         200,    # transferFee (2.00%)
         250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
         sender=governor
     )
     
@@ -736,6 +742,8 @@ def test_transaction_fees_different_assets(new_ai_wallet, agent, oracle_custom, 
         300,    # rebalanceFee (3.00%)
         400,    # transferFee (4.00%)
         500,    # swapFee (5.00%)
+        600,    # addLiqFee (6.00%)
+        700,    # removeLiqFee (7.00%)
         sender=governor
     )
     

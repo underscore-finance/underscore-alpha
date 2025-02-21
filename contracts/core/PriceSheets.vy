@@ -17,6 +17,9 @@ flag ActionType:
     REBALANCE
     TRANSFER
     SWAP
+    CONVERSION
+    ADD_LIQ
+    REMOVE_LIQ
 
 struct TxPriceSheet:
     asset: address
@@ -25,6 +28,8 @@ struct TxPriceSheet:
     rebalanceFee: uint256
     transferFee: uint256
     swapFee: uint256
+    addLiqFee: uint256
+    removeLiqFee: uint256
 
 struct SubscriptionInfo:
     asset: address
@@ -99,6 +104,8 @@ event AgentTxPriceSheetSet:
     rebalanceFee: uint256
     transferFee: uint256
     swapFee: uint256
+    addLiqFee: uint256
+    removeLiqFee: uint256
 
 event PendingAgentTxPriceSheetSet:
     agent: indexed(address)
@@ -108,6 +115,8 @@ event PendingAgentTxPriceSheetSet:
     rebalanceFee: uint256
     transferFee: uint256
     swapFee: uint256
+    addLiqFee: uint256
+    removeLiqFee: uint256
     effectiveBlock: uint256
 
 event ProtocolTxPriceSheetSet:
@@ -117,6 +126,8 @@ event ProtocolTxPriceSheetSet:
     rebalanceFee: uint256
     transferFee: uint256
     swapFee: uint256
+    addLiqFee: uint256
+    removeLiqFee: uint256
 
 event AgentTxPriceSheetRemoved:
     agent: indexed(address)
@@ -126,6 +137,8 @@ event AgentTxPriceSheetRemoved:
     rebalanceFee: uint256
     transferFee: uint256
     swapFee: uint256
+    addLiqFee: uint256
+    removeLiqFee: uint256
 
 event ProtocolTxPriceSheetRemoved:
     asset: indexed(address)
@@ -134,6 +147,8 @@ event ProtocolTxPriceSheetRemoved:
     rebalanceFee: uint256
     transferFee: uint256
     swapFee: uint256
+    addLiqFee: uint256
+    removeLiqFee: uint256
 
 event AgentTxPricingEnabled:
     isEnabled: bool
@@ -564,6 +579,10 @@ def _getTxFeeForAction(_action: ActionType, _prices: TxPriceSheet) -> uint256:
         return _prices.transferFee
     elif _action == ActionType.SWAP:
         return _prices.swapFee
+    elif _action == ActionType.ADD_LIQ:
+        return _prices.addLiqFee
+    elif _action == ActionType.REMOVE_LIQ:
+        return _prices.removeLiqFee
     else:
         return 0
 
@@ -585,6 +604,8 @@ def isValidTxPriceSheet(
     _rebalanceFee: uint256,
     _transferFee: uint256,
     _swapFee: uint256,
+    _addLiqFee: uint256,
+    _removeLiqFee: uint256,
 ) -> bool:
     """
     @notice Check if transaction price sheet parameters are valid
@@ -595,9 +616,11 @@ def isValidTxPriceSheet(
     @param _rebalanceFee The fee percentage for rebalances
     @param _transferFee The fee percentage for transfers
     @param _swapFee The fee percentage for swaps
+    @param _addLiqFee The fee percentage for adding liquidity
+    @param _removeLiqFee The fee percentage for removing liquidity
     @return bool True if all parameters are valid
     """
-    return self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee)
+    return self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee)
 
 
 @view
@@ -609,10 +632,12 @@ def _isValidTxPriceSheet(
     _rebalanceFee: uint256,
     _transferFee: uint256,
     _swapFee: uint256,
+    _addLiqFee: uint256,
+    _removeLiqFee: uint256,
 ) -> bool:
     if _asset == empty(address):
         return False
-    return _depositFee <= MAX_TX_FEE and _withdrawalFee <= MAX_TX_FEE and _rebalanceFee <= MAX_TX_FEE and _transferFee <= MAX_TX_FEE and _swapFee <= MAX_TX_FEE
+    return _depositFee <= MAX_TX_FEE and _withdrawalFee <= MAX_TX_FEE and _rebalanceFee <= MAX_TX_FEE and _transferFee <= MAX_TX_FEE and _swapFee <= MAX_TX_FEE and _addLiqFee <= MAX_TX_FEE and _removeLiqFee <= MAX_TX_FEE
 
 
 @external
@@ -624,6 +649,8 @@ def setAgentTxPriceSheet(
     _rebalanceFee: uint256,
     _transferFee: uint256,
     _swapFee: uint256,
+    _addLiqFee: uint256,
+    _removeLiqFee: uint256,
 ) -> bool:
     """
     @notice Set transaction price sheet for a specific agent
@@ -635,6 +662,8 @@ def setAgentTxPriceSheet(
     @param _rebalanceFee The fee percentage for rebalances
     @param _transferFee The fee percentage for transfers
     @param _swapFee The fee percentage for swaps
+    @param _addLiqFee The fee percentage for adding liquidity
+    @param _removeLiqFee The fee percentage for removing liquidity
     @return bool True if pending price sheet was set successfully
     """
     isAgent: bool = msg.sender == _agent
@@ -645,7 +674,7 @@ def setAgentTxPriceSheet(
 
     # validation
     assert _agent != empty(address) # dev: invalid agent
-    if not self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee):
+    if not self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee):
         return False
 
     # create pending price sheet
@@ -656,6 +685,8 @@ def setAgentTxPriceSheet(
         rebalanceFee=_rebalanceFee,
         transferFee=_transferFee,
         swapFee=_swapFee,
+        addLiqFee=_addLiqFee,
+        removeLiqFee=_removeLiqFee,
     )
 
     # set price change immediately if delay is 0
@@ -667,7 +698,7 @@ def setAgentTxPriceSheet(
     # set pending price change
     effectiveBlock: uint256 = block.number + priceChangeDelay
     self.pendingAgentTxPrices[_agent] = PendingTxPriceSheet(priceSheet=priceSheet, effectiveBlock=effectiveBlock)
-    log PendingAgentTxPriceSheetSet(_agent, _asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, effectiveBlock)
+    log PendingAgentTxPriceSheetSet(_agent, _asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, effectiveBlock)
 
     return True
 
@@ -697,7 +728,7 @@ def finalizePendingTxPriceSheet(_agent: address) -> bool:
 @internal
 def _setPendingTxPriceSheet(_agent: address, _priceSheet: TxPriceSheet):
     self.agentTxPriceData[_agent] = _priceSheet
-    log AgentTxPriceSheetSet(_agent, _priceSheet.asset, _priceSheet.depositFee, _priceSheet.withdrawalFee, _priceSheet.rebalanceFee, _priceSheet.transferFee, _priceSheet.swapFee)
+    log AgentTxPriceSheetSet(_agent, _priceSheet.asset, _priceSheet.depositFee, _priceSheet.withdrawalFee, _priceSheet.rebalanceFee, _priceSheet.transferFee, _priceSheet.swapFee, _priceSheet.addLiqFee, _priceSheet.removeLiqFee)
 
 
 # removing tx price sheet
@@ -718,7 +749,7 @@ def removeAgentTxPriceSheet(_agent: address) -> bool:
         return False
 
     self.agentTxPriceData[_agent] = empty(TxPriceSheet)
-    log AgentTxPriceSheetRemoved(_agent, prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee)
+    log AgentTxPriceSheetRemoved(_agent, prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee, prevInfo.addLiqFee, prevInfo.removeLiqFee)
     return True
 
 
@@ -756,6 +787,8 @@ def setProtocolTxPriceSheet(
     _rebalanceFee: uint256,
     _transferFee: uint256,
     _swapFee: uint256,
+    _addLiqFee: uint256,
+    _removeLiqFee: uint256,
 ) -> bool:
     """
     @notice Set transaction price sheet for the protocol
@@ -766,12 +799,14 @@ def setProtocolTxPriceSheet(
     @param _rebalanceFee The fee percentage for rebalances
     @param _transferFee The fee percentage for transfers
     @param _swapFee The fee percentage for swaps
+    @param _addLiqFee The fee percentage for adding liquidity
+    @param _removeLiqFee The fee percentage for removing liquidity
     @return bool True if protocol price sheet was set successfully
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     # validation
-    if not self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee):
+    if not self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee):
         return False
 
     # save data
@@ -782,9 +817,11 @@ def setProtocolTxPriceSheet(
         rebalanceFee=_rebalanceFee,
         transferFee=_transferFee,
         swapFee=_swapFee,
+        addLiqFee=_addLiqFee,
+        removeLiqFee=_removeLiqFee,
     )
 
-    log ProtocolTxPriceSheetSet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee)
+    log ProtocolTxPriceSheetSet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee)
     return True
 
 
@@ -805,7 +842,7 @@ def removeProtocolTxPriceSheet() -> bool:
         return False
 
     self.protocolTxPriceData = empty(TxPriceSheet)
-    log ProtocolTxPriceSheetRemoved(prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee)
+    log ProtocolTxPriceSheetRemoved(prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee, prevInfo.addLiqFee, prevInfo.removeLiqFee)
     return True
 
 

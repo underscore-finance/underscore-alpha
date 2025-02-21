@@ -11,6 +11,14 @@ def getRegistries() -> DynArray[address, 10]:
 def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _pool: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     ...
 
+@external
+def addLiquidity(_pool: address, _tokenA: address, _tokenB: address, _amountA: uint256, _amountB: uint256, _minAmountOut: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256, uint256, uint256):
+    ...
+
+@external
+def removeLiquidity(_lpToken: address, _lpAmount: uint256, _tokenA: address, _tokenB: address, _minAmountA: uint256, _minAmountB: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256, uint256):
+    ...
+
 # config
 
 @external

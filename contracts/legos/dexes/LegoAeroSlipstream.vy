@@ -217,6 +217,44 @@ def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: B
     assert extcall IERC20(poolSwapData.tokenIn).transfer(poolSwapData.pool, poolSwapData.amountIn, default_return_value=True) # dev: transfer failed
 
 
+#############
+# Liquidity #
+#############
+
+
+@external
+def addLiquidity(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256,
+    _amountB: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256, uint256):
+    # not implemented
+    return 0, 0, 0, 0, 0, 0
+
+
+# remove liq
+
+
+@external
+def removeLiquidity(
+    _lpToken: address,
+    _lpAmount: uint256,
+    _tokenA: address,
+    _tokenB: address,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256):
+    # not implemented
+    return 0, 0, 0, 0, 0
+
+
 ################
 # Swap Generic #
 ################

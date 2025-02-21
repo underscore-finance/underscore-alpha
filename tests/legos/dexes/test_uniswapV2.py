@@ -138,3 +138,76 @@ def test_uniswapV2_swap_partial_with_pool(
 
     pool = getPool(token_str)
     testLegoSwap(lego_uniswap_v2.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+
+
+# add liquidity
+
+
+@pytest.always
+def test_uniswapV2_add_liquidity_more_token_A(
+    testLegoLiquidityAdded,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_uniswap_v2,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 50_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("weth")
+    amountB = 1 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C")
+    testLegoLiquidityAdded(lego_uniswap_v2.legoId(), pool, tokenA, tokenB, amountA, amountB, 0)
+
+
+@pytest.always
+def test_uniswapV2_add_liquidity_more_token_B(
+    testLegoLiquidityAdded,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_uniswap_v2,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 1_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("weth")
+    amountB = 10 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C")
+    testLegoLiquidityAdded(lego_uniswap_v2.legoId(), pool, tokenA, tokenB, amountA, amountB, 0)
+
+
+# remove liquidity
+
+
+@pytest.always
+def test_uniswapV2_remove_liq(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_uniswap_v2,
+    bob_agent,
+):
+    legoId = lego_uniswap_v2.legoId()
+    pool = boa.from_etherscan("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C")
+
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("weth")
+    amountB = 3 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    # add liquidity
+    lpAmountReceived, liqAmountA, liqAmountB, usdValue = bob_ai_wallet.addLiquidity(legoId, pool.address, tokenA.address, tokenB.address, amountA, amountB, 0, sender=bob_agent)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(legoId, pool, MAX_UINT256, tokenA, tokenB, 0, 0)

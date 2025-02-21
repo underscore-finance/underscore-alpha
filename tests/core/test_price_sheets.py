@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256, ADD_LIQ_UINT256, REMOVE_LIQ_UINT256
 from conf_utils import filter_logs
 
 
@@ -204,12 +204,16 @@ def test_transaction_price_validation(price_sheets, alpha_token):
         1000,   # withdrawalFee
         1000,   # rebalanceFee
         1000,   # transferFee
-        1000    # swapFee
+        1000,   # swapFee
+        1000,   # addLiqFee
+        1000    # removeLiqFee
     )
     
     # Invalid cases
     assert not price_sheets.isValidTxPriceSheet(
         ZERO_ADDRESS,  # invalid asset
+        1000,
+        1000,
         1000,
         1000,
         1000,
@@ -220,6 +224,8 @@ def test_transaction_price_validation(price_sheets, alpha_token):
     assert not price_sheets.isValidTxPriceSheet(
         alpha_token,
         1001,   # fee too high (>10.00%)
+        1000,
+        1000,
         1000,
         1000,
         1000,
@@ -245,6 +251,8 @@ def test_agent_transaction_price(price_sheets, governor, bob_agent, oracle_custo
         300,    # rebalanceFee (3.00%)
         400,    # transferFee (4.00%)
         500,    # swapFee (5.00%)
+        600,    # addLiqFee (6.00%)
+        700,    # removeLiqFee (7.00%)
         sender=governor
     )
     log = filter_logs(price_sheets, "AgentTxPriceSheetSet")[0]
@@ -255,6 +263,8 @@ def test_agent_transaction_price(price_sheets, governor, bob_agent, oracle_custo
     assert log.rebalanceFee == 300
     assert log.transferFee == 400
     assert log.swapFee == 500
+    assert log.addLiqFee == 600
+    assert log.removeLiqFee == 700
     
     sheet = price_sheets.agentTxPriceData(bob_agent)
     assert sheet.asset == alpha_token.address
@@ -263,6 +273,8 @@ def test_agent_transaction_price(price_sheets, governor, bob_agent, oracle_custo
     assert sheet.rebalanceFee == 300
     assert sheet.transferFee == 400
     assert sheet.swapFee == 500
+    assert sheet.addLiqFee == 600
+    assert sheet.removeLiqFee == 700
     
     # Test fee calculations
     cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)  # DEPOSIT
@@ -289,6 +301,16 @@ def test_agent_transaction_price(price_sheets, governor, bob_agent, oracle_custo
     assert cost.asset == alpha_token.address  # asset
     assert cost.amount == 50 * EIGHTEEN_DECIMALS # assetAmount (0.5 alpha tokens)
     assert cost.usdValue == 50 * EIGHTEEN_DECIMALS # usdValue (50)
+
+    cost = price_sheets.getAgentTransactionFeeData(bob_agent, ADD_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # ADD_LIQ
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 60 * EIGHTEEN_DECIMALS # assetAmount (0.6 alpha tokens)
+    assert cost.usdValue == 60 * EIGHTEEN_DECIMALS # usdValue (60)
+
+    cost = price_sheets.getAgentTransactionFeeData(bob_agent, REMOVE_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REMOVE_LIQ
+    assert cost.asset == alpha_token.address  # asset
+    assert cost.amount == 70 * EIGHTEEN_DECIMALS # assetAmount (0.7 alpha tokens)
+    assert cost.usdValue == 70 * EIGHTEEN_DECIMALS # usdValue (70)
     
     # Remove price sheet
     assert price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
@@ -300,6 +322,8 @@ def test_agent_transaction_price(price_sheets, governor, bob_agent, oracle_custo
     assert log.rebalanceFee == 300
     assert log.transferFee == 400
     assert log.swapFee == 500
+    assert log.addLiqFee == 600
+    assert log.removeLiqFee == 700
 
     sheet = price_sheets.agentTxPriceData(bob_agent)
     assert sheet.asset == ZERO_ADDRESS
@@ -321,6 +345,8 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
         150,    # rebalanceFee (1.50%)
         200,    # transferFee (2.00%)
         250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
         sender=governor
     )
     log = filter_logs(price_sheets, "ProtocolTxPriceSheetSet")[0]
@@ -330,6 +356,8 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     assert log.rebalanceFee == 150
     assert log.transferFee == 200
     assert log.swapFee == 250
+    assert log.addLiqFee == 300
+    assert log.removeLiqFee == 350
     
     sheet = price_sheets.protocolTxPriceData()
     assert sheet.asset == alpha_token.address
@@ -338,6 +366,8 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     assert sheet.rebalanceFee == 150
     assert sheet.transferFee == 200
     assert sheet.swapFee == 250
+    assert sheet.addLiqFee == 300
+    assert sheet.removeLiqFee == 350
     
     # Test fee calculations
     cost = price_sheets.getProtocolTransactionFeeData(DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)  # DEPOSIT
@@ -361,6 +391,14 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     cost = price_sheets.getProtocolTransactionFeeData(SWAP_UINT256, 1000 * EIGHTEEN_DECIMALS)  # SWAP
     assert cost.amount == 25 * EIGHTEEN_DECIMALS  # assetAmount (0.25 alpha tokens)
     assert cost.usdValue == 25 * EIGHTEEN_DECIMALS  # usdValue (25)
+
+    cost = price_sheets.getProtocolTransactionFeeData(ADD_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # ADD_LIQ
+    assert cost.amount == 30 * EIGHTEEN_DECIMALS  # assetAmount (0.3 alpha tokens)
+    assert cost.usdValue == 30 * EIGHTEEN_DECIMALS  # usdValue (30)
+
+    cost = price_sheets.getProtocolTransactionFeeData(REMOVE_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REMOVE_LIQ
+    assert cost.amount == 35 * EIGHTEEN_DECIMALS  # assetAmount (0.35 alpha tokens)
+    assert cost.usdValue == 35 * EIGHTEEN_DECIMALS  # usdValue (35)
     
     # Remove price sheet
     assert price_sheets.removeProtocolTxPriceSheet(sender=governor)
@@ -371,6 +409,8 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     assert log.rebalanceFee == 150
     assert log.transferFee == 200
     assert log.swapFee == 250
+    assert log.addLiqFee == 300
+    assert log.removeLiqFee == 350
 
     sheet = price_sheets.protocolTxPriceData()
     assert sheet.asset == ZERO_ADDRESS
@@ -394,6 +434,8 @@ def test_combined_transaction_costs(price_sheets, governor, bob_agent, oracle_cu
         150,    # rebalanceFee (1.50%)
         200,    # transferFee (2.00%)
         250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
         sender=governor
     )
 
@@ -406,6 +448,8 @@ def test_combined_transaction_costs(price_sheets, governor, bob_agent, oracle_cu
         300,    # rebalanceFee (3.00%)
         400,    # transferFee (4.00%)
         500,    # swapFee (5.00%)
+        600,    # addLiqFee (6.00%)
+        700,    # removeLiqFee (7.00%)
         sender=governor
     )
 
@@ -476,6 +520,8 @@ def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally
             300,
             400,
             500,
+            600,
+            700,
             sender=bob_agent
         )
 
@@ -495,6 +541,8 @@ def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custo
         1000,
         1000,
         1000,
+        1000,   # addLiqFee (10.00%)
+        1000,   # removeLiqFee (10.00%)
         sender=governor
     )
 
@@ -545,6 +593,8 @@ def test_transaction_fee_edge_cases(price_sheets, governor, bob_agent, alpha_tok
         1,
         1,
         1,
+        1,      # addLiqFee (0.01%)
+        1,      # removeLiqFee (0.01%)
         sender=governor
     )
       
@@ -649,6 +699,8 @@ def test_price_sheet_state_transitions(price_sheets, governor, bob_agent, alpha_
         300,
         400,
         500,
+        600,    # addLiqFee
+        700,    # removeLiqFee
         sender=governor
     )
     
@@ -659,6 +711,8 @@ def test_price_sheet_state_transitions(price_sheets, governor, bob_agent, alpha_
     assert sheet.rebalanceFee == 300
     assert sheet.transferFee == 400
     assert sheet.swapFee == 500
+    assert sheet.addLiqFee == 600
+    assert sheet.removeLiqFee == 700
     
     # Update to new values
     assert price_sheets.setAgentTxPriceSheet(
@@ -669,6 +723,8 @@ def test_price_sheet_state_transitions(price_sheets, governor, bob_agent, alpha_
         350,
         450,
         550,
+        650,    # addLiqFee
+        750,    # removeLiqFee
         sender=governor
     )
     
@@ -679,6 +735,8 @@ def test_price_sheet_state_transitions(price_sheets, governor, bob_agent, alpha_
     assert sheet.rebalanceFee == 350
     assert sheet.transferFee == 450
     assert sheet.swapFee == 550
+    assert sheet.addLiqFee == 650
+    assert sheet.removeLiqFee == 750
     
     # Remove price sheet
     assert price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
@@ -691,6 +749,8 @@ def test_price_sheet_state_transitions(price_sheets, governor, bob_agent, alpha_
     assert sheet.rebalanceFee == 0
     assert sheet.transferFee == 0
     assert sheet.swapFee == 0
+    assert sheet.addLiqFee == 0
+    assert sheet.removeLiqFee == 0
 
 
 def test_agent_tx_pricing_enable_disable(price_sheets, governor, bob_agent, oracle_custom, alpha_token, sally):
@@ -721,6 +781,8 @@ def test_agent_tx_pricing_enable_disable(price_sheets, governor, bob_agent, orac
         300,    # rebalanceFee
         400,    # transferFee
         500,    # swapFee
+        600,    # addLiqFee
+        700,    # removeLiqFee
         sender=governor
     )
     
@@ -804,6 +866,8 @@ def test_agent_pricing_combined_states(price_sheets, governor, bob_agent, alpha_
         300,    # rebalanceFee
         400,    # transferFee
         500,    # swapFee
+        600,    # addLiqFee
+        700,    # removeLiqFee
         sender=governor
     )
     
@@ -891,6 +955,8 @@ def test_pending_agent_tx_price_sheet(price_sheets, governor, bob_agent, alpha_t
         300,    # rebalanceFee
         400,    # transferFee
         500,    # swapFee
+        600,    # addLiqFee
+        700,    # removeLiqFee
         sender=governor
     )
     
@@ -993,7 +1059,7 @@ def test_pending_price_change_edge_cases(price_sheets, governor, bob_agent, alph
     price_sheets.setAgentTxPriceSheet(
         bob_agent,
         alpha_token,
-        100, 200, 300, 400, 500,
+        100, 200, 300, 400, 500, 600, 700,  # fees including addLiqFee and removeLiqFee
         sender=governor
     )
     price_sheets.setAgentSubPrice(
@@ -1014,7 +1080,7 @@ def test_pending_price_change_edge_cases(price_sheets, governor, bob_agent, alph
     price_sheets.setAgentTxPriceSheet(
         bob_agent,
         alpha_token,
-        150, 250, 350, 450, 550,
+        150, 250, 350, 450, 550, 650, 750,  # fees including addLiqFee and removeLiqFee
         sender=governor
     )
     price_sheets.setAgentSubPrice(
@@ -1041,7 +1107,7 @@ def test_zero_delay_price_changes(price_sheets, governor, bob_agent, alpha_token
     price_sheets.setAgentTxPriceSheet(
         bob_agent,
         alpha_token,
-        100, 200, 300, 400, 500,
+        100, 200, 300, 400, 500, 600, 700,
         sender=governor
     )
     

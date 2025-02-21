@@ -15,7 +15,9 @@ interface IUniswapV2Pair:
     def token1() -> address: view
 
 interface UniV2Router:
-    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[address, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
+    def addLiquidity(_tokenA: address, _tokenB: address, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
+    def removeLiquidity(_tokenA: address, _tokenB: address, _lpAmount: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256): nonpayable
+    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[address, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -25,6 +27,26 @@ interface UniV2Factory:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
+
+event UniswapV2LiquidityAdded:
+    sender: indexed(address)
+    tokenA: indexed(address)
+    tokenB: indexed(address)
+    amountA: uint256
+    amountB: uint256
+    lpAmountReceived: uint256
+    usdValue: uint256
+    recipient: address
+
+event UniswapV2LiquidityRemoved:
+    sender: indexed(address)
+    tokenA: indexed(address)
+    tokenB: indexed(address)
+    removedAmountA: uint256
+    removedAmountB: uint256
+    lpAmountBurned: uint256
+    usdValue: uint256
+    recipient: address
 
 event UniswapV2Swap:
     sender: indexed(address)
@@ -76,18 +98,22 @@ def getRegistries() -> DynArray[address, 10]:
 @view
 @internal
 def _getUsdValue(
-    _tokenIn: address,
-    _tokenInAmount: uint256,
-    _tokenOut: address,
-    _tokenOutAmount: uint256,
+    _tokenA: address,
+    _amountA: uint256,
+    _tokenB: address,
+    _amountB: uint256,
+    _isSwap: bool,
     _oracleRegistry: address,
 ) -> uint256:
     oracleRegistry: address = _oracleRegistry
     if _oracleRegistry == empty(address):
         oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    tokenInUsdValue: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenIn, _tokenInAmount)
-    tokenOutUsdValue: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenOut, _tokenOutAmount)
-    return max(tokenInUsdValue, tokenOutUsdValue)
+    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
+    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
+    if _isSwap:
+        return max(usdValueA, usdValueB)
+    else:
+        return usdValueA + usdValueB
 
 
 ########
@@ -135,14 +161,12 @@ def swapTokens(
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
         swapAmount -= refundAssetAmount
 
-    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, _oracleRegistry)
+    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, True, _oracleRegistry)
     log UniswapV2Swap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
     return swapAmount, toAmount, refundAssetAmount, usdValue
 
 
-################
-# Swap In Pool #
-################
+# swap in pool
 
 
 @internal
@@ -207,9 +231,7 @@ def _getAmountOut(_amountIn: uint256, _reserveIn: uint256, _reserveOut: uint256)
     return numerator // denominator
 
 
-################
-# Swap Generic #
-################
+# generic swap
 
 
 @internal
@@ -227,6 +249,151 @@ def _swapTokensGeneric(
     amounts: DynArray[uint256, MAX_ASSETS] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, [_tokenIn, _tokenOut], _recipient, block.timestamp)
     assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
     return amounts[1]
+
+
+#############
+# Liquidity #
+#############
+
+
+# add liq
+
+
+@external
+def addLiquidity(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256,
+    _amountB: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
+    assert empty(address) not in [_tokenA, _tokenB] # dev: invalid tokens
+    assert _tokenA != _tokenB # dev: invalid tokens
+
+    # pre balances
+    preLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
+    preLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
+
+    # token a
+    transferAmountA: uint256 = min(_amountA, staticcall IERC20(_tokenA).balanceOf(msg.sender))
+    assert transferAmountA != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenA).transferFrom(msg.sender, self, transferAmountA, default_return_value=True) # dev: transfer failed
+    liqAmountA: uint256 = min(transferAmountA, staticcall IERC20(_tokenA).balanceOf(self))
+
+    # token b
+    transferAmountB: uint256 = min(_amountB, staticcall IERC20(_tokenB).balanceOf(msg.sender))
+    assert transferAmountB != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenB).transferFrom(msg.sender, self, transferAmountB, default_return_value=True) # dev: transfer failed
+    liqAmountB: uint256 = min(transferAmountB, staticcall IERC20(_tokenB).balanceOf(self))
+
+    # approvals
+    swapRouter: address = UNISWAP_V2_ROUTER
+    assert extcall IERC20(_tokenA).approve(swapRouter, liqAmountA, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenB).approve(swapRouter, liqAmountB, default_return_value=True) # dev: approval failed
+
+    # add liquidity
+    lpAmountReceived: uint256 = 0
+    liqAmountA, liqAmountB, lpAmountReceived = extcall UniV2Router(swapRouter).addLiquidity(
+        _tokenA,
+        _tokenB,
+        liqAmountA,
+        liqAmountB,
+        0,
+        0,
+        _recipient,
+        block.timestamp,
+    )
+    assert lpAmountReceived != 0 # dev: no liquidity added
+    assert lpAmountReceived >= _minAmountOut # dev: insufficient liquidity added
+
+    # reset approvals
+    assert extcall IERC20(_tokenA).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenB).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
+
+    # refund if full liquidity was not added
+    currentLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
+    refundAssetAmountA: uint256 = 0
+    if currentLegoBalanceA > preLegoBalanceA:
+        refundAssetAmountA = currentLegoBalanceA - preLegoBalanceA
+        assert extcall IERC20(_tokenA).transfer(msg.sender, refundAssetAmountA, default_return_value=True) # dev: transfer failed
+
+    currentLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
+    refundAssetAmountB: uint256 = 0
+    if currentLegoBalanceB > preLegoBalanceB:
+        refundAssetAmountB = currentLegoBalanceB - preLegoBalanceB
+        assert extcall IERC20(_tokenB).transfer(msg.sender, refundAssetAmountB, default_return_value=True) # dev: transfer failed
+
+    usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
+    log UniswapV2LiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, usdValue, _recipient)
+    return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB
+
+
+# remove liq
+
+
+@external
+def removeLiquidity(
+    _lpToken: address,
+    _lpAmount: uint256,
+    _tokenA: address,
+    _tokenB: address,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
+    assert empty(address) not in [_tokenA, _tokenB] # dev: invalid tokens
+    assert _tokenA != _tokenB # dev: invalid tokens
+
+    # pre balance
+    preLegoBalance: uint256 = staticcall IERC20(_lpToken).balanceOf(self)
+
+    # lp token
+    transferAmount: uint256 = min(_lpAmount, staticcall IERC20(_lpToken).balanceOf(msg.sender))
+    assert transferAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_lpToken).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+    lpAmount: uint256 = min(transferAmount, staticcall IERC20(_lpToken).balanceOf(self))
+
+    # approvals
+    swapRouter: address = UNISWAP_V2_ROUTER
+    assert extcall IERC20(_lpToken).approve(swapRouter, lpAmount, default_return_value=True) # dev: approval failed
+
+    # remove liquidity
+    removedAmountA: uint256 = 0
+    removedAmountB: uint256 = 0
+    removedAmountA, removedAmountB = extcall UniV2Router(swapRouter).removeLiquidity(
+        _tokenA,
+        _tokenB,
+        lpAmount,
+        _minAmountA,
+        _minAmountB,
+        _recipient,
+        block.timestamp,
+    )
+    assert removedAmountA != 0 # dev: no amountA removed
+    assert removedAmountB != 0 # dev: no amountB removed
+
+    # reset approvals
+    assert extcall IERC20(_lpToken).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
+
+    # refund if full liquidity was not removed
+    currentLegoBalance: uint256 = staticcall IERC20(_lpToken).balanceOf(self)
+    refundAssetAmount: uint256 = 0
+    if currentLegoBalance > preLegoBalance:
+        refundAssetAmount = currentLegoBalance - preLegoBalance
+        assert extcall IERC20(_lpToken).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        lpAmount -= refundAssetAmount
+
+    usdValue: uint256 = self._getUsdValue(_tokenA, removedAmountA, _tokenB, removedAmountB, False, _oracleRegistry)
+    log UniswapV2LiquidityRemoved(msg.sender, _tokenA, _tokenB, removedAmountA, removedAmountB, lpAmount, usdValue, _recipient)
+    return lpAmount, removedAmountA, removedAmountB, usdValue, refundAssetAmount
 
 
 #################
