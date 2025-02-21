@@ -34,7 +34,7 @@ LEGO_REGISTRIES = {
         "local": ZERO_ADDRESS,
     },
     "uniswap_v3": {
-        "base": ["0x33128a8fC17869897dcE68Ed026d694621f6FDfD", "0x2626664c2603336E57B271c5C0b26F421741e481"],
+        "base": ["0x33128a8fC17869897dcE68Ed026d694621f6FDfD", "0x2626664c2603336E57B271c5C0b26F421741e481", "0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1"],
         "local": [],
     },
     "uniswap_v2": {
@@ -165,9 +165,7 @@ def lego_uniswap_v3(fork, lego_registry, addy_registry_deploy, governor):
     if len(registries) == 0:
         pytest.skip("asset not relevant on this fork")
 
-    factory = boa.from_etherscan(registries[0], name="uniswap_v3_factory")
-    swap_router = boa.from_etherscan(registries[1], name="uniswap_v3_swap_router")
-    addr = boa.load("contracts/legos/dexes/LegoUniswapV3.vy", factory, swap_router, addy_registry_deploy, name="lego_uniswap_v3")
+    addr = boa.load("contracts/legos/dexes/LegoUniswapV3.vy", registries[0], registries[1], registries[2], addy_registry_deploy, name="lego_uniswap_v3")
     assert lego_registry.registerNewLego(addr, "Uniswap V3", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 

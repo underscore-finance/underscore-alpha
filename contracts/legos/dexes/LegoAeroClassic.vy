@@ -243,18 +243,21 @@ def _isStablePair(_tokenA: address, _tokenB: address, _factory: address) -> bool
 
 @external
 def addLiquidity(
+    _nftTokenId: uint256,
     _pool: address,
     _tokenA: address,
     _tokenB: address,
+    _tickLower: int24,
+    _tickUpper: int24,
     _amountA: uint256,
     _amountB: uint256,
     _minAmountA: uint256,
     _minAmountB: uint256,
     _recipient: address,
     _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256, uint256, uint256):
+) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
     # not implemented
-    return 0, 0, 0, 0, 0, 0
+    return 0, 0, 0, 0, 0, 0, 0
 
 
 # remove liq

@@ -261,16 +261,19 @@ def _swapTokensGeneric(
 
 @external
 def addLiquidity(
+    _nftTokenId: uint256,
     _pool: address,
     _tokenA: address,
     _tokenB: address,
+    _tickLower: int24,
+    _tickUpper: int24,
     _amountA: uint256,
     _amountB: uint256,
     _minAmountA: uint256,
     _minAmountB: uint256,
     _recipient: address,
     _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256, uint256, uint256):
+) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
 
     assert empty(address) not in [_tokenA, _tokenB] # dev: invalid tokens
@@ -293,13 +296,13 @@ def addLiquidity(
     liqAmountB: uint256 = min(transferAmountB, staticcall IERC20(_tokenB).balanceOf(self))
 
     # approvals
-    swapRouter: address = UNISWAP_V2_ROUTER
-    assert extcall IERC20(_tokenA).approve(swapRouter, liqAmountA, default_return_value=True) # dev: approval failed
-    assert extcall IERC20(_tokenB).approve(swapRouter, liqAmountB, default_return_value=True) # dev: approval failed
+    router: address = UNISWAP_V2_ROUTER
+    assert extcall IERC20(_tokenA).approve(router, liqAmountA, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenB).approve(router, liqAmountB, default_return_value=True) # dev: approval failed
 
     # add liquidity
     lpAmountReceived: uint256 = 0
-    liqAmountA, liqAmountB, lpAmountReceived = extcall UniV2Router(swapRouter).addLiquidity(
+    liqAmountA, liqAmountB, lpAmountReceived = extcall UniV2Router(router).addLiquidity(
         _tokenA,
         _tokenB,
         liqAmountA,
@@ -312,8 +315,8 @@ def addLiquidity(
     assert lpAmountReceived != 0 # dev: no liquidity added
 
     # reset approvals
-    assert extcall IERC20(_tokenA).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
-    assert extcall IERC20(_tokenB).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenA).approve(router, 0, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenB).approve(router, 0, default_return_value=True) # dev: approval failed
 
     # refund if full liquidity was not added
     currentLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
@@ -330,7 +333,7 @@ def addLiquidity(
 
     usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
     log UniswapV2LiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, usdValue, _recipient)
-    return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB
+    return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, 0
 
 
 # remove liq
