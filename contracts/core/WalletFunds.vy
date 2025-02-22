@@ -154,8 +154,8 @@ event AgenticLiquidityRemoved:
     removedAmountB: uint256
     usdValue: uint256
     isDepleted: bool
+    liquidityRemoved: uint256
     lpToken: indexed(address)
-    lpAmountBurned: uint256
     refundedLpAmount: uint256
     legoId: uint256
     legoAddr: address
@@ -206,6 +206,11 @@ event TrialFundsRecovered:
     asset: indexed(address)
     amountRecovered: uint256
     remainingAmount: uint256
+
+event NftRecovered:
+    collection: indexed(address)
+    nftTokenId: uint256
+    recipient: indexed(address)
 
 # core
 walletConfig: public(address)
@@ -684,6 +689,27 @@ def addLiquidity(
     _minAmountB: uint256 = 0,
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256, uint256, uint256):
+    """
+    @notice Adds liquidity to a pool
+    @param _legoId The ID of the lego to use for adding liquidity
+    @param _nftAddr The address of the NFT token contract
+    @param _nftTokenId The ID of the NFT token to use for adding liquidity
+    @param _pool The address of the pool to add liquidity to
+    @param _tokenA The address of the first token to add liquidity
+    @param _tokenB The address of the second token to add liquidity
+    @param _amountA The amount of the first token to add liquidity
+    @param _amountB The amount of the second token to add liquidity
+    @param _tickLower The lower tick of the liquidity range
+    @param _tickUpper The upper tick of the liquidity range
+    @param _minAmountA The minimum amount of the first token to add liquidity
+    @param _minAmountB The minimum amount of the second token to add liquidity
+    @param _sig The signature of agent or owner (optional)
+    @return uint256 The amount of liquidity added
+    @return uint256 The amount of the first token added
+    @return uint256 The amount of the second token added
+    @return uint256 The usd value of the liquidity added
+    @return uint256 The ID of the NFT token used for adding liquidity
+    """
     cd: CoreData = self._getCoreData()
 
     # signer
@@ -796,6 +822,23 @@ def removeLiquidity(
     _minAmountB: uint256 = 0,
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256, bool):
+    """
+    @notice Removes liquidity from a pool
+    @param _legoId The ID of the lego to use for removing liquidity
+    @param _nftAddr The address of the NFT token contract
+    @param _nftTokenId The ID of the NFT token to use for removing liquidity
+    @param _pool The address of the pool to remove liquidity from
+    @param _tokenA The address of the first token to remove liquidity
+    @param _tokenB The address of the second token to remove liquidity
+    @param _liqToRemove The amount of liquidity to remove
+    @param _minAmountA The minimum amount of the first token to remove liquidity
+    @param _minAmountB The minimum amount of the second token to remove liquidity
+    @param _sig The signature of agent or owner (optional)
+    @return uint256 The amount of the first token removed
+    @return uint256 The amount of the second token removed
+    @return uint256 The usd value of the liquidity removed
+    @return bool True if the liquidity moved to lego contract was depleted, false otherwise
+    """
     cd: CoreData = self._getCoreData()
 
     # signer
@@ -854,18 +897,19 @@ def _removeLiquidity(
     amountA: uint256 = 0
     amountB: uint256 = 0
     usdValue: uint256 = 0
-    lpAmountBurned: uint256 = 0
+    liquidityRemoved: uint256 = 0
     refundedLpAmount: uint256 = 0
     isDepleted: bool = False
-    amountA, amountB, usdValue, lpAmountBurned, refundedLpAmount, isDepleted = extcall LegoDex(legoAddr).removeLiquidity(_nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, lpToken, liqToRemove, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
+    amountA, amountB, usdValue, liquidityRemoved, refundedLpAmount, isDepleted = extcall LegoDex(legoAddr).removeLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, lpToken, liqToRemove, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
 
     # validate the nft came back, reset lp token approvals
     if hasNftLiqPosition:
-        assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
+        if not isDepleted:
+            assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
     else:
         assert extcall IERC20(lpToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log AgenticLiquidityRemoved(_signer, _tokenA, _tokenB, amountA, amountB, usdValue, isDepleted, lpToken, lpAmountBurned, refundedLpAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    log AgenticLiquidityRemoved(_signer, _tokenA, _tokenB, amountA, amountB, usdValue, isDepleted, liquidityRemoved, lpToken, refundedLpAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
     return amountA, amountB, usdValue, isDepleted
 
 
@@ -1301,4 +1345,19 @@ def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -
         self.trialFundsAsset = empty(address)
 
     log TrialFundsRecovered(cd.trialFundsAsset, amountRecovered, remainingTrialFunds)
+    return True
+
+
+# recover nft
+
+
+@external
+def recoverNft(_collection: address, _nftTokenId: uint256) -> bool:
+    assert msg.sender == staticcall WalletConfig(self.walletConfig).owner() # dev: no perms
+
+    if staticcall IERC721(_collection).ownerOf(_nftTokenId) != self:
+        return False
+
+    extcall IERC721(_collection).safeTransferFrom(self, msg.sender, _nftTokenId)
+    log NftRecovered(_collection, _nftTokenId, msg.sender)
     return True

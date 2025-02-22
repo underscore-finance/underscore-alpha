@@ -4,6 +4,7 @@ import boa
 from constants import MAX_UINT256, ZERO_ADDRESS, MIN_INT24, MAX_INT24
 from conf_utils import filter_logs
 from conf_tokens import TEST_AMOUNTS
+from contracts.mock import MockErc20
 
 
 @pytest.fixture(scope="package")
@@ -178,9 +179,9 @@ def testLegoSwap(bob_ai_wallet, bob_agent, lego_registry, _test):
 
 
 @pytest.fixture(scope="package")
-def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, lego_registry, _test):
+def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, _test):
     def testLegoLiquidityAdded(
-        _legoId,
+        _lego,
         _nftAddr,
         _nftTokenId,
         _pool,
@@ -193,6 +194,11 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, lego_registry, _test):
         _minAmountA = 0,
         _minAmountB = 0,
     ):
+        lp_token_addr = _lego.getLpToken(_pool.address)
+        lp_token = lp_token_addr
+        if lp_token_addr != ZERO_ADDRESS:
+            lp_token = MockErc20.at(lp_token_addr)
+
         # pre balances
         pre_user_bal_a = _tokenA.balanceOf(bob_ai_wallet)
         pre_user_bal_b = _tokenB.balanceOf(bob_ai_wallet)
@@ -202,18 +208,17 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, lego_registry, _test):
 
         # lp tokens
         if _nftAddr == ZERO_ADDRESS:
-            pre_user_lp_bal = _pool.balanceOf(bob_ai_wallet)
+            pre_user_lp_bal = lp_token.balanceOf(bob_ai_wallet)
 
         # nft stuff
         else:
             pre_nft_bal = _nftAddr.balanceOf(bob_ai_wallet)
 
-        lego_addr = lego_registry.getLegoAddr(_legoId)
-        pre_lego_bal_a = _tokenA.balanceOf(lego_addr)
-        pre_lego_bal_b = _tokenB.balanceOf(lego_addr)
+        pre_lego_bal_a = _tokenA.balanceOf(_lego.address)
+        pre_lego_bal_b = _tokenB.balanceOf(_lego.address)
 
         # add liquidity
-        liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = bob_ai_wallet.addLiquidity(_legoId, _nftAddr, _nftTokenId, _pool.address, _tokenA.address, _tokenB.address, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, sender=bob_agent)
+        liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = bob_ai_wallet.addLiquidity(_lego.legoId(), _nftAddr, _nftTokenId, _pool.address, _tokenA.address, _tokenB.address, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, sender=bob_agent)
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticLiquidityAdded")[0]
@@ -225,16 +230,16 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, lego_registry, _test):
         assert log_wallet.liquidityAdded == liquidityAdded
         assert log_wallet.pool == _pool.address
         assert log_wallet.usdValue == usdValue
-        assert log_wallet.legoId == _legoId
-        assert log_wallet.legoAddr == lego_addr
+        assert log_wallet.legoId == _lego.legoId()
+        assert log_wallet.legoAddr == _lego.address
         assert log_wallet.isSignerAgent == True
 
         assert liqAmountA != 0 and liqAmountB != 0
         assert liquidityAdded != 0
 
         # lego addr should not have any leftover
-        assert _tokenA.balanceOf(lego_addr) == pre_lego_bal_a
-        assert _tokenB.balanceOf(lego_addr) == pre_lego_bal_b
+        assert _tokenA.balanceOf(_lego.address) == pre_lego_bal_a
+        assert _tokenB.balanceOf(_lego.address) == pre_lego_bal_b
 
         # liq tokens
         _test(pre_user_bal_a - liqAmountA, _tokenA.balanceOf(bob_ai_wallet.address))
@@ -242,11 +247,11 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, lego_registry, _test):
 
         # lp tokens
         if _nftAddr == ZERO_ADDRESS:
-            _test(pre_user_lp_bal + liquidityAdded, _pool.balanceOf(bob_ai_wallet.address))
+            _test(pre_user_lp_bal + liquidityAdded, lp_token.balanceOf(bob_ai_wallet.address))
 
         # nft stuff
         else:
-            assert _nftAddr.balanceOf(lego_addr) == 0
+            assert _nftAddr.balanceOf(_lego.address) == 0
 
             if _nftTokenId == 0:
                 assert _nftAddr.balanceOf(bob_ai_wallet.address) == pre_nft_bal + 1
@@ -260,9 +265,9 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, lego_registry, _test):
 
 
 @pytest.fixture(scope="package")
-def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, lego_registry, _test):
+def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, _test):
     def testLegoLiquidityRemoved(
-        _legoId,
+        _lego,
         _nftAddr,
         _nftTokenId,
         _pool,
@@ -272,6 +277,11 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, lego_registry, _test):
         _minAmountA = 0,
         _minAmountB = 0,
     ):
+        lp_token_addr = _lego.getLpToken(_pool.address)
+        lp_token = lp_token_addr
+        if lp_token_addr != ZERO_ADDRESS:
+            lp_token = MockErc20.at(lp_token_addr)
+        
         # pre balances
         pre_user_bal_a = _tokenA.balanceOf(bob_ai_wallet)
         pre_user_bal_b = _tokenB.balanceOf(bob_ai_wallet)
@@ -281,18 +291,17 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, lego_registry, _test):
 
         # lp tokens
         if _nftAddr == ZERO_ADDRESS:
-            pre_user_lp_bal = _pool.balanceOf(bob_ai_wallet)
+            pre_user_lp_bal = lp_token.balanceOf(bob_ai_wallet)
 
         # nft stuff
         else:
             pre_nft_bal = _nftAddr.balanceOf(bob_ai_wallet)
 
-        lego_addr = lego_registry.getLegoAddr(_legoId)
-        pre_lego_bal_a = _tokenA.balanceOf(lego_addr)
-        pre_lego_bal_b = _tokenB.balanceOf(lego_addr)
+        pre_lego_bal_a = _tokenA.balanceOf(_lego.address)
+        pre_lego_bal_b = _tokenB.balanceOf(_lego.address)
 
         # remove liquidity
-        removedAmountA, removedAmountB, usdValue, isDepleted= bob_ai_wallet.removeLiquidity(_legoId, _nftAddr, _nftTokenId, _pool.address, _tokenA.address, _tokenB.address, _liqToRemove, _minAmountA, _minAmountB, sender=bob_agent)
+        removedAmountA, removedAmountB, usdValue, isDepleted = bob_ai_wallet.removeLiquidity(_lego.legoId(), _nftAddr, _nftTokenId, lp_token_addr, _tokenA.address, _tokenB.address, _liqToRemove, _minAmountA, _minAmountB, sender=bob_agent)
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticLiquidityRemoved")[0]
@@ -302,16 +311,15 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, lego_registry, _test):
         assert log_wallet.removedAmountA == removedAmountA
         assert log_wallet.removedAmountB == removedAmountB
         assert log_wallet.usdValue == usdValue
-        assert log_wallet.lpToken == _pool.address
-        assert log_wallet.legoId == _legoId
-        assert log_wallet.legoAddr == lego_addr
+        assert log_wallet.legoId == _lego.legoId()
+        assert log_wallet.legoAddr == _lego.address
         assert log_wallet.isSignerAgent == True
 
         assert removedAmountA != 0 and removedAmountB != 0
 
             # lego addr should not have any leftover
-        assert _tokenA.balanceOf(lego_addr) == pre_lego_bal_a
-        assert _tokenB.balanceOf(lego_addr) == pre_lego_bal_b
+        assert _tokenA.balanceOf(_lego.address) == pre_lego_bal_a
+        assert _tokenB.balanceOf(_lego.address) == pre_lego_bal_b
 
         # liq tokens
         _test(pre_user_bal_a + removedAmountA, _tokenA.balanceOf(bob_ai_wallet.address))
@@ -319,11 +327,12 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, lego_registry, _test):
 
         # lp tokens
         if _nftAddr == ZERO_ADDRESS:
-            _test(pre_user_lp_bal - log_wallet.lpAmountBurned, _pool.balanceOf(bob_ai_wallet.address))
+            _test(pre_user_lp_bal - log_wallet.liquidityRemoved, lp_token.balanceOf(bob_ai_wallet.address))
+            assert log_wallet.lpToken == lp_token_addr
 
         # nft stuff
         else:
-            assert _nftAddr.balanceOf(lego_addr) == 0
+            assert _nftAddr.balanceOf(_lego.address) == 0
 
             if isDepleted:
                 assert _nftAddr.balanceOf(bob_ai_wallet.address) == pre_nft_bal - 1

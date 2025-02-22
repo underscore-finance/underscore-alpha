@@ -10,6 +10,14 @@ from ethereum.ercs import IERC20
 from ethereum.ercs import IERC721
 from interfaces import LegoDex
 
+interface UniV3NftPositionManager:
+    def increaseLiquidity(_params: IncreaseLiquidityParams) -> (uint128, uint256, uint256): nonpayable
+    def decreaseLiquidity(_params: DecreaseLiquidityParams) -> (uint256, uint256): nonpayable
+    def mint(_params: MintParams) -> (uint256, uint128, uint256, uint256): nonpayable
+    def collect(_params: CollectParams) -> (uint256, uint256): nonpayable
+    def positions(_tokenId: uint256) -> PositionData: view
+    def burn(_tokenId: uint256): nonpayable
+
 interface UniV3Pool:
     def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[256]) -> (int256, int256): nonpayable
     def liquidity() -> uint128: view
@@ -17,12 +25,6 @@ interface UniV3Pool:
     def token0() -> address: view
     def token1() -> address: view
     def fee() -> uint24: view
-
-interface UniV3NftPositionManager:
-    def increaseLiquidity(_params: IncreaseLiquidityParams) -> (uint128, uint256, uint256): nonpayable
-    def mint(_params: MintParams) -> (uint256, uint128, uint256, uint256): nonpayable
-    def collect(_params: CollectParams) -> (uint256, uint256): nonpayable
-    def positions(_tokenId: uint256) -> PositionData: view
 
 interface IUniswapV3Callback:
     def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
@@ -65,6 +67,13 @@ struct IncreaseLiquidityParams:
     tokenId: uint256
     amount0Desired: uint256
     amount1Desired: uint256
+    amount0Min: uint256
+    amount1Min: uint256
+    deadline: uint256
+
+struct DecreaseLiquidityParams:
+    tokenId: uint256
+    liquidity: uint128
     amount0Min: uint256
     amount1Min: uint256
     deadline: uint256
@@ -124,10 +133,27 @@ event UniswapV3LiquidityAdded:
     usdValue: uint256
     recipient: address
 
+event UniswapV3LiquidityRemoved:
+    sender: address
+    pool: indexed(address)
+    nftTokenId: uint256
+    tokenA: indexed(address)
+    tokenB: indexed(address)
+    amountA: uint256
+    amountB: uint256
+    liquidityRemoved: uint256
+    usdValue: uint256
+    recipient: address
+
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
+
+event NftRecovered:
+    collection: indexed(address)
+    nftTokenId: uint256
+    recipient: indexed(address)
 
 event UniswapV3LegoIdSet:
     legoId: uint256
@@ -204,8 +230,8 @@ def _getUsdValue(
 @view
 @external
 def getLpToken(_pool: address) -> address:
-    # TODO: implement this
-    return _pool
+    # no lp tokens for uniswap v3
+    return empty(address)
 
 
 ########
@@ -531,6 +557,7 @@ def _increaseExistingPosition(
     _minAmount1: uint256,
     _recipient: address,
 ) -> (uint128, uint256, uint256):
+    assert staticcall IERC721(_nftPositionManager).ownerOf(_tokenId) == self # dev: nft not here
 
     liquidityAddedInt128: uint128 = 0
     amount0: uint256 = 0
@@ -546,7 +573,8 @@ def _increaseExistingPosition(
     liquidityAddedInt128, amount0, amount1 = extcall UniV3NftPositionManager(_nftPositionManager).increaseLiquidity(params)
 
     # collect fees (if applicable) -- must be done before transferring nft
-    self._collectFees(_nftPositionManager, _tokenId, _recipient)
+    positionData: PositionData = staticcall UniV3NftPositionManager(_nftPositionManager).positions(_tokenId)
+    self._collectFees(_nftPositionManager, _tokenId, _recipient, positionData)
 
     # transfer nft to recipient
     extcall IERC721(_nftPositionManager).safeTransferFrom(self, _recipient, _tokenId)
@@ -555,9 +583,8 @@ def _increaseExistingPosition(
 
 
 @internal
-def _collectFees(_nftPositionManager: address, _tokenId: uint256, _recipient: address) -> (uint256, uint256):
-    feesData: PositionData = staticcall UniV3NftPositionManager(_nftPositionManager).positions(_tokenId)
-    if feesData.tokensOwed0 == 0 and feesData.tokensOwed1 == 0:
+def _collectFees(_nftPositionManager: address, _tokenId: uint256, _recipient: address, _positionData: PositionData) -> (uint256, uint256):
+    if _positionData.tokensOwed0 == 0 and _positionData.tokensOwed1 == 0:
         return 0, 0
 
     params: CollectParams = CollectParams(
@@ -576,7 +603,6 @@ def _collectFees(_nftPositionManager: address, _tokenId: uint256, _recipient: ad
 
 @external
 def removeLiquidity(
-    _nftAddr: address,
     _nftTokenId: uint256,
     _pool: address,
     _tokenA: address,
@@ -588,8 +614,70 @@ def removeLiquidity(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256, uint256, bool):
-    # not implemented
-    return 0, 0, 0, 0, 0, False
+    assert self.isActivated # dev: not activated
+
+    # make sure nft is here
+    nftPositionManager: address = UNI_NFT_POSITION_MANAGER
+    assert staticcall IERC721(nftPositionManager).ownerOf(_nftTokenId) == self # dev: nft not here
+
+    # get position data
+    positionData: PositionData = staticcall UniV3NftPositionManager(nftPositionManager).positions(_nftTokenId)
+    originalLiquidity: uint128 = positionData.liquidity
+
+    # validate tokens
+    tokens: address[2] = [positionData.token0, positionData.token1]
+    assert _tokenA in tokens # dev: invalid tokenA
+    assert _tokenB in tokens # dev: invalid tokenB
+    assert _tokenA != _tokenB # dev: invalid tokens
+
+    # organized the index of tokens
+    minAmount0: uint256 = _minAmountA
+    minAmount1: uint256 = _minAmountB
+    if _tokenA != tokens[0]:
+        minAmount0 = _minAmountB
+        minAmount1 = _minAmountA
+
+    # decrease liquidity
+    liqToRemove: uint256 = min(_liqToRemove, convert(positionData.liquidity, uint256))
+    assert liqToRemove != 0 # dev: no liquidity to remove
+
+    params: DecreaseLiquidityParams = DecreaseLiquidityParams(
+        tokenId=_nftTokenId,
+        liquidity=convert(liqToRemove, uint128),
+        amount0Min=minAmount0,
+        amount1Min=minAmount1,
+        deadline=block.timestamp,
+    )
+    amount0: uint256 = 0
+    amount1: uint256 = 0
+    amount0, amount1 = extcall UniV3NftPositionManager(nftPositionManager).decreaseLiquidity(params)
+    assert amount0 != 0 and amount1 != 0 # dev: no liquidity removed
+
+    # a/b amounts
+    amountA: uint256 = amount0
+    amountB: uint256 = amount1
+    if _tokenA != tokens[0]:
+        amountA = amount1
+        amountB = amount0
+
+    # get latest position data -- collect withdrawn tokens AND any fees (if applicable)
+    positionData = staticcall UniV3NftPositionManager(nftPositionManager).positions(_nftTokenId)
+    self._collectFees(nftPositionManager, _nftTokenId, _recipient, positionData)
+
+    # burn nft (if applicable)
+    isDepleted: bool = False
+    if positionData.liquidity == 0:
+        isDepleted = True
+        extcall UniV3NftPositionManager(nftPositionManager).burn(_nftTokenId)
+
+    # transfer nft to recipient
+    else:
+        extcall IERC721(nftPositionManager).safeTransferFrom(self, _recipient, _nftTokenId)
+
+    usdValue: uint256 = self._getUsdValue(_tokenA, amountA, _tokenB, amountB, False, _oracleRegistry)
+    liquidityRemoved: uint256 = convert(originalLiquidity - positionData.liquidity, uint256)
+    log UniswapV3LiquidityRemoved(msg.sender, _pool, _nftTokenId, _tokenA, _tokenB, amountA, amountB, liquidityRemoved, usdValue, _recipient)
+    return amountA, amountB, usdValue, liquidityRemoved, 0, isDepleted
 
 
 #################
@@ -607,6 +695,18 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
     log FundsRecovered(_asset, _recipient, balance)
+    return True
+
+
+@external
+def recoverNft(_collection: address, _nftTokenId: uint256, _recipient: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+
+    if staticcall IERC721(_collection).ownerOf(_nftTokenId) != self:
+        return False
+
+    extcall IERC721(_collection).safeTransferFrom(self, _recipient, _nftTokenId)
+    log NftRecovered(_collection, _nftTokenId, _recipient)
     return True
 
 

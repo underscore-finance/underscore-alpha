@@ -344,7 +344,6 @@ def addLiquidity(
 
 @external
 def removeLiquidity(
-    _nftAddr: address,
     _nftTokenId: uint256,
     _pool: address,
     _tokenA: address,
