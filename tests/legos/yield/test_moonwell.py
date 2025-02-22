@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, MAX_UINT256
 from conf_tokens import TEST_AMOUNTS, TOKENS
 
 
@@ -36,11 +36,11 @@ VAULT_TOKENS = {
 TEST_ASSETS = [
     "alpha",
     "usdc",
-    "weth",
     "cbbtc",
     "wsteth",
     "cbeth",
     "aero",
+    "weth",
 ]
 
 

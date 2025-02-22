@@ -29,6 +29,9 @@ interface CompoundV2Comptroller:
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
+interface WethContract:
+    def deposit(): payable
+
 event MoonwellDeposit:
     sender: indexed(address)
     asset: indexed(address)
@@ -62,19 +65,27 @@ event MoonwellActivated:
 legoId: public(uint256)
 isActivated: public(bool)
 MOONWELL_COMPTROLLER: public(immutable(address))
+WETH: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
 MAX_MARKETS: constant(uint256) = 50
 
 
 @deploy
-def __init__(_moonwellComptroller: address, _addyRegistry: address):
-    assert empty(address) not in [_moonwellComptroller, _addyRegistry] # dev: invalid addrs
+def __init__(_moonwellComptroller: address, _addyRegistry: address, _wethAddr: address):
+    assert empty(address) not in [_moonwellComptroller, _addyRegistry, _wethAddr] # dev: invalid addrs
     MOONWELL_COMPTROLLER = _moonwellComptroller
     ADDY_REGISTRY = _addyRegistry
+    WETH = _wethAddr
     self.isActivated = True
     gov.__init__(_addyRegistry)
     yld.__init__()
+
+
+@payable
+@external
+def __default__():
+    pass
 
 
 @view
@@ -295,6 +306,10 @@ def withdrawTokens(
 
     # withdraw assets from lego partner
     assert extcall CompoundV2(_vaultToken).redeem(max_value(uint256)) == 0 # dev: could not withdraw from moonwell
+
+    # when withdrawing weth, they give eth
+    if _asset == WETH:
+        extcall WethContract(WETH).deposit(value=self.balance)
 
     # validate received asset , transfer back to user
     assetAmountReceived: uint256 = staticcall IERC20(_asset).balanceOf(self) - preLegoBalance

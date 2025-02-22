@@ -101,9 +101,9 @@ def lego_fluid(getRegistry, fork, lego_registry, addy_registry_deploy, governor)
 
 
 @pytest.fixture(scope="session")
-def lego_moonwell(getRegistry, fork, lego_registry, addy_registry_deploy, governor):
+def lego_moonwell(getRegistry, fork, lego_registry, addy_registry_deploy, weth, governor):
     registry = getRegistry("moonwell", fork)
-    addr = boa.load("contracts/legos/yield/LegoMoonwell.vy", registry, addy_registry_deploy, name="lego_moonwell")
+    addr = boa.load("contracts/legos/yield/LegoMoonwell.vy", registry, addy_registry_deploy, weth, name="lego_moonwell")
     assert lego_registry.registerNewLego(addr, "Moonwell", YIELD_OPP_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 
