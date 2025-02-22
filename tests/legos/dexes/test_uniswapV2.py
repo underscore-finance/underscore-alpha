@@ -210,4 +210,4 @@ def test_uniswapV2_remove_liq(
     lpAmountReceived, liqAmountA, liqAmountB, usdValue, _ = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
 
     # test remove liquidity
-    testLegoLiquidityRemoved(legoId, pool, MAX_UINT256, tokenA, tokenB, 0, 0)
+    testLegoLiquidityRemoved(legoId, ZERO_ADDRESS, 0, pool, tokenA, tokenB)

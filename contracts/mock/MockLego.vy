@@ -344,17 +344,26 @@ def addLiquidity(
 
 @external
 def removeLiquidity(
-    _lpToken: address,
-    _lpAmount: uint256,
+    _nftAddr: address,
+    _nftTokenId: uint256,
+    _pool: address,
     _tokenA: address,
     _tokenB: address,
+    _lpToken: address,
+    _liqToRemove: uint256,
     _minAmountA: uint256,
     _minAmountB: uint256,
     _recipient: address,
     _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256, uint256):
+) -> (uint256, uint256, uint256, uint256, uint256, bool):
     # not implemented
-    return 0, 0, 0, 0, 0
+    return 0, 0, 0, 0, 0, False
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    return _pool
 
 
 ##################

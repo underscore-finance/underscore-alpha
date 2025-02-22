@@ -148,13 +148,14 @@ event AgenticLiquidityAdded:
 
 event AgenticLiquidityRemoved:
     signer: indexed(address)
-    lpToken: indexed(address)
-    lpAmountBurned: uint256
     tokenA: indexed(address)
     tokenB: address
     removedAmountA: uint256
     removedAmountB: uint256
     usdValue: uint256
+    isDepleted: bool
+    lpToken: indexed(address)
+    lpAmountBurned: uint256
     refundedLpAmount: uint256
     legoId: uint256
     legoAddr: address
@@ -235,8 +236,8 @@ DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
 SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
-ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidityNft(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
-REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(uint256 legoId,address lpToken,uint256 lpAmount,address tokenA,address tokenB,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
+ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
+REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
 WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
@@ -785,71 +786,87 @@ def _addLiquidity(
 @external
 def removeLiquidity(
     _legoId: uint256,
-    _lpToken: address,
+    _nftAddr: address,
+    _nftTokenId: uint256,
+    _pool: address,
     _tokenA: address,
     _tokenB: address,
-    _lpAmount: uint256 = max_value(uint256),
+    _liqToRemove: uint256 = max_value(uint256),
     _minAmountA: uint256 = 0,
     _minAmountB: uint256 = 0,
     _sig: Signature = empty(Signature),
-) -> (uint256, uint256, uint256, uint256):
+) -> (uint256, uint256, uint256, bool):
     cd: CoreData = self._getCoreData()
 
     # signer
     signer: address = msg.sender
     if _sig.signer != empty(address):
-        extcall WalletConfig(cd.walletConfig).isValidSignature(abi_encode(REMOVE_LIQ_TYPE_HASH, _legoId, _lpToken, _lpAmount, _tokenA, _tokenB, _minAmountA, _minAmountB, _sig.expiration), _sig)
+        extcall WalletConfig(cd.walletConfig).isValidSignature(abi_encode(REMOVE_LIQ_TYPE_HASH, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB, _sig.expiration), _sig)
         signer = _sig.signer
 
     # check permissions / subscription data
-    isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.REMOVE_LIQ, [_lpToken, _tokenA, _tokenB], [_legoId], cd)
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.REMOVE_LIQ, [_tokenA, _tokenB], [_legoId], cd)
 
     # remove liquidity
-    lpAmountBurned: uint256 = 0
-    removedAmountA: uint256 = 0
-    removedAmountB: uint256 = 0
+    amountA: uint256 = 0
+    amountB: uint256 = 0
     usdValue: uint256 = 0
-    lpAmountBurned, removedAmountA, removedAmountB, usdValue = self._removeLiquidity(signer, _legoId, _lpToken, _lpAmount, _tokenA, _tokenB, _minAmountA, _minAmountB, isSignerAgent, cd)
+    isDepleted: bool = False
+    amountA, amountB, usdValue, isDepleted = self._removeLiquidity(signer, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB, isSignerAgent, cd)
 
     self._handleTransactionFees(signer, isSignerAgent, ActionType.REMOVE_LIQ, usdValue, cd)
-    return lpAmountBurned, removedAmountA, removedAmountB, usdValue
+    return amountA, amountB, usdValue, isDepleted
 
 
 @internal
 def _removeLiquidity(
     _signer: address,
     _legoId: uint256,
-    _lpToken: address,
-    _lpAmount: uint256,
+    _nftAddr: address,
+    _nftTokenId: uint256,
+    _pool: address,
     _tokenA: address,
     _tokenB: address,
+    _liqToRemove: uint256,
     _minAmountA: uint256,
     _minAmountB: uint256,
     _isSignerAgent: bool,
     _cd: CoreData,
-) -> (uint256, uint256, uint256, uint256):
+) -> (uint256, uint256, uint256, bool):
     legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
-    # lp token
-    lpAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_lpToken, _lpAmount, True, _cd)
-    assert extcall IERC20(_lpToken).approve(legoAddr, lpAmount, default_return_value=True) # dev: approval failed
-    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_lpToken, _cd.trialFundsAsset, _cd.legoRegistry)
+    lpToken: address = empty(address)
+    liqToRemove: uint256 = _liqToRemove
+
+    # transfer nft to lego (if applicable)
+    hasNftLiqPosition: bool = _nftAddr != empty(address) and _nftTokenId != 0
+    if hasNftLiqPosition:
+        extcall IERC721(_nftAddr).safeTransferFrom(self, legoAddr, _nftTokenId, ERC721_RECEIVE_DATA)
+    
+    # handle lp token
+    else:
+        lpToken = staticcall LegoDex(legoAddr).getLpToken(_pool)
+        liqToRemove = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(lpToken, liqToRemove, False, _cd)
+        assert extcall IERC20(lpToken).approve(legoAddr, liqToRemove, default_return_value=True) # dev: approval failed
 
     # remove liquidity via lego partner
-    lpAmountBurned: uint256 = 0
-    removedAmountA: uint256 = 0
-    removedAmountB: uint256 = 0
+    amountA: uint256 = 0
+    amountB: uint256 = 0
     usdValue: uint256 = 0
+    lpAmountBurned: uint256 = 0
     refundedLpAmount: uint256 = 0
-    lpAmountBurned, removedAmountA, removedAmountB, usdValue, refundedLpAmount = extcall LegoDex(legoAddr).removeLiquidity(_lpToken, lpAmount, _tokenA, _tokenB, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
-    
-    # reset approvals
-    self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
-    assert extcall IERC20(_lpToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+    isDepleted: bool = False
+    amountA, amountB, usdValue, lpAmountBurned, refundedLpAmount, isDepleted = extcall LegoDex(legoAddr).removeLiquidity(_nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, lpToken, liqToRemove, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
 
-    log AgenticLiquidityRemoved(_signer, _lpToken, lpAmountBurned, _tokenA, _tokenB, removedAmountA, removedAmountB, usdValue, refundedLpAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
-    return lpAmountBurned, removedAmountA, removedAmountB, usdValue
+    # validate the nft came back, reset lp token approvals
+    if hasNftLiqPosition:
+        assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
+    else:
+        assert extcall IERC20(lpToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    log AgenticLiquidityRemoved(_signer, _tokenA, _tokenB, amountA, amountB, usdValue, isDepleted, lpToken, lpAmountBurned, refundedLpAmount, _legoId, legoAddr, msg.sender, _isSignerAgent)
+    return amountA, amountB, usdValue, isDepleted
 
 
 ##################
