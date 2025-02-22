@@ -92,6 +92,11 @@ struct SubscriptionInfo:
     trialPeriod: uint256
     payPeriod: uint256
 
+struct PendingOwner:
+    newOwner: address
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
 event AgentAdded:
     agent: indexed(address)
     allowedAssets: uint256
@@ -134,6 +139,25 @@ event ReserveAssetSet:
     asset: indexed(address)
     amount: uint256
 
+event OwnershipChangeInitiated:
+    prevOwner: indexed(address)
+    newOwner: indexed(address)
+    confirmBlock: uint256
+
+event OwnershipChangeConfirmed:
+    prevOwner: indexed(address)
+    newOwner: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event OwnershipChangeCancelled:
+    cancelledOwner: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event OwnershipChangeDelaySet:
+    delayBlocks: uint256
+
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -142,8 +166,12 @@ event FundsRecovered:
 # core
 wallet: public(address)
 
-# user settings
+# owner
 owner: public(address) # owner of the wallet
+pendingOwner: public(PendingOwner) # pending owner of the wallet
+ownershipChangeDelay: public(uint256) # num blocks to wait before owner can be changed
+
+# user settings
 protocolSub: public(ProtocolSub) # subscription info
 reserveAssets: public(HashMap[address, uint256]) # asset -> reserve amount
 agentSettings: public(HashMap[address, AgentInfo]) # agent -> agent info
@@ -166,6 +194,9 @@ ORACLE_REGISTRY_ID: constant(uint256) = 4
 usedSignatures: public(HashMap[Bytes[65], bool])
 ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
 DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
+
+MIN_OWNER_CHANGE_DELAY: constant(uint256) = 21_600 # 12 hours on Base (2 seconds per block)
+MAX_OWNER_CHANGE_DELAY: constant(uint256) = 302_400 # 7 days on Base (2 seconds per block)
 
 
 @deploy
@@ -198,6 +229,7 @@ def initialize(
     self.wallet = _wallet
     self.addyRegistry = _addyRegistry
     self.owner = _owner
+    self.ownershipChangeDelay = MIN_OWNER_CHANGE_DELAY
 
     priceSheets: address = staticcall AddyRegistry(_addyRegistry).getAddy(PRICE_SHEETS_ID)
 
@@ -867,6 +899,74 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
         log ReserveAssetSet(asset, amount)
 
     return True
+
+
+####################
+# Ownership Change #
+####################
+
+
+@external
+def changeOwnership(_newOwner: address):
+    """
+    @notice Initiates a new ownership change
+    @dev Can only be called by the current owner
+    @param _newOwner The address of the new owner
+    """
+    currentOwner: address = self.owner
+    assert msg.sender == currentOwner # dev: no perms
+    assert _newOwner not in [empty(address), currentOwner] # dev: invalid new owner
+
+    confirmBlock: uint256 = block.number + self.ownershipChangeDelay
+    self.pendingOwner = PendingOwner(
+        newOwner= _newOwner,
+        initiatedBlock= block.number,
+        confirmBlock= confirmBlock,
+    )
+    log OwnershipChangeInitiated(currentOwner, _newOwner, confirmBlock)
+
+
+@external
+def confirmOwnershipChange():
+    """
+    @notice Confirms the ownership change
+    @dev Can only be called by the new owner
+    """
+    data: PendingOwner = self.pendingOwner
+    assert data.newOwner != empty(address) # dev: no pending owner
+    assert data.confirmBlock != 0 and block.number >= data.confirmBlock # dev: time delay not reached
+    assert msg.sender == data.newOwner # dev: only new owner can confirm
+
+    prevOwner: address = self.owner
+    self.owner = data.newOwner
+    self.pendingOwner = empty(PendingOwner)
+    log OwnershipChangeConfirmed(prevOwner, data.newOwner, data.initiatedBlock, data.confirmBlock)
+
+
+@external
+def cancelOwnershipChange():
+    """
+    @notice Cancels the ownership change
+    @dev Can only be called by the current owner
+    """
+    assert msg.sender == self.owner # dev: no perms
+    data: PendingOwner = self.pendingOwner
+    assert data.confirmBlock != 0 # dev: no pending change
+    self.pendingOwner = empty(PendingOwner)
+    log OwnershipChangeCancelled(data.newOwner, data.initiatedBlock, data.confirmBlock)
+
+
+@external
+def setOwnershipChangeDelay(_numBlocks: uint256):
+    """
+    @notice Sets the ownership change delay
+    @dev Can only be called by the owner
+    @param _numBlocks The number of blocks to wait before ownership can be changed
+    """
+    assert msg.sender == self.owner # dev: no perms
+    assert _numBlocks >= MIN_OWNER_CHANGE_DELAY and _numBlocks <= MAX_OWNER_CHANGE_DELAY # dev: invalid delay
+    self.ownershipChangeDelay = _numBlocks
+    log OwnershipChangeDelaySet(_numBlocks)
 
 
 #################
