@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS
 from conf_tokens import TEST_AMOUNTS, TOKENS
 
 
