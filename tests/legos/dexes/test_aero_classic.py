@@ -158,3 +158,197 @@ def test_aerodrome_classic_swap_partial_with_pool(
 
     pool = getPool(token_str)
     testLegoSwap(lego_aero_classic.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+
+
+# add liquidity
+
+
+@pytest.always
+def test_aerodrome_classic_add_liquidity_more_token_A_volatile(
+    testLegoLiquidityAdded,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("aero")
+    amountB = 1_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d")
+    testLegoLiquidityAdded(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB, amountA, amountB)
+
+
+@pytest.always
+def test_aerodrome_classic_add_liquidity_more_token_B_volatile(
+    testLegoLiquidityAdded,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 1_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("aero")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d")
+    testLegoLiquidityAdded(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB, amountA, amountB)
+
+
+@pytest.always
+def test_aerodrome_classic_add_liquidity_more_token_A_stable(
+    testLegoLiquidityAdded,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("dola")
+    amountB = 1_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0xf213F2D02837012dC0236cC105061e121bB03e37")
+    testLegoLiquidityAdded(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB, amountA, amountB)
+
+
+@pytest.always
+def test_aerodrome_classic_add_liquidity_more_token_B_stable(
+    testLegoLiquidityAdded,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 1_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("dola")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0xf213F2D02837012dC0236cC105061e121bB03e37")
+    testLegoLiquidityAdded(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB, amountA, amountB)
+
+
+# remove liquidity
+
+
+@pytest.always
+def test_aerodrome_classic_remove_liq_max_volatile(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+    bob_agent,
+):
+    legoId = lego_aero_classic.legoId()
+    pool = boa.from_etherscan("0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d")
+
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("aero")
+    amountB = 11_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    # add liquidity
+    lpAmountReceived, liqAmountA, liqAmountB, usdValue, _ = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
+
+
+@pytest.always
+def test_aerodrome_classic_remove_liq_partial_volatile(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+    bob_agent,
+):
+    legoId = lego_aero_classic.legoId()
+    pool = boa.from_etherscan("0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d")
+
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("aero")
+    amountB = 11_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    # add liquidity
+    lpAmountReceived, liqAmountA, liqAmountB, usdValue, _ = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB, lpAmountReceived // 2)
+
+
+@pytest.always
+def test_aerodrome_classic_remove_liq_max_stable(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+    bob_agent,
+):
+    legoId = lego_aero_classic.legoId()
+    pool = boa.from_etherscan("0xf213F2D02837012dC0236cC105061e121bB03e37")
+
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("dola")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    # add liquidity
+    lpAmountReceived, liqAmountA, liqAmountB, usdValue, _ = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
+
+
+@pytest.always
+def test_aerodrome_classic_remove_liq_partial_stable(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+    bob_agent,
+):
+    legoId = lego_aero_classic.legoId()
+    pool = boa.from_etherscan("0xf213F2D02837012dC0236cC105061e121bB03e37")
+
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("dola")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    # add liquidity
+    lpAmountReceived, liqAmountA, liqAmountB, usdValue, _ = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB, lpAmountReceived // 2)

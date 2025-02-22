@@ -12,15 +12,18 @@ interface AeroClassicPool:
     def swap(_amount0Out: uint256, _amount1Out: uint256, _recipient: address, _data: Bytes[256]): nonpayable
     def getAmountOut(_amountIn: uint256, _tokenIn: address) -> uint256: view
     def tokens() -> (address, address): view
+    def stable() -> bool: view
 
 interface AeroRouter:
+    def addLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
+    def removeLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _lpAmount: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256): nonpayable
     def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[Route, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
-
-interface AeroFactory:
-    def getPool(_tokenA: address, _tokenB: address, _isStable: bool) -> address: view
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface AeroFactory:
+    def getPool(_tokenA: address, _tokenB: address, _isStable: bool) -> address: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -37,6 +40,28 @@ event AerodromeSwap:
     tokenOut: indexed(address)
     amountIn: uint256
     amountOut: uint256
+    usdValue: uint256
+    recipient: address
+
+event AerodromeLiquidityAdded:
+    sender: indexed(address)
+    tokenA: indexed(address)
+    tokenB: indexed(address)
+    amountA: uint256
+    amountB: uint256
+    lpAmountReceived: uint256
+    usdValue: uint256
+    recipient: address
+
+event AerodromeLiquidityRemoved:
+    sender: address
+    pool: indexed(address)
+    tokenA: indexed(address)
+    tokenB: indexed(address)
+    amountA: uint256
+    amountB: uint256
+    lpToken: address
+    lpAmountBurned: uint256
     usdValue: uint256
     recipient: address
 
@@ -81,18 +106,29 @@ def getRegistries() -> DynArray[address, 10]:
 @view
 @internal
 def _getUsdValue(
-    _tokenIn: address,
-    _tokenInAmount: uint256,
-    _tokenOut: address,
-    _tokenOutAmount: uint256,
+    _tokenA: address,
+    _amountA: uint256,
+    _tokenB: address,
+    _amountB: uint256,
+    _isSwap: bool,
     _oracleRegistry: address,
 ) -> uint256:
     oracleRegistry: address = _oracleRegistry
     if _oracleRegistry == empty(address):
         oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    tokenInUsdValue: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenIn, _tokenInAmount)
-    tokenOutUsdValue: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenOut, _tokenOutAmount)
-    return max(tokenInUsdValue, tokenOutUsdValue)
+    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
+    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
+    if _isSwap:
+        return max(usdValueA, usdValueB)
+    else:
+        return usdValueA + usdValueB
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    # in uniswap v2, the lp token is the pool address
+    return _pool
 
 
 ########
@@ -140,14 +176,12 @@ def swapTokens(
         assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
         swapAmount -= refundAssetAmount
 
-    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, _oracleRegistry)
+    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, True, _oracleRegistry)
     log AerodromeSwap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
     return swapAmount, toAmount, refundAssetAmount, usdValue
 
 
-################
-# Swap In Pool #
-################
+# swap in pool
 
 
 @internal
@@ -194,9 +228,7 @@ def _swapTokensInPool(
     return toAmount
 
 
-################
-# Swap Generic #
-################
+# generic swap
 
 
 @internal
@@ -236,9 +268,9 @@ def _isStablePair(_tokenA: address, _tokenB: address, _factory: address) -> bool
     return False
 
 
-#############
-# Liquidity #
-#############
+#################
+# Add Liquidity #
+#################
 
 
 @external
@@ -256,11 +288,79 @@ def addLiquidity(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
-    # not implemented
-    return 0, 0, 0, 0, 0, 0, 0
+    assert self.isActivated # dev: not activated
+
+    # validate tokens
+    token0: address = empty(address)
+    token1: address = empty(address)
+    token0, token1 = staticcall AeroClassicPool(_pool).tokens()
+
+    tokens: address[2] = [token0, token1]
+    assert _tokenA in tokens # dev: invalid tokenA
+    assert _tokenB in tokens # dev: invalid tokenB
+    assert _tokenA != _tokenB # dev: invalid tokens
+
+    # pre balances
+    preLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
+    preLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
+
+    # token a
+    transferAmountA: uint256 = min(_amountA, staticcall IERC20(_tokenA).balanceOf(msg.sender))
+    assert transferAmountA != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenA).transferFrom(msg.sender, self, transferAmountA, default_return_value=True) # dev: transfer failed
+    liqAmountA: uint256 = min(transferAmountA, staticcall IERC20(_tokenA).balanceOf(self))
+
+    # token b
+    transferAmountB: uint256 = min(_amountB, staticcall IERC20(_tokenB).balanceOf(msg.sender))
+    assert transferAmountB != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenB).transferFrom(msg.sender, self, transferAmountB, default_return_value=True) # dev: transfer failed
+    liqAmountB: uint256 = min(transferAmountB, staticcall IERC20(_tokenB).balanceOf(self))
+
+    # approvals
+    router: address = AERODROME_ROUTER
+    assert extcall IERC20(_tokenA).approve(router, liqAmountA, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenB).approve(router, liqAmountB, default_return_value=True) # dev: approval failed
+
+    # add liquidity
+    lpAmountReceived: uint256 = 0
+    liqAmountA, liqAmountB, lpAmountReceived = extcall AeroRouter(router).addLiquidity(
+        _tokenA,
+        _tokenB,
+        staticcall AeroClassicPool(_pool).stable(),
+        liqAmountA,
+        liqAmountB,
+        _minAmountA,
+        _minAmountB,
+        _recipient,
+        block.timestamp,
+    )
+    assert lpAmountReceived != 0 # dev: no liquidity added
+
+    # reset approvals
+    assert extcall IERC20(_tokenA).approve(router, 0, default_return_value=True) # dev: approval failed
+    assert extcall IERC20(_tokenB).approve(router, 0, default_return_value=True) # dev: approval failed
+
+    # refund if full liquidity was not added
+    currentLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
+    refundAssetAmountA: uint256 = 0
+    if currentLegoBalanceA > preLegoBalanceA:
+        refundAssetAmountA = currentLegoBalanceA - preLegoBalanceA
+        assert extcall IERC20(_tokenA).transfer(msg.sender, refundAssetAmountA, default_return_value=True) # dev: transfer failed
+
+    currentLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
+    refundAssetAmountB: uint256 = 0
+    if currentLegoBalanceB > preLegoBalanceB:
+        refundAssetAmountB = currentLegoBalanceB - preLegoBalanceB
+        assert extcall IERC20(_tokenB).transfer(msg.sender, refundAssetAmountB, default_return_value=True) # dev: transfer failed
+
+    usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
+    log AerodromeLiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, usdValue, _recipient)
+    return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, 0
 
 
-# remove liq
+####################
+# Remove Liquidity #
+####################
 
 
 @external
@@ -276,14 +376,61 @@ def removeLiquidity(
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256, uint256, bool):
-    # not implemented
-    return 0, 0, 0, 0, 0, False
+    assert self.isActivated # dev: not activated
 
+    # validate tokens
+    token0: address = empty(address)
+    token1: address = empty(address)
+    token0, token1 = staticcall AeroClassicPool(_pool).tokens()
 
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    return _pool
+    tokens: address[2] = [token0, token1]
+    assert _tokenA in tokens # dev: invalid tokenA
+    assert _tokenB in tokens # dev: invalid tokenB
+    assert _tokenA != _tokenB # dev: invalid tokens
+
+    # pre balance
+    preLegoBalance: uint256 = staticcall IERC20(_lpToken).balanceOf(self)
+
+    # lp token
+    transferAmount: uint256 = min(_liqToRemove, staticcall IERC20(_lpToken).balanceOf(msg.sender))
+    assert transferAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_lpToken).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+    lpAmount: uint256 = min(transferAmount, staticcall IERC20(_lpToken).balanceOf(self))
+
+    # approvals
+    router: address = AERODROME_ROUTER
+    assert extcall IERC20(_lpToken).approve(router, lpAmount, default_return_value=True) # dev: approval failed
+
+    # remove liquidity
+    amountA: uint256 = 0
+    amountB: uint256 = 0
+    amountA, amountB = extcall AeroRouter(router).removeLiquidity(
+        _tokenA,
+        _tokenB,
+        staticcall AeroClassicPool(_pool).stable(),
+        lpAmount,
+        _minAmountA,
+        _minAmountB,
+        _recipient,
+        block.timestamp,
+    )
+    assert amountA != 0 # dev: no amountA removed
+    assert amountB != 0 # dev: no amountB removed
+
+    # reset approvals
+    assert extcall IERC20(_lpToken).approve(router, 0, default_return_value=True) # dev: approval failed
+
+    # refund if full liquidity was not removed
+    currentLegoBalance: uint256 = staticcall IERC20(_lpToken).balanceOf(self)
+    refundedLpAmount: uint256 = 0
+    if currentLegoBalance > preLegoBalance:
+        refundedLpAmount = currentLegoBalance - preLegoBalance
+        assert extcall IERC20(_lpToken).transfer(msg.sender, refundedLpAmount, default_return_value=True) # dev: transfer failed
+        lpAmount -= refundedLpAmount
+
+    usdValue: uint256 = self._getUsdValue(_tokenA, amountA, _tokenB, amountB, False, _oracleRegistry)
+    log AerodromeLiquidityRemoved(msg.sender, _pool, _tokenA, _tokenB, amountA, amountB, _lpToken, lpAmount, usdValue, _recipient)
+    return amountA, amountB, usdValue, lpAmount, refundedLpAmount, refundedLpAmount != 0
 
 
 #################
