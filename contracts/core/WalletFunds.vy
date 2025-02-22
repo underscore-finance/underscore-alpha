@@ -235,8 +235,7 @@ DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
 SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
-ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(uint256 legoId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
-ADD_LIQ_NFT_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidityNft(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,int24 tickLower,int24 tickUpper,uint256 amountA,uint256 amountB,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
+ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidityNft(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(uint256 legoId,address lpToken,uint256 lpAmount,address tokenA,address tokenB,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
@@ -671,39 +670,15 @@ def _swapTokens(
 @external
 def addLiquidity(
     _legoId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _amountA: uint256 = max_value(uint256),
-    _amountB: uint256 = max_value(uint256),
-    _minAmountA: uint256 = 0,
-    _minAmountB: uint256 = 0,
-    _sig: Signature = empty(Signature),
-) -> (uint256, uint256, uint256, uint256, uint256):
-    cd: CoreData = self._getCoreData()
-
-    # signer
-    signer: address = msg.sender
-    if _sig.signer != empty(address):
-        extcall WalletConfig(cd.walletConfig).isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _legoId, _pool, _tokenA, _tokenB, _amountA, _amountB, _minAmountA, _minAmountB, _sig.expiration), _sig)
-        signer = _sig.signer
-
-    return self._addLiquidityShared(signer, _legoId, empty(address), 0, _pool, _tokenA, _tokenB, 0, 0, _amountA, _amountB, _minAmountA, _minAmountB, cd)
-
-
-@nonreentrant
-@external
-def addLiquidityNft(
-    _legoId: uint256,
     _nftAddr: address,
     _nftTokenId: uint256,
     _pool: address,
     _tokenA: address,
     _tokenB: address,
+    _amountA: uint256 = max_value(uint256),
+    _amountB: uint256 = max_value(uint256),
     _tickLower: int24 = min_value(int24),
     _tickUpper: int24 = max_value(int24),
-    _amountA: uint256 = max_value(uint256),
-    _amountB: uint256 = max_value(uint256),
     _minAmountA: uint256 = 0,
     _minAmountB: uint256 = 0,
     _sig: Signature = empty(Signature),
@@ -713,32 +688,11 @@ def addLiquidityNft(
     # signer
     signer: address = msg.sender
     if _sig.signer != empty(address):
-        extcall WalletConfig(cd.walletConfig).isValidSignature(abi_encode(ADD_LIQ_NFT_TYPE_HASH, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, _amountA, _amountB, _minAmountA, _minAmountB, _sig.expiration), _sig)
+        extcall WalletConfig(cd.walletConfig).isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _sig.expiration), _sig)
         signer = _sig.signer
 
-    return self._addLiquidityShared(signer, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, _amountA, _amountB, _minAmountA, _minAmountB, cd)
-
-
-@internal
-def _addLiquidityShared(
-    _signer: address,
-    _legoId: uint256,
-    _nftAddr: address,
-    _nftTokenId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _tickLower: int24,
-    _tickUpper: int24,
-    _amountA: uint256,
-    _amountB: uint256,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _cd: CoreData,
-) -> (uint256, uint256, uint256, uint256, uint256):
-
     # check permissions / subscription data
-    isSignerAgent: bool = self._checkPermsAndHandleSubs(_signer, ActionType.ADD_LIQ, [_tokenA, _tokenB], [_legoId], _cd)
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(signer, ActionType.ADD_LIQ, [_tokenA, _tokenB], [_legoId], cd)
 
     # add liquidity
     liquidityAdded: uint256 = 0
@@ -746,9 +700,9 @@ def _addLiquidityShared(
     liqAmountB: uint256 = 0
     usdValue: uint256 = 0
     nftTokenId: uint256 = 0
-    liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = self._addLiquidity(_signer, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, _amountA, _amountB, _minAmountA, _minAmountB, isSignerAgent, _cd)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = self._addLiquidity(signer, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, isSignerAgent, cd)
 
-    self._handleTransactionFees(_signer, isSignerAgent, ActionType.ADD_LIQ, usdValue, _cd)
+    self._handleTransactionFees(signer, isSignerAgent, ActionType.ADD_LIQ, usdValue, cd)
     return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId
 
 
@@ -761,10 +715,10 @@ def _addLiquidity(
     _pool: address,
     _tokenA: address,
     _tokenB: address,
-    _tickLower: int24,
-    _tickUpper: int24,
     _amountA: uint256,
     _amountB: uint256,
+    _tickLower: int24,
+    _tickUpper: int24,
     _minAmountA: uint256,
     _minAmountB: uint256,
     _isSignerAgent: bool,
@@ -774,17 +728,24 @@ def _addLiquidity(
     assert legoAddr != empty(address) # dev: invalid lego
 
     # token a
-    amountA: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenA, _amountA, True, _cd)
-    assert extcall IERC20(_tokenA).approve(legoAddr, amountA, default_return_value=True) # dev: approval failed
-    isTrialFundsVaultTokenA: bool = self._isTrialFundsVaultToken(_tokenA, _cd.trialFundsAsset, _cd.legoRegistry)
+    amountA: uint256 = 0
+    isTrialFundsVaultTokenA: bool = False
+    if _amountA != 0:
+        amountA = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenA, _amountA, True, _cd)
+        assert extcall IERC20(_tokenA).approve(legoAddr, amountA, default_return_value=True) # dev: approval failed
+        isTrialFundsVaultTokenA = self._isTrialFundsVaultToken(_tokenA, _cd.trialFundsAsset, _cd.legoRegistry)
 
     # token b
-    amountB: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenB, _amountB, True, _cd)
-    assert extcall IERC20(_tokenB).approve(legoAddr, amountB, default_return_value=True) # dev: approval failed
-    isTrialFundsVaultTokenB: bool = self._isTrialFundsVaultToken(_tokenB, _cd.trialFundsAsset, _cd.legoRegistry)
+    amountB: uint256 = 0
+    isTrialFundsVaultTokenB: bool = False
+    if _amountB != 0:
+        amountB = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenB, _amountB, True, _cd)
+        assert extcall IERC20(_tokenB).approve(legoAddr, amountB, default_return_value=True) # dev: approval failed
+        isTrialFundsVaultTokenB = self._isTrialFundsVaultToken(_tokenB, _cd.trialFundsAsset, _cd.legoRegistry)
 
     # transfer nft to lego (if applicable)
-    if _nftAddr != empty(address) and _nftTokenId != 0:
+    hasNftLiqPosition: bool = _nftAddr != empty(address) and _nftTokenId != 0
+    if hasNftLiqPosition:
         extcall IERC721(_nftAddr).safeTransferFrom(self, legoAddr, _nftTokenId, ERC721_RECEIVE_DATA)
 
     # add liquidity via lego partner
@@ -797,13 +758,19 @@ def _addLiquidity(
     nftTokenId: uint256 = 0
     liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = extcall LegoDex(legoAddr).addLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, amountA, amountB, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
 
+    # validate the nft came back
+    if hasNftLiqPosition:
+        assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
+
     # token a
     self._checkTrialFundsPostTx(isTrialFundsVaultTokenA, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
-    assert extcall IERC20(_tokenA).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+    if amountA != 0:
+        assert extcall IERC20(_tokenA).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # token b
     self._checkTrialFundsPostTx(isTrialFundsVaultTokenB, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
-    assert extcall IERC20(_tokenB).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+    if amountB != 0:
+        assert extcall IERC20(_tokenB).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     log AgenticLiquidityAdded(_signer, _tokenA, _tokenB, liqAmountA, liqAmountB, liquidityAdded, _pool, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId, _legoId, legoAddr, msg.sender, _isSignerAgent)
     return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId

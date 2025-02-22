@@ -251,12 +251,9 @@ def _swapTokensGeneric(
     return amounts[1]
 
 
-#############
-# Liquidity #
-#############
-
-
-# add liq
+#################
+# Add Liquidity #
+#################
 
 
 @external
@@ -336,7 +333,9 @@ def addLiquidity(
     return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, 0
 
 
-# remove liq
+####################
+# Remove Liquidity #
+####################
 
 
 @external

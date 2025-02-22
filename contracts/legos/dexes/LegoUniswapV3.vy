@@ -7,6 +7,7 @@ exports: gov.__interface__
 
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
+from ethereum.ercs import IERC721
 from interfaces import LegoDex
 
 interface UniV3Pool:
@@ -18,7 +19,10 @@ interface UniV3Pool:
     def fee() -> uint24: view
 
 interface UniV3NftPositionManager:
+    def increaseLiquidity(_params: IncreaseLiquidityParams) -> (uint128, uint256, uint256): nonpayable
     def mint(_params: MintParams) -> (uint256, uint128, uint256, uint256): nonpayable
+    def collect(_params: CollectParams) -> (uint256, uint256): nonpayable
+    def positions(_tokenId: uint256) -> PositionData: view
 
 interface IUniswapV3Callback:
     def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
@@ -56,6 +60,34 @@ struct MintParams:
     amount1Min: uint256
     recipient: address
     deadline: uint256
+
+struct IncreaseLiquidityParams:
+    tokenId: uint256
+    amount0Desired: uint256
+    amount1Desired: uint256
+    amount0Min: uint256
+    amount1Min: uint256
+    deadline: uint256
+
+struct CollectParams:
+    tokenId: uint256
+    recipient: address
+    amount0Max: uint128
+    amount1Max: uint128
+
+struct PositionData:
+    nonce: uint96
+    operator: address
+    token0: address
+    token1: address
+    fee: uint24
+    tickLower: int24
+    tickUpper: int24
+    liquidity: uint128
+    feeGrowthInside0LastX128: uint256
+    feeGrowthInside1LastX128: uint256
+    tokensOwed0: uint128
+    tokensOwed1: uint128
 
 struct PoolSwapData:
     pool: address
@@ -169,9 +201,164 @@ def _getUsdValue(
         return usdValueA + usdValueB
 
 
-#############
-# Liquidity #
-#############
+########
+# Swap #
+########
+
+
+@external
+def swapTokens(
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _pool: address,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
+    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
+    assert _tokenIn != _tokenOut # dev: invalid tokens
+
+    # pre balances
+    preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+
+    # transfer deposit asset to this contract
+    transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
+    assert transferAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
+
+    # perform swap
+    toAmount: uint256 = 0
+    if _pool != empty(address):
+        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+    else:
+        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+    assert toAmount != 0 # dev: no tokens swapped
+
+    # refund if full swap didn't get through
+    currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+    refundAssetAmount: uint256 = 0
+    if currentLegoBalance > preLegoBalance:
+        refundAssetAmount = currentLegoBalance - preLegoBalance
+        assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        swapAmount -= refundAssetAmount
+
+    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, True, _oracleRegistry)
+    log UniswapV3SwapInPool(msg.sender, _pool, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
+    return swapAmount, toAmount, refundAssetAmount, usdValue
+
+
+# swap in pool
+
+
+@internal
+def _swapTokensInPool(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+) -> uint256:
+    tokens: address[2] = [staticcall UniV3Pool(_pool).token0(), staticcall UniV3Pool(_pool).token1()]
+    assert _tokenIn in tokens # dev: invalid tokenIn
+    assert _tokenOut in tokens # dev: invalid tokenOut
+
+    # params
+    zeroForOne: bool = True
+    sqrtPriceLimitX96: uint160 = MIN_SQRT_RATIO_PLUS_ONE
+    if _tokenIn != tokens[0]:
+        zeroForOne = False
+        sqrtPriceLimitX96 = MAX_SQRT_RATIO_MINUS_ONE
+
+    # save in transient storage (for use in callback)
+    self.poolSwapData = PoolSwapData(
+        pool=_pool,
+        tokenIn=_tokenIn,
+        amountIn=_amountIn,
+    )
+
+    # perform swap
+    amount0: int256 = 0
+    amount1: int256 = 0
+    amount0, amount1 = extcall UniV3Pool(_pool).swap(_recipient, zeroForOne, convert(_amountIn, int256), sqrtPriceLimitX96, b"")
+
+    # check swap results
+    toAmount: uint256 = 0
+    if zeroForOne:
+        toAmount = convert(-amount1, uint256)
+    else:
+        toAmount = convert(-amount0, uint256)
+
+    assert toAmount >= _minAmountOut # dev: insufficient output
+    return toAmount
+
+
+@external
+def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]):
+    poolSwapData: PoolSwapData = self.poolSwapData
+    assert msg.sender == poolSwapData.pool # dev: no perms
+
+    # transfer tokens to pool
+    assert extcall IERC20(poolSwapData.tokenIn).transfer(poolSwapData.pool, poolSwapData.amountIn, default_return_value=True) # dev: transfer failed
+
+
+# generic swap
+
+
+@view
+@internal
+def _getBestFeeTier(_tokenA: address, _tokenB: address) -> uint24:
+    bestLiquidity: uint128 = 0
+    bestFeeTier: uint24 = 0
+
+    factory: address = UNISWAP_V3_FACTORY
+    for i: uint256 in range(4):
+        fee: uint24 = FEE_TIERS[i]
+        pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)
+        if pool != empty(address):
+            liquidity: uint128 = staticcall UniV3Pool(pool).liquidity()
+            if liquidity > bestLiquidity:
+                bestLiquidity = liquidity
+                bestFeeTier = fee
+
+    return bestFeeTier
+
+
+@internal
+def _swapTokensGeneric(
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256, 
+    _recipient: address,
+) -> uint256:
+    bestFeeTier: uint24 = self._getBestFeeTier(_tokenIn, _tokenOut)
+    assert bestFeeTier != 0 # dev: no pool found
+
+    router: address = UNISWAP_V3_SWAP_ROUTER
+    assert extcall IERC20(_tokenIn).approve(router, _amountIn, default_return_value=True) # dev: approval failed
+    toAmount: uint256 = extcall UniV3SwapRouter(router).exactInputSingle(
+        ExactInputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            fee=bestFeeTier,
+            recipient=_recipient,
+            amountIn=_amountIn,
+            amountOutMinimum=_minAmountOut,
+            sqrtPriceLimitX96=0,
+        )
+    )
+    assert extcall IERC20(_tokenIn).approve(router, 0, default_return_value=True) # dev: approval failed
+    return toAmount
+
+
+#################
+# Add Liquidity #
+#################
 
 
 @external
@@ -233,20 +420,16 @@ def addLiquidity(
         minAmount0 = _minAmountB
         minAmount1 = _minAmountA
 
+    # add liquidity
     nftTokenId: uint256 = _nftTokenId
     liquidityAdded: uint256 = 0
-
-    # mint new position
+    liquidityAddedInt128: uint128 = 0
     if _nftTokenId == 0:
-        liqAdded: uint128 = 0
-        nftTokenId, liqAdded, amount0, amount1 = self._mintNewPosition(nftPositionManager, _pool, token0, token1, _tickLower, _tickUpper, amount0, amount1, minAmount0, minAmount1, _recipient)
-        liquidityAdded = convert(liqAdded, uint256)
-
-    # add to existing position
+        nftTokenId, liquidityAddedInt128, amount0, amount1 = self._mintNewPosition(nftPositionManager, _pool, token0, token1, _tickLower, _tickUpper, amount0, amount1, minAmount0, minAmount1, _recipient)
     else:
-        # TODO
-        pass
+        liquidityAddedInt128, amount0, amount1 = self._increaseExistingPosition(nftPositionManager, _nftTokenId, amount0, amount1, minAmount0, minAmount1, _recipient)
 
+    liquidityAdded = convert(liquidityAddedInt128, uint256)
     assert liquidityAdded != 0 # dev: no liquidity added
 
     # reset approvals
@@ -292,8 +475,6 @@ def _mintNewPosition(
     _minAmount1: uint256,
     _recipient: address,
 ) -> (uint256, uint128, uint256, uint256):
-
-    # get ticks
     tickLower: int24 = 0
     tickUpper: int24 = 0
     tickLower, tickUpper = self._getTicks(_pool, _tickLower, _tickUpper)
@@ -333,7 +514,57 @@ def _getTicks(_pool: address, _tickLower: int24, _tickUpper: int24) -> (int24, i
     return tickLower, tickUpper
 
 
-# remove liq
+@internal
+def _increaseExistingPosition(
+    _nftPositionManager: address,
+    _tokenId: uint256,
+    _amount0: uint256,
+    _amount1: uint256,
+    _minAmount0: uint256,
+    _minAmount1: uint256,
+    _recipient: address,
+) -> (uint128, uint256, uint256):
+
+    liquidityAddedInt128: uint128 = 0
+    amount0: uint256 = 0
+    amount1: uint256 = 0
+    params: IncreaseLiquidityParams = IncreaseLiquidityParams(
+        tokenId=_tokenId,
+        amount0Desired=_amount0,
+        amount1Desired=_amount1,
+        amount0Min=_minAmount0,
+        amount1Min=_minAmount1,
+        deadline=block.timestamp,
+    )
+    liquidityAddedInt128, amount0, amount1 = extcall UniV3NftPositionManager(_nftPositionManager).increaseLiquidity(params)
+
+    # collect fees (if applicable) -- must be done before transferring nft
+    self._collectFees(_nftPositionManager, _tokenId, _recipient)
+
+    # transfer nft to recipient
+    extcall IERC721(_nftPositionManager).safeTransferFrom(self, _recipient, _tokenId)
+
+    return liquidityAddedInt128, amount0, amount1
+
+
+@internal
+def _collectFees(_nftPositionManager: address, _tokenId: uint256, _recipient: address) -> (uint256, uint256):
+    feesData: PositionData = staticcall UniV3NftPositionManager(_nftPositionManager).positions(_tokenId)
+    if feesData.tokensOwed0 == 0 and feesData.tokensOwed1 == 0:
+        return 0, 0
+
+    params: CollectParams = CollectParams(
+        tokenId=_tokenId,
+        recipient=_recipient,
+        amount0Max=max_value(uint128),
+        amount1Max=max_value(uint128),
+    )
+    return extcall UniV3NftPositionManager(_nftPositionManager).collect(params)
+
+
+####################
+# Remove Liquidity #
+####################
 
 
 @external
@@ -349,165 +580,6 @@ def removeLiquidity(
 ) -> (uint256, uint256, uint256, uint256, uint256):
     # not implemented
     return 0, 0, 0, 0, 0
-
-
-########
-# Swap #
-########
-
-
-@external
-def swapTokens(
-    _tokenIn: address,
-    _tokenOut: address,
-    _amountIn: uint256,
-    _minAmountOut: uint256,
-    _pool: address,
-    _recipient: address,
-    _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256):
-    assert self.isActivated # dev: not activated
-
-    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
-    assert _tokenIn != _tokenOut # dev: invalid tokens
-
-    # pre balances
-    preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
-
-    # transfer deposit asset to this contract
-    transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
-    assert transferAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
-    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
-
-    # perform swap
-    toAmount: uint256 = 0
-    if _pool != empty(address):
-        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
-    else:
-        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
-    assert toAmount != 0 # dev: no tokens swapped
-
-    # refund if full swap didn't get through
-    currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
-    refundAssetAmount: uint256 = 0
-    if currentLegoBalance > preLegoBalance:
-        refundAssetAmount = currentLegoBalance - preLegoBalance
-        assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
-        swapAmount -= refundAssetAmount
-
-    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, True, _oracleRegistry)
-    log UniswapV3SwapInPool(msg.sender, _pool, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
-    return swapAmount, toAmount, refundAssetAmount, usdValue
-
-
-################
-# Swap In Pool #
-################
-
-
-@internal
-def _swapTokensInPool(
-    _pool: address,
-    _tokenIn: address,
-    _tokenOut: address,
-    _amountIn: uint256,
-    _minAmountOut: uint256,
-    _recipient: address,
-) -> uint256:
-    tokens: address[2] = [staticcall UniV3Pool(_pool).token0(), staticcall UniV3Pool(_pool).token1()]
-    assert _tokenIn in tokens # dev: invalid tokenIn
-    assert _tokenOut in tokens # dev: invalid tokenOut
-
-    # params
-    zeroForOne: bool = True
-    sqrtPriceLimitX96: uint160 = MIN_SQRT_RATIO_PLUS_ONE
-    if _tokenIn != tokens[0]:
-        zeroForOne = False
-        sqrtPriceLimitX96 = MAX_SQRT_RATIO_MINUS_ONE
-
-    # save in transient storage (for use in callback)
-    self.poolSwapData = PoolSwapData(
-        pool=_pool,
-        tokenIn=_tokenIn,
-        amountIn=_amountIn,
-    )
-
-    # perform swap
-    amount0: int256 = 0
-    amount1: int256 = 0
-    amount0, amount1 = extcall UniV3Pool(_pool).swap(_recipient, zeroForOne, convert(_amountIn, int256), sqrtPriceLimitX96, b"")
-
-    # check swap results
-    toAmount: uint256 = 0
-    if zeroForOne:
-        toAmount = convert(-amount1, uint256)
-    else:
-        toAmount = convert(-amount0, uint256)
-
-    assert toAmount >= _minAmountOut # dev: insufficient output
-    return toAmount
-
-
-@external
-def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]):
-    poolSwapData: PoolSwapData = self.poolSwapData
-    assert msg.sender == poolSwapData.pool # dev: no perms
-
-    # transfer tokens to pool
-    assert extcall IERC20(poolSwapData.tokenIn).transfer(poolSwapData.pool, poolSwapData.amountIn, default_return_value=True) # dev: transfer failed
-
-
-################
-# Swap Generic #
-################
-
-
-@view
-@internal
-def _getBestFeeTier(_tokenA: address, _tokenB: address) -> uint24:
-    bestLiquidity: uint128 = 0
-    bestFeeTier: uint24 = 0
-
-    factory: address = UNISWAP_V3_FACTORY
-    for i: uint256 in range(4):
-        fee: uint24 = FEE_TIERS[i]
-        pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)
-        if pool != empty(address):
-            liquidity: uint128 = staticcall UniV3Pool(pool).liquidity()
-            if liquidity > bestLiquidity:
-                bestLiquidity = liquidity
-                bestFeeTier = fee
-
-    return bestFeeTier
-
-
-@internal
-def _swapTokensGeneric(
-    _tokenIn: address,
-    _tokenOut: address,
-    _amountIn: uint256,
-    _minAmountOut: uint256, 
-    _recipient: address,
-) -> uint256:
-    bestFeeTier: uint24 = self._getBestFeeTier(_tokenIn, _tokenOut)
-    assert bestFeeTier != 0 # dev: no pool found
-
-    router: address = UNISWAP_V3_SWAP_ROUTER
-    assert extcall IERC20(_tokenIn).approve(router, _amountIn, default_return_value=True) # dev: approval failed
-    toAmount: uint256 = extcall UniV3SwapRouter(router).exactInputSingle(
-        ExactInputSingleParams(
-            tokenIn=_tokenIn,
-            tokenOut=_tokenOut,
-            fee=bestFeeTier,
-            recipient=_recipient,
-            amountIn=_amountIn,
-            amountOutMinimum=_minAmountOut,
-            sqrtPriceLimitX96=0,
-        )
-    )
-    assert extcall IERC20(_tokenIn).approve(router, 0, default_return_value=True) # dev: approval failed
-    return toAmount
 
 
 #################
