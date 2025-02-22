@@ -172,13 +172,13 @@ ADDY_REGISTRY: public(immutable(address))
 UNISWAP_V3_FACTORY: public(immutable(address))
 UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
 UNI_NFT_POSITION_MANAGER: public(immutable(address))
-ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
 
 FEE_TIERS: constant(uint24[4]) = [100, 500, 3000, 10000] # 0.01%, 0.05%, 0.3%, 1%
 MIN_SQRT_RATIO_PLUS_ONE: constant(uint160) = 4295128740
 MAX_SQRT_RATIO_MINUS_ONE: constant(uint160) = 1461446703485210103287273052203988822378723970341
 TICK_LOWER: constant(int24) = -887272
 TICK_UPPER: constant(int24) = 887272
+ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
 
 
 @deploy
