@@ -241,7 +241,7 @@ DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
 SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
-ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
+ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 expiration)')
 REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
@@ -687,6 +687,7 @@ def addLiquidity(
     _tickUpper: int24 = max_value(int24),
     _minAmountA: uint256 = 0,
     _minAmountB: uint256 = 0,
+    _minLpAmount: uint256 = 0,
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256, uint256, uint256):
     """
@@ -703,6 +704,7 @@ def addLiquidity(
     @param _tickUpper The upper tick of the liquidity range
     @param _minAmountA The minimum amount of the first token to add liquidity
     @param _minAmountB The minimum amount of the second token to add liquidity
+    @param _minLpAmount The minimum amount of lp token amount to receive
     @param _sig The signature of agent or owner (optional)
     @return uint256 The amount of liquidity added
     @return uint256 The amount of the first token added
@@ -715,7 +717,7 @@ def addLiquidity(
     # signer
     signer: address = msg.sender
     if _sig.signer != empty(address):
-        extcall WalletConfig(cd.walletConfig).isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _sig.expiration), _sig)
+        extcall WalletConfig(cd.walletConfig).isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _minLpAmount, _sig.expiration), _sig)
         signer = _sig.signer
 
     # check permissions / subscription data
@@ -727,7 +729,7 @@ def addLiquidity(
     liqAmountB: uint256 = 0
     usdValue: uint256 = 0
     nftTokenId: uint256 = 0
-    liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = self._addLiquidity(signer, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, isSignerAgent, cd)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = self._addLiquidity(signer, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _minLpAmount, isSignerAgent, cd)
 
     self._handleTransactionFees(signer, isSignerAgent, ActionType.ADD_LIQ, usdValue, cd)
     return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId
@@ -748,6 +750,7 @@ def _addLiquidity(
     _tickUpper: int24,
     _minAmountA: uint256,
     _minAmountB: uint256,
+    _minLpAmount: uint256,
     _isSignerAgent: bool,
     _cd: CoreData,
 ) -> (uint256, uint256, uint256, uint256, uint256):
@@ -783,7 +786,7 @@ def _addLiquidity(
     refundAssetAmountA: uint256 = 0
     refundAssetAmountB: uint256 = 0
     nftTokenId: uint256 = 0
-    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = extcall LegoDex(legoAddr).addLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, amountA, amountB, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = extcall LegoDex(legoAddr).addLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, amountA, amountB, _minAmountA, _minAmountB, _minLpAmount, self, _cd.oracleRegistry)
 
     # validate the nft came back
     if hasNftLiqPosition:

@@ -307,6 +307,7 @@ def addLiquidity(
     _amountB: uint256,
     _minAmountA: uint256,
     _minAmountB: uint256,
+    _minLpAmount: uint256,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
@@ -324,22 +325,16 @@ def addLiquidity(
     if liqAmountA != 0:
         assert extcall IERC20(_tokenA).transferFrom(msg.sender, self, liqAmountA, default_return_value=True) # dev: transfer failed
         liqAmountA = min(liqAmountA, staticcall IERC20(_tokenA).balanceOf(self))
+        assert extcall IERC20(_tokenA).approve(_pool, liqAmountA, default_return_value=True) # dev: approval failed
 
     # token b
     liqAmountB: uint256 = min(_amountB, staticcall IERC20(_tokenB).balanceOf(msg.sender))
     if liqAmountB != 0:
         assert extcall IERC20(_tokenB).transferFrom(msg.sender, self, liqAmountB, default_return_value=True) # dev: transfer failed
         liqAmountB = min(liqAmountB, staticcall IERC20(_tokenB).balanceOf(self))
-
-    # approvals
-    assert liqAmountA != 0 or liqAmountB != 0 # dev: need at least one token amount
-    if liqAmountA != 0:
-        assert extcall IERC20(_tokenA).approve(_pool, liqAmountA, default_return_value=True) # dev: approval failed
-    if liqAmountB != 0:
         assert extcall IERC20(_tokenB).approve(_pool, liqAmountB, default_return_value=True) # dev: approval failed
 
-    # TODO: get minLpAmount
-    _minLpAmount: uint256 = 0
+    assert liqAmountA != 0 or liqAmountB != 0 # dev: need at least one token amount
 
     # pool data
     metaRegistry: address = CURVE_META_REGISTRY
@@ -357,31 +352,29 @@ def addLiquidity(
         lpAmountReceived = self._addLiquidityTricrypto(p, liqAmountA, liqAmountB, _minLpAmount, _recipient)
     elif p.poolType == PoolType.METAPOOL:
         if staticcall CurveMetaRegistry(metaRegistry).is_meta(p.pool):
-            raise "metapool: not implemented"
+            raise "metapool: not implemented" # will need zap contracts for this
         else:
             lpAmountReceived = self._addLiquidityMetaPool(p, liqAmountA, liqAmountB, _minLpAmount, _recipient)
     else:
         raise "crypto v1: not implemented" # don't think any of these are deployed on L2s
     assert lpAmountReceived != 0 # dev: no liquidity added
-    assert lpAmountReceived >= _minLpAmount # dev: minimum not met
 
-    # reset approvals
-    if liqAmountA != 0:
-        assert extcall IERC20(_tokenA).approve(_pool, 0, default_return_value=True) # dev: approval failed
-    if liqAmountB != 0:
-        assert extcall IERC20(_tokenB).approve(_pool, 0, default_return_value=True) # dev: approval failed
-
-    # refund if full liquidity was not added
+    # handle token a refunds / approvals
     refundAssetAmountA: uint256 = 0
     if liqAmountA != 0:
+        assert extcall IERC20(_tokenA).approve(_pool, 0, default_return_value=True) # dev: approval failed
+
         currentLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
         if currentLegoBalanceA > preLegoBalanceA:
             refundAssetAmountA = currentLegoBalanceA - preLegoBalanceA
             assert extcall IERC20(_tokenA).transfer(msg.sender, refundAssetAmountA, default_return_value=True) # dev: transfer failed
             liqAmountA -= refundAssetAmountA
 
+    # handle token b refunds / approvals
     refundAssetAmountB: uint256 = 0
     if liqAmountB != 0:
+        assert extcall IERC20(_tokenB).approve(_pool, 0, default_return_value=True) # dev: approval failed
+
         currentLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
         if currentLegoBalanceB > preLegoBalanceB:
             refundAssetAmountB = currentLegoBalanceB - preLegoBalanceB
