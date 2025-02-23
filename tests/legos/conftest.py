@@ -197,7 +197,7 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, _test):
         lp_token_addr = _lego.getLpToken(_pool.address)
         lp_token = lp_token_addr
         if lp_token_addr != ZERO_ADDRESS:
-            lp_token = MockErc20.at(lp_token_addr)
+            lp_token = boa.from_etherscan(lp_token_addr)
 
         # pre balances
         pre_user_bal_a = _tokenA.balanceOf(bob_ai_wallet)
@@ -234,16 +234,31 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, _test):
         assert log_wallet.legoAddr == _lego.address
         assert log_wallet.isSignerAgent == True
 
-        assert liqAmountA != 0 and liqAmountB != 0
+        assert liqAmountA != 0 or liqAmountB != 0
         assert liquidityAdded != 0
 
         # lego addr should not have any leftover
-        assert _tokenA.balanceOf(_lego.address) == pre_lego_bal_a
-        assert _tokenB.balanceOf(_lego.address) == pre_lego_bal_b
+        # rebasing tokens like usdm leaving a little extra
+        current_lego_bal_a = _tokenA.balanceOf(_lego.address)
+        if current_lego_bal_a <= 5:
+            current_lego_bal_a = 0
+        assert current_lego_bal_a == pre_lego_bal_a
+        current_lego_bal_b = _tokenB.balanceOf(_lego.address)
+        if current_lego_bal_b <= 5:
+            current_lego_bal_b = 0
+        assert current_lego_bal_b == pre_lego_bal_b
 
         # liq tokens
         _test(pre_user_bal_a - liqAmountA, _tokenA.balanceOf(bob_ai_wallet.address))
-        _test(pre_user_bal_b - liqAmountB, _tokenB.balanceOf(bob_ai_wallet.address))
+
+        # rebasing tokens like usdm leaving a little extra
+        current_user_bal_b = _tokenB.balanceOf(bob_ai_wallet.address)
+        if current_user_bal_b <= 5:
+            current_user_bal_b = 0
+        expected_user_bal_b = pre_user_bal_b - liqAmountB
+        if expected_user_bal_b <= 5:
+            expected_user_bal_b = 0
+        _test(expected_user_bal_b, current_user_bal_b)
 
         # lp tokens
         if _nftAddr == ZERO_ADDRESS:

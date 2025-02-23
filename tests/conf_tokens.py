@@ -53,6 +53,10 @@ TOKENS = {
         "base": "0x4621b7A9c75199271F773Ebd9A499dbd165c3191",
         "local": ZERO_ADDRESS,
     },
+    "usdm": {
+        "base": "0x59D9356E565Ab3A36dD77763Fc0d87fEaf85508C",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 WHALES = {
@@ -104,6 +108,10 @@ WHALES = {
         "base": "0xe96e99a5A3512468A4aaFC317D77C6Fa0289F5f3",
         "local": ZERO_ADDRESS,
     },
+    "usdm": {
+        "base": "0x546Fb1621CF8C0e8e3ED8E3508b7c5100ADdBc03",
+        "local": ZERO_ADDRESS,
+    },
 }
 
 
@@ -121,6 +129,7 @@ TEST_AMOUNTS = {
     "frok": 1_000,
     "crvusd": 10_000,
     "dola": 10_000,
+    "usdm": 10_000,
 }
 
 

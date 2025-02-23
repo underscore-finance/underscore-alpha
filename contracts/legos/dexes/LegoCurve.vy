@@ -12,23 +12,48 @@ interface CurveMetaRegistry:
     def get_coin_indices(_pool: address, _from: address, _to: address) -> (int128, int128, bool): view
     def find_pools_for_coins(_from: address, _to: address) -> DynArray[address, MAX_POOLS]: view
     def get_registry_handlers_from_pool(_pool: address) -> address[10]: view
-    def get_underlying_balances(_pool: address) -> uint256[8]: view
-    def get_underlying_coins(_pool: address) -> address[8]: view
     def get_base_registry(_addr: address) -> address: view
+    def get_balances(_pool: address) -> uint256[8]: view
+    def get_coins(_pool: address) -> address[8]: view
+    def get_n_coins(_pool: address) -> uint256: view
+    def get_lp_token(_pool: address) -> address: view
     def is_registered(_pool: address) -> bool: view
     def is_meta(_pool: address) -> bool: view
 
 interface TwoCryptoPool:
     def exchange(_i: uint256, _j: uint256, _dx: uint256, _min_dy: uint256, _use_eth: bool = False, _receiver: address = msg.sender) -> uint256: payable
+    def add_liquidity(_amounts: uint256[2], _minLpAmount: uint256, _useEth: bool = False, _recipient: address = msg.sender) -> uint256: payable
+
+interface TwoCryptoNgPool:
+    def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, receiver: address = msg.sender) -> uint256: nonpayable
+    def add_liquidity(_amounts: uint256[2], _minLpAmount: uint256, _recipient: address = msg.sender) -> uint256: nonpayable
 
 interface CommonCurvePool:
     def exchange(_i: int128, _j: int128, _dx: uint256, _min_dy: uint256, _receiver: address = msg.sender) -> uint256: nonpayable
 
-interface TwoCryptoNgPool:
-    def exchange(i: uint256, j: uint256, dx: uint256, min_dy: uint256, receiver: address = msg.sender) -> uint256: nonpayable
-
 interface CryptoLegacyPool:
     def exchange(_i: uint256, _j: uint256, _dx: uint256, _min_dy: uint256, _use_eth: bool = False) -> uint256: payable
+
+interface StableNgTwo:
+    def add_liquidity(_amounts: DynArray[uint256, 2], _minLpAmount: uint256, _recipient: address = msg.sender) -> uint256: nonpayable
+
+interface StableNgThree:
+    def add_liquidity(_amounts: DynArray[uint256, 3], _minLpAmount: uint256, _recipient: address = msg.sender) -> uint256: nonpayable
+
+interface StableNgFour:
+    def add_liquidity(_amounts: DynArray[uint256, 4], _minLpAmount: uint256, _recipient: address = msg.sender) -> uint256: nonpayable
+
+interface TriCryptoPool:
+    def add_liquidity(_amounts: uint256[3], _minLpAmount: uint256, _useEth: bool = False, _recipient: address = msg.sender) -> uint256: payable
+
+interface MetaPoolTwo:
+    def add_liquidity(_amounts: uint256[2], _minLpAmount: uint256, _recipient: address = msg.sender) -> uint256: nonpayable
+
+interface MetaPoolThree:
+    def add_liquidity(_amounts: uint256[3], _minLpAmount: uint256, _recipient: address = msg.sender) -> uint256: nonpayable
+
+interface MetaPoolFour:
+    def add_liquidity(_amounts: uint256[4], _minLpAmount: uint256, _recipient: address = msg.sender) -> uint256: nonpayable
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -49,9 +74,10 @@ flag PoolType:
 
 struct PoolData:
     pool: address
-    indexTokenA: int128
-    indexTokenB: int128
+    indexTokenA: uint256
+    indexTokenB: uint256
     poolType: PoolType
+    numCoins: uint256
 
 struct CurveRegistries:
     StableSwapNg: address
@@ -158,123 +184,10 @@ def _getUsdValue(
         return usdValueA + usdValueB
 
 
-#################
-# Add Liquidity #
-#################
-
-
-@external
-def addLiquidity(
-    _nftTokenId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _tickLower: int24,
-    _tickUpper: int24,
-    _amountA: uint256,
-    _amountB: uint256,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _recipient: address,
-    _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
-    assert self.isActivated # dev: not activated
-
-    assert empty(address) not in [_tokenA, _tokenB] # dev: invalid tokens
-    assert _tokenA != _tokenB # dev: invalid tokens
-
-    # pre balances
-    preLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
-    preLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
-
-    # token a
-    liqAmountA: uint256 = 0
-    if _amountA != 0:
-        transferAmountA: uint256 = min(_amountA, staticcall IERC20(_tokenA).balanceOf(msg.sender))
-        assert transferAmountA != 0 # dev: nothing to transfer
-        assert extcall IERC20(_tokenA).transferFrom(msg.sender, self, transferAmountA, default_return_value=True) # dev: transfer failed
-        liqAmountA = min(transferAmountA, staticcall IERC20(_tokenA).balanceOf(self))
-
-    # token b
-    liqAmountB: uint256 = 0
-    if _amountB != 0:
-        transferAmountB: uint256 = min(_amountB, staticcall IERC20(_tokenB).balanceOf(msg.sender))
-        assert transferAmountB != 0 # dev: nothing to transfer
-        assert extcall IERC20(_tokenB).transferFrom(msg.sender, self, transferAmountB, default_return_value=True) # dev: transfer failed
-        liqAmountB = min(transferAmountB, staticcall IERC20(_tokenB).balanceOf(self))
-
-    # approvals
-    if liqAmountA != 0:
-        assert extcall IERC20(_tokenA).approve(_pool, liqAmountA, default_return_value=True) # dev: approval failed
-    if liqAmountB != 0:
-        assert extcall IERC20(_tokenB).approve(_pool, liqAmountB, default_return_value=True) # dev: approval failed
-
-    # get pool data
-    metaRegistry: address = CURVE_META_REGISTRY
-    p: PoolData = self._getPoolData(_pool, _tokenA, _tokenB, metaRegistry)
-
-    # add liquidity
-    lpAmountReceived: uint256 = 0
-    isFirstIndex: bool = p.indexTokenA == 0
-    # TODO: implement
-    assert lpAmountReceived != 0 # dev: no liquidity added
-
-    # reset approvals
-    if liqAmountA != 0:
-        assert extcall IERC20(_tokenA).approve(_pool, 0, default_return_value=True) # dev: approval failed
-    if liqAmountB != 0:
-        assert extcall IERC20(_tokenB).approve(_pool, 0, default_return_value=True) # dev: approval failed
-
-    # refund if full liquidity was not added
-    currentLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
-    refundAssetAmountA: uint256 = 0
-    if currentLegoBalanceA > preLegoBalanceA:
-        refundAssetAmountA = currentLegoBalanceA - preLegoBalanceA
-        assert extcall IERC20(_tokenA).transfer(msg.sender, refundAssetAmountA, default_return_value=True) # dev: transfer failed
-        liqAmountA -= refundAssetAmountA
-
-    currentLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
-    refundAssetAmountB: uint256 = 0
-    if currentLegoBalanceB > preLegoBalanceB:
-        refundAssetAmountB = currentLegoBalanceB - preLegoBalanceB
-        assert extcall IERC20(_tokenB).transfer(msg.sender, refundAssetAmountB, default_return_value=True) # dev: transfer failed
-        liqAmountB -= refundAssetAmountB
-
-    # check minimums
-    assert liqAmountA >= _minAmountA # dev: minimum not met on token a
-    assert liqAmountB >= _minAmountB # dev: minimum not met on token b
-
-    usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
-    log CurveLiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, usdValue, _recipient)
-    return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, 0
-
-
-####################
-# Remove Liquidity #
-####################
-
-
-@external
-def removeLiquidity(
-    _nftTokenId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _lpToken: address,
-    _liqToRemove: uint256,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _recipient: address,
-    _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256, uint256, bool):
-    # not implemented
-    return 0, 0, 0, 0, 0, False
-
-
 @view
 @external
 def getLpToken(_pool: address) -> address:
-    return _pool
+    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_lp_token(_pool)
 
 
 ########
@@ -348,26 +261,26 @@ def _swapTokensInPool(
 
     # stable ng
     if _p.poolType == PoolType.STABLESWAP_NG:
-        toAmount = extcall CommonCurvePool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, _recipient)
+        toAmount = extcall CommonCurvePool(_p.pool).exchange(convert(_p.indexTokenA, int128), convert(_p.indexTokenB, int128), _amountIn, _minAmountOut, _recipient)
 
     # two crypto ng
     elif _p.poolType == PoolType.TWO_CRYPTO_NG:
-        toAmount = extcall TwoCryptoNgPool(_p.pool).exchange(convert(_p.indexTokenA, uint256), convert(_p.indexTokenB, uint256), _amountIn, _minAmountOut, _recipient)
+        toAmount = extcall TwoCryptoNgPool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, _recipient)
 
     # two crypto + tricrypto ng pools
     elif _p.poolType == PoolType.TRICRYPTO_NG or _p.poolType == PoolType.TWO_CRYPTO:
-        toAmount = extcall TwoCryptoPool(_p.pool).exchange(convert(_p.indexTokenA, uint256), convert(_p.indexTokenB, uint256), _amountIn, _minAmountOut, False, _recipient)
+        toAmount = extcall TwoCryptoPool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, False, _recipient)
 
     # meta pools
     elif _p.poolType == PoolType.METAPOOL:
         if staticcall CurveMetaRegistry(CURVE_META_REGISTRY).is_meta(_p.pool):
             raise "Not Implemented"
         else:
-            toAmount = extcall CommonCurvePool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, _recipient)
+            toAmount = extcall CommonCurvePool(_p.pool).exchange(convert(_p.indexTokenA, int128), convert(_p.indexTokenB, int128), _amountIn, _minAmountOut, _recipient)
 
     # crypto v1
     else:
-        toAmount = extcall CryptoLegacyPool(_p.pool).exchange(convert(_p.indexTokenA, uint256), convert(_p.indexTokenB, uint256), _amountIn, _minAmountOut, False)
+        toAmount = extcall CryptoLegacyPool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, False)
         assert extcall IERC20(_tokenOut).transfer(_recipient, toAmount, default_return_value=True) # dev: transfer failed
 
     # reset approvals
@@ -375,6 +288,245 @@ def _swapTokensInPool(
 
     assert toAmount != 0 # dev: no tokens swapped
     return toAmount
+
+
+#################
+# Add Liquidity #
+#################
+
+
+@external
+def addLiquidity(
+    _nftTokenId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _tickLower: int24,
+    _tickUpper: int24,
+    _amountA: uint256,
+    _amountB: uint256,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
+    assert self.isActivated # dev: not activated
+
+    assert empty(address) not in [_tokenA, _tokenB] # dev: invalid tokens
+    assert _tokenA != _tokenB # dev: invalid tokens
+
+    # pre balances
+    preLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
+    preLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
+
+    # token a
+    liqAmountA: uint256 = min(_amountA, staticcall IERC20(_tokenA).balanceOf(msg.sender))
+    if liqAmountA != 0:
+        assert extcall IERC20(_tokenA).transferFrom(msg.sender, self, liqAmountA, default_return_value=True) # dev: transfer failed
+        liqAmountA = min(liqAmountA, staticcall IERC20(_tokenA).balanceOf(self))
+
+    # token b
+    liqAmountB: uint256 = min(_amountB, staticcall IERC20(_tokenB).balanceOf(msg.sender))
+    if liqAmountB != 0:
+        assert extcall IERC20(_tokenB).transferFrom(msg.sender, self, liqAmountB, default_return_value=True) # dev: transfer failed
+        liqAmountB = min(liqAmountB, staticcall IERC20(_tokenB).balanceOf(self))
+
+    # approvals
+    assert liqAmountA != 0 or liqAmountB != 0 # dev: need at least one token amount
+    if liqAmountA != 0:
+        assert extcall IERC20(_tokenA).approve(_pool, liqAmountA, default_return_value=True) # dev: approval failed
+    if liqAmountB != 0:
+        assert extcall IERC20(_tokenB).approve(_pool, liqAmountB, default_return_value=True) # dev: approval failed
+
+    # TODO: get minLpAmount
+    _minLpAmount: uint256 = 0
+
+    # pool data
+    metaRegistry: address = CURVE_META_REGISTRY
+    p: PoolData = self._getPoolData(_pool, _tokenA, _tokenB, metaRegistry)
+
+    # add liquidity
+    lpAmountReceived: uint256 = 0
+    if p.poolType == PoolType.STABLESWAP_NG:
+        lpAmountReceived = self._addLiquidityStableNg(p, liqAmountA, liqAmountB, _minLpAmount, _recipient)
+    elif p.poolType == PoolType.TWO_CRYPTO_NG:
+        lpAmountReceived = self._addLiquidityTwoCryptoNg(p, liqAmountA, liqAmountB, _minLpAmount, _recipient)
+    elif p.poolType == PoolType.TWO_CRYPTO:
+        lpAmountReceived = self._addLiquidityTwoCrypto(p, liqAmountA, liqAmountB, _minLpAmount, _recipient)
+    elif p.poolType == PoolType.TRICRYPTO_NG:
+        lpAmountReceived = self._addLiquidityTricrypto(p, liqAmountA, liqAmountB, _minLpAmount, _recipient)
+    elif p.poolType == PoolType.METAPOOL:
+        if staticcall CurveMetaRegistry(metaRegistry).is_meta(p.pool):
+            raise "metapool: not implemented"
+        else:
+            lpAmountReceived = self._addLiquidityMetaPool(p, liqAmountA, liqAmountB, _minLpAmount, _recipient)
+    else:
+        raise "crypto v1: not implemented" # don't think any of these are deployed on L2s
+    assert lpAmountReceived != 0 # dev: no liquidity added
+    assert lpAmountReceived >= _minLpAmount # dev: minimum not met
+
+    # reset approvals
+    if liqAmountA != 0:
+        assert extcall IERC20(_tokenA).approve(_pool, 0, default_return_value=True) # dev: approval failed
+    if liqAmountB != 0:
+        assert extcall IERC20(_tokenB).approve(_pool, 0, default_return_value=True) # dev: approval failed
+
+    # refund if full liquidity was not added
+    refundAssetAmountA: uint256 = 0
+    if liqAmountA != 0:
+        currentLegoBalanceA: uint256 = staticcall IERC20(_tokenA).balanceOf(self)
+        if currentLegoBalanceA > preLegoBalanceA:
+            refundAssetAmountA = currentLegoBalanceA - preLegoBalanceA
+            assert extcall IERC20(_tokenA).transfer(msg.sender, refundAssetAmountA, default_return_value=True) # dev: transfer failed
+            liqAmountA -= refundAssetAmountA
+
+    refundAssetAmountB: uint256 = 0
+    if liqAmountB != 0:
+        currentLegoBalanceB: uint256 = staticcall IERC20(_tokenB).balanceOf(self)
+        if currentLegoBalanceB > preLegoBalanceB:
+            refundAssetAmountB = currentLegoBalanceB - preLegoBalanceB
+            assert extcall IERC20(_tokenB).transfer(msg.sender, refundAssetAmountB, default_return_value=True) # dev: transfer failed
+            liqAmountB -= refundAssetAmountB
+
+    usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
+    log CurveLiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, usdValue, _recipient)
+    return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, 0
+
+
+@internal
+def _addLiquidityStableNg(
+    _p: PoolData,
+    _liqAmountA: uint256,
+    _liqAmountB: uint256,
+    _minLpAmount: uint256,
+    _recipient: address,
+) -> uint256:
+    lpAmountReceived: uint256 = 0
+    if _p.numCoins == 2:
+        amounts: DynArray[uint256, 2] = [0, 0]
+        if _liqAmountA != 0:
+            amounts[_p.indexTokenA] = _liqAmountA
+        if _liqAmountB != 0:
+            amounts[_p.indexTokenB] = _liqAmountB
+        lpAmountReceived = extcall StableNgTwo(_p.pool).add_liquidity(amounts, _minLpAmount, _recipient)
+    elif _p.numCoins == 3:
+        amounts: DynArray[uint256, 3] = [0, 0, 0]
+        if _liqAmountA != 0:
+            amounts[_p.indexTokenA] = _liqAmountA
+        if _liqAmountB != 0:
+            amounts[_p.indexTokenB] = _liqAmountB
+        lpAmountReceived = extcall StableNgThree(_p.pool).add_liquidity(amounts, _minLpAmount, _recipient)
+    elif _p.numCoins == 4:
+        amounts: DynArray[uint256, 4] = [0, 0, 0, 0]
+        if _liqAmountA != 0:
+            amounts[_p.indexTokenA] = _liqAmountA
+        if _liqAmountB != 0:
+            amounts[_p.indexTokenB] = _liqAmountB
+        lpAmountReceived = extcall StableNgFour(_p.pool).add_liquidity(amounts, _minLpAmount, _recipient)
+    return lpAmountReceived
+
+
+@internal
+def _addLiquidityTwoCryptoNg(
+    _p: PoolData,
+    _liqAmountA: uint256,
+    _liqAmountB: uint256,
+    _minLpAmount: uint256,
+    _recipient: address,
+) -> uint256:
+    amounts: uint256[2] = [0, 0]
+    if _liqAmountA != 0:
+        amounts[_p.indexTokenA] = _liqAmountA
+    if _liqAmountB != 0:
+        amounts[_p.indexTokenB] = _liqAmountB
+    return extcall TwoCryptoNgPool(_p.pool).add_liquidity(amounts, _minLpAmount, _recipient)
+
+
+@internal
+def _addLiquidityTwoCrypto(
+    _p: PoolData,
+    _liqAmountA: uint256,
+    _liqAmountB: uint256,
+    _minLpAmount: uint256,
+    _recipient: address,
+) -> uint256:
+    amounts: uint256[2] = [0, 0]
+    if _liqAmountA != 0:
+        amounts[_p.indexTokenA] = _liqAmountA
+    if _liqAmountB != 0:
+        amounts[_p.indexTokenB] = _liqAmountB
+    return extcall TwoCryptoPool(_p.pool).add_liquidity(amounts, _minLpAmount, False, _recipient)
+
+
+@internal
+def _addLiquidityTricrypto(
+    _p: PoolData,
+    _liqAmountA: uint256,
+    _liqAmountB: uint256,
+    _minLpAmount: uint256,
+    _recipient: address,
+) -> uint256:
+    amounts: uint256[3] = [0, 0, 0]
+    if _liqAmountA != 0:
+        amounts[_p.indexTokenA] = _liqAmountA
+    if _liqAmountB != 0:
+        amounts[_p.indexTokenB] = _liqAmountB
+    return extcall TriCryptoPool(_p.pool).add_liquidity(amounts, _minLpAmount, False, _recipient)
+
+
+@internal
+def _addLiquidityMetaPool(
+    _p: PoolData,
+    _liqAmountA: uint256,
+    _liqAmountB: uint256,
+    _minLpAmount: uint256,
+    _recipient: address,
+) -> uint256:
+    lpAmountReceived: uint256 = 0
+    if _p.numCoins == 2:
+        amounts: uint256[2] = [0, 0]
+        if _liqAmountA != 0:
+            amounts[_p.indexTokenA] = _liqAmountA
+        if _liqAmountB != 0:
+            amounts[_p.indexTokenB] = _liqAmountB
+        lpAmountReceived = extcall MetaPoolTwo(_p.pool).add_liquidity(amounts, _minLpAmount, _recipient)
+    elif _p.numCoins == 3:
+        amounts: uint256[3] = [0, 0, 0]
+        if _liqAmountA != 0:
+            amounts[_p.indexTokenA] = _liqAmountA
+        if _liqAmountB != 0:
+            amounts[_p.indexTokenB] = _liqAmountB
+        lpAmountReceived = extcall MetaPoolThree(_p.pool).add_liquidity(amounts, _minLpAmount, _recipient)
+    elif _p.numCoins == 4:
+        amounts: uint256[4] = [0, 0, 0, 0]
+        if _liqAmountA != 0:
+            amounts[_p.indexTokenA] = _liqAmountA
+        if _liqAmountB != 0:
+            amounts[_p.indexTokenB] = _liqAmountB
+        lpAmountReceived = extcall MetaPoolFour(_p.pool).add_liquidity(amounts, _minLpAmount, _recipient)
+    return lpAmountReceived
+
+
+####################
+# Remove Liquidity #
+####################
+
+
+@external
+def removeLiquidity(
+    _nftTokenId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpToken: address,
+    _liqToRemove: uint256,
+    _minAmountA: uint256,
+    _minAmountB: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256, uint256, bool):
+    # not implemented
+    return 0, 0, 0, 0, 0, False
 
 
 #############
@@ -404,31 +556,32 @@ def _findBestPool(_tokenIn: address, _tokenOut: address, _metaRegistry: address)
             continue
 
         na: bool = False
+        indexTokenA: int128 = 0
+        indexTokenB: int128 = 0
 
         # check if pool is preferred
         if pool in preferredPools:
-            bestPoolData = PoolData(pool=pool, indexTokenA=0, indexTokenB=0, poolType=empty(PoolType))
-            bestPoolData.indexTokenA, bestPoolData.indexTokenB, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(pool, _tokenIn, _tokenOut)
+            indexTokenA, indexTokenB, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(pool, _tokenIn, _tokenOut)
+            bestPoolData = PoolData(pool=pool, indexTokenA=convert(indexTokenA, uint256), indexTokenB=convert(indexTokenB, uint256), poolType=empty(PoolType), numCoins=0)
             break
 
         # balances
-        balances: uint256[8] = staticcall CurveMetaRegistry(_metaRegistry).get_underlying_balances(pool)
+        balances: uint256[8] = staticcall CurveMetaRegistry(_metaRegistry).get_balances(pool)
         if balances[0] == 0:
             continue
 
         # token indexes 
-        indexTokenA: int128 = 0
-        indexTokenB: int128 = 0
         indexTokenA, indexTokenB, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(pool, _tokenIn, _tokenOut)
         
         # compare liquidity
         liquidity: uint256 = balances[indexTokenA] + balances[indexTokenB]
         if liquidity > bestLiquidity:
             bestLiquidity = liquidity
-            bestPoolData = PoolData(pool=pool, indexTokenA=indexTokenA, indexTokenB=indexTokenB, poolType=empty(PoolType))
+            bestPoolData = PoolData(pool=pool, indexTokenA=convert(indexTokenA, uint256), indexTokenB=convert(indexTokenB, uint256), poolType=empty(PoolType), numCoins=0)
 
     assert bestPoolData.pool != empty(address) # dev: no pool found
     bestPoolData.poolType = self._getPoolType(bestPoolData.pool, _metaRegistry)
+    bestPoolData.numCoins = staticcall CurveMetaRegistry(_metaRegistry).get_n_coins(bestPoolData.pool)
     return bestPoolData
 
 
@@ -441,20 +594,28 @@ def getPoolData(_pool: address, _tokenA: address, _tokenB: address) -> PoolData:
 @view
 @internal
 def _getPoolData(_pool: address, _tokenA: address, _tokenB: address, _metaRegistry: address) -> PoolData:
-    coins: address[8] = staticcall CurveMetaRegistry(_metaRegistry).get_underlying_coins(_pool)
+    coins: address[8] = staticcall CurveMetaRegistry(_metaRegistry).get_coins(_pool)
     assert _tokenA in coins and _tokenB in coins # dev: invalid tokens
 
     # get indices
-    indexTokenA: int128 = 0
-    indexTokenB: int128 = 0
-    na: bool = False
-    indexTokenA, indexTokenB, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(_pool, _tokenA, _tokenB)
+    indexTokenA: uint256 = 0
+    indexTokenB: uint256 = 0
+    numCoins: uint256 = 0
+    for coin: address in coins:
+        if coin == empty(address):
+            break
+        if coin == _tokenA:
+            indexTokenA = numCoins
+        elif coin == _tokenB:
+            indexTokenB = numCoins
+        numCoins += 1
 
     return PoolData(
         pool=_pool,
         indexTokenA=indexTokenA,
         indexTokenB=indexTokenB,
         poolType=self._getPoolType(_pool, _metaRegistry),
+        numCoins=numCoins,
     )
 
 
