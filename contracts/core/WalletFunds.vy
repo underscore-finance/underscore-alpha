@@ -210,7 +210,7 @@ event TrialFundsRecovered:
 event NftRecovered:
     collection: indexed(address)
     nftTokenId: uint256
-    recipient: indexed(address)
+    owner: indexed(address)
 
 # core
 walletConfig: public(address)
@@ -1304,6 +1304,11 @@ def _checkTrialFundsPostTx(_isTrialFundsVaultToken: bool, _trialFundsAsset: addr
 
 @external
 def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
+    """
+    @notice Recovers trial funds from the wallet
+    @param _opportunities Array of trial funds opportunities
+    @return bool True if trial funds were recovered successfully
+    """
     cd: CoreData = self._getCoreData()
     agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
     assert msg.sender == agentFactory # dev: no perms
@@ -1356,11 +1361,18 @@ def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -
 
 @external
 def recoverNft(_collection: address, _nftTokenId: uint256) -> bool:
-    assert msg.sender == staticcall WalletConfig(self.walletConfig).owner() # dev: no perms
+    """
+    @notice Recovers an NFT from the wallet
+    @param _collection The collection address
+    @param _nftTokenId The token ID of the NFT
+    @return bool True if the NFT was recovered successfully
+    """
+    owner: address = staticcall WalletConfig(self.walletConfig).owner()
+    assert msg.sender == owner # dev: no perms
 
     if staticcall IERC721(_collection).ownerOf(_nftTokenId) != self:
         return False
 
-    extcall IERC721(_collection).safeTransferFrom(self, msg.sender, _nftTokenId)
-    log NftRecovered(_collection, _nftTokenId, msg.sender)
+    extcall IERC721(_collection).safeTransferFrom(self, owner, _nftTokenId)
+    log NftRecovered(_collection, _nftTokenId, owner)
     return True

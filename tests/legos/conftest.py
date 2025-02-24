@@ -295,10 +295,16 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, _test):
         lp_token = lp_token_addr
         if lp_token_addr != ZERO_ADDRESS:
             lp_token = boa.from_etherscan(lp_token_addr)
-        
+
+        tokenAddrB = ZERO_ADDRESS
+        if _tokenB != ZERO_ADDRESS:
+            tokenAddrB = _tokenB.address
+
         # pre balances
         pre_user_bal_a = _tokenA.balanceOf(bob_ai_wallet)
-        pre_user_bal_b = _tokenB.balanceOf(bob_ai_wallet)
+        pre_user_bal_b = 0
+        if _tokenB != ZERO_ADDRESS:
+            pre_user_bal_b = _tokenB.balanceOf(bob_ai_wallet)
 
         pre_nft_bal = 0
         pre_user_lp_bal = 0
@@ -312,16 +318,18 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, _test):
             pre_nft_bal = _nftAddr.balanceOf(bob_ai_wallet)
 
         pre_lego_bal_a = _tokenA.balanceOf(_lego.address)
-        pre_lego_bal_b = _tokenB.balanceOf(_lego.address)
+        pre_lego_bal_b = 0
+        if _tokenB != ZERO_ADDRESS:
+            pre_lego_bal_b = _tokenB.balanceOf(_lego.address)
 
         # remove liquidity
-        removedAmountA, removedAmountB, usdValue, isDepleted = bob_ai_wallet.removeLiquidity(_lego.legoId(), _nftAddr, _nftTokenId, lp_token_addr, _tokenA.address, _tokenB.address, _liqToRemove, _minAmountA, _minAmountB, sender=bob_agent)
+        removedAmountA, removedAmountB, usdValue, isDepleted = bob_ai_wallet.removeLiquidity(_lego.legoId(), _nftAddr, _nftTokenId, _pool.address, _tokenA.address, tokenAddrB, _liqToRemove, _minAmountA, _minAmountB, sender=bob_agent)
 
         # event
         log_wallet = filter_logs(bob_ai_wallet, "AgenticLiquidityRemoved")[0]
         assert log_wallet.signer == bob_agent
         assert log_wallet.tokenA == _tokenA.address
-        assert log_wallet.tokenB == _tokenB.address
+        assert log_wallet.tokenB == tokenAddrB
         assert log_wallet.removedAmountA == removedAmountA
         assert log_wallet.removedAmountB == removedAmountB
         assert log_wallet.usdValue == usdValue
@@ -329,15 +337,17 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, _test):
         assert log_wallet.legoAddr == _lego.address
         assert log_wallet.isSignerAgent == True
 
-        assert removedAmountA != 0 and removedAmountB != 0
+        assert removedAmountA != 0 or removedAmountB != 0
 
-            # lego addr should not have any leftover
+        # lego addr should not have any leftover
         assert _tokenA.balanceOf(_lego.address) == pre_lego_bal_a
-        assert _tokenB.balanceOf(_lego.address) == pre_lego_bal_b
+        if _tokenB != ZERO_ADDRESS:
+            assert _tokenB.balanceOf(_lego.address) == pre_lego_bal_b
 
         # liq tokens
         _test(pre_user_bal_a + removedAmountA, _tokenA.balanceOf(bob_ai_wallet.address))
-        _test(pre_user_bal_b + removedAmountB, _tokenB.balanceOf(bob_ai_wallet.address))
+        if _tokenB != ZERO_ADDRESS:
+            _test(pre_user_bal_b + removedAmountB, _tokenB.balanceOf(bob_ai_wallet.address))
 
         # lp tokens
         if _nftAddr == ZERO_ADDRESS:

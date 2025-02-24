@@ -411,3 +411,246 @@ def test_curve_remove_liquidity_stable_ng(
 
     # test remove liquidity
     testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
+
+
+@pytest.always
+def test_curve_remove_liquidity_stable_ng_one_coin(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("usdm")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x63Eb7846642630456707C3efBb50A03c79B89D81")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, ZERO_ADDRESS)
+
+
+@pytest.always
+def test_curve_remove_liquidity_two_crypto(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("weth")
+    amountA = 2 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("cbeth")
+    amountB = 2 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x11C1fBd4b3De66bC0565779b35171a6CF3E71f59")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
+
+
+@pytest.always
+def test_curve_remove_liquidity_two_crypto_one_coin(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("weth")
+    amountA = 2 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("cbeth")
+    amountB = 2 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x11C1fBd4b3De66bC0565779b35171a6CF3E71f59")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, ZERO_ADDRESS)
+
+
+@pytest.always
+def test_curve_remove_liquidity_tricrypto(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("tbtc")
+    amountA = int(0.1 * (10 ** tokenA.decimals()))
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("crvusd")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x6e53131F68a034873b6bFA15502aF094Ef0c5854")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
+
+
+@pytest.always
+def test_curve_remove_liquidity_tricrypto_one_coin(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("tbtc")
+    amountA = int(0.1 * (10 ** tokenA.decimals()))
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("crvusd")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x6e53131F68a034873b6bFA15502aF094Ef0c5854")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, ZERO_ADDRESS)
+
+
+@pytest.always
+def test_curve_remove_liquidity_two_crypto_ng(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("weth")
+    amountA = 1 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("frok")
+    amountB = 70_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0xa0D3911349e701A1F49C1Ba2dDA34b4ce9636569")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
+
+
+@pytest.always
+def test_curve_remove_liquidity_two_crypto_ng_one_coin(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("weth")
+    amountA = 1 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("frok")
+    amountB = 70_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0xa0D3911349e701A1F49C1Ba2dDA34b4ce9636569")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, ZERO_ADDRESS)
+
+
+@pytest.always
+def test_curve_remove_liquidity_4pool(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("crvusd")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
+
+
+@pytest.always
+def test_curve_remove_liquidity_4pool_one_coin(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("crvusd")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, ZERO_ADDRESS)
