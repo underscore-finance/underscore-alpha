@@ -889,7 +889,7 @@ def _removeLiquidity(
     hasNftLiqPosition: bool = _nftAddr != empty(address) and _nftTokenId != 0
     if hasNftLiqPosition:
         extcall IERC721(_nftAddr).safeTransferFrom(self, legoAddr, _nftTokenId, ERC721_RECEIVE_DATA)
-    
+
     # handle lp token
     else:
         lpToken = staticcall LegoDex(legoAddr).getLpToken(_pool)

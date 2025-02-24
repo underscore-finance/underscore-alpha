@@ -4,7 +4,6 @@ import boa
 from constants import MAX_UINT256, ZERO_ADDRESS, MIN_INT24, MAX_INT24
 from conf_utils import filter_logs
 from conf_tokens import TEST_AMOUNTS
-from contracts.mock import MockErc20
 
 
 @pytest.fixture(scope="package")
@@ -295,7 +294,7 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, _test):
         lp_token_addr = _lego.getLpToken(_pool.address)
         lp_token = lp_token_addr
         if lp_token_addr != ZERO_ADDRESS:
-            lp_token = MockErc20.at(lp_token_addr)
+            lp_token = boa.from_etherscan(lp_token_addr)
         
         # pre balances
         pre_user_bal_a = _tokenA.balanceOf(bob_ai_wallet)

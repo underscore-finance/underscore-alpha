@@ -217,11 +217,6 @@ def test_curve_add_liquidity_stable_ng(
     pool = boa.from_etherscan("0x63Eb7846642630456707C3efBb50A03c79B89D81")
     testLegoLiquidityAdded(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
 
-    # testing directly
-    # tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
-    # tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
-    # lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
-
 
 @pytest.always
 def test_curve_add_liquidity_stable_ng_one_coin(
@@ -386,3 +381,33 @@ def test_curve_add_liquidity_4pool_one_coin(
     tokenB, _ = getTokenAndWhale("crvusd")
     pool = boa.from_etherscan("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f")
     testLegoLiquidityAdded(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB, amountA, 0)
+
+
+# remove liquidity
+
+
+@pytest.always
+def test_curve_remove_liquidity_stable_ng(
+    testLegoLiquidityRemoved,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_curve,
+):
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("usdm")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    pool = boa.from_etherscan("0x63Eb7846642630456707C3efBb50A03c79B89D81")
+
+    # add liquidity
+    tokenA.approve(lego_curve.address, amountA, sender=bob_ai_wallet.address)
+    tokenB.approve(lego_curve.address, amountB, sender=bob_ai_wallet.address)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = lego_curve.addLiquidity(0, pool, tokenA.address, tokenB.address, 0, 0, amountA, amountB, 0, 0, 0, bob_ai_wallet.address, sender=bob_ai_wallet.address)
+
+    # test remove liquidity
+    testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, tokenB)
