@@ -6,7 +6,15 @@ exports: gov.__interface__
 
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
+from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
+
+interface AeroRouter:
+    def addLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
+    def removeLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _lpAmount: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256): nonpayable
+    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[Route, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
+    def quoteAddLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _factory: address, _amountADesired: uint256, _amountBDesired: uint256) -> (uint256, uint256, uint256): view
+    def quoteRemoveLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _factory: address, _liquidity: uint256) -> (uint256, uint256): view
 
 interface AeroClassicPool:
     def swap(_amount0Out: uint256, _amount1Out: uint256, _recipient: address, _data: Bytes[256]): nonpayable
@@ -15,15 +23,9 @@ interface AeroClassicPool:
     def tokens() -> (address, address): view
     def stable() -> bool: view
 
-interface AeroRouter:
-    def addLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
-    def removeLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _lpAmount: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256): nonpayable
-    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[Route, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
-    def quoteAddLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256) -> (uint256, uint256, uint256): view
-    def quoteRemoveLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _factory: address, _liquidity: uint256) -> (uint256, uint256): view
-
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+    def getPrice(_asset: address, _shouldRaise: bool = False) -> uint256: view
 
 interface AeroFactory:
     def getPool(_tokenA: address, _tokenB: address, _isStable: bool) -> address: view
@@ -95,6 +97,7 @@ AERODROME_FACTORY: public(immutable(address))
 AERODROME_ROUTER: public(immutable(address))
 
 MAX_ASSETS: constant(uint256) = 5
+EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
 @deploy
@@ -500,10 +503,10 @@ def getSwapAmountIn(
     _tokenOut: address,
     _amountOut: uint256,
 ) -> uint256:
-    if staticcall AeroClassicPool(_pool).stable():
-        return 0 # TODO: implement this
-    else:
+    if not staticcall AeroClassicPool(_pool).stable():
         return self._getAmountInForVolatilePools(_pool, _tokenIn, _tokenOut, _amountOut)
+    else:
+        return 0 # TODO: implement stable pools
 
 
 @view
@@ -515,7 +518,7 @@ def getAddLiqAmountsIn(
     _availAmountA: uint256,
     _availAmountB: uint256,
 ) -> (uint256, uint256, uint256):
-    return staticcall AeroRouter(AERODROME_ROUTER).quoteAddLiquidity(_tokenA, _tokenB, staticcall AeroClassicPool(_pool).stable(), _availAmountA, _availAmountB)
+    return staticcall AeroRouter(AERODROME_ROUTER).quoteAddLiquidity(_tokenA, _tokenB, staticcall AeroClassicPool(_pool).stable(), AERODROME_FACTORY, _availAmountA, _availAmountB)
 
 
 @view
@@ -527,6 +530,15 @@ def getRemoveLiqAmountsOut(
     _lpAmount: uint256,
 ) -> (uint256, uint256):
     return staticcall AeroRouter(AERODROME_ROUTER).quoteRemoveLiquidity(_tokenA, _tokenB, staticcall AeroClassicPool(_pool).stable(), AERODROME_FACTORY, _lpAmount)
+
+
+@view
+@external
+def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
+    if not staticcall AeroClassicPool(_pool).stable():
+        return self._getPriceUnsafeVolatilePool(_pool, _targetToken, _oracleRegistry)
+    else:
+        return 0 # TODO: implement stable pools
 
 
 # internal utils
@@ -551,6 +563,60 @@ def _getUsdValue(
         return max(usdValueA, usdValueB)
     else:
         return usdValueA + usdValueB
+
+
+@view
+@internal
+def _getPriceUnsafeVolatilePool(_pool: address, _targetToken: address, _oracleRegistry: address) -> uint256:
+    token0: address = empty(address)
+    token1: address = empty(address)
+    token0, token1 = staticcall AeroClassicPool(_pool).tokens()
+
+    # oracle registry
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+
+    # alt price
+    altPrice: uint256 = 0
+    if _targetToken == token0:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token1, False)
+    else:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token0, False)
+
+    # return early if no alt price
+    if altPrice == 0:
+        return 0
+
+    # reserves
+    reserve0: uint256 = 0
+    reserve1: uint256 = 0
+    na: uint256 = 0
+    reserve0, reserve1, na = staticcall AeroClassicPool(_pool).getReserves()
+
+    # avoid division by zero
+    if reserve0 == 0 or reserve1 == 0:
+        return 0  
+
+    # price of token0 in token1
+    priceZeroToOne: uint256 = reserve1 * EIGHTEEN_DECIMALS // reserve0
+
+    # adjust for decimals: price should be in 18 decimals
+    decimals0: uint256 = convert(staticcall IERC20Detailed(token0).decimals(), uint256)
+    decimals1: uint256 = convert(staticcall IERC20Detailed(token1).decimals(), uint256)
+    if decimals0 > decimals1:
+        scaleFactor: uint256 = 10 ** (decimals0 - decimals1)
+        priceZeroToOne = priceZeroToOne * scaleFactor
+    elif decimals1 > decimals0:
+        scaleFactor: uint256 = 10 ** (decimals1 - decimals0)
+        priceZeroToOne = priceZeroToOne // scaleFactor
+
+    # if _targetToken is token1, make price inverse
+    priceToOther: uint256 = priceZeroToOne
+    if _targetToken == token1:
+        priceToOther = EIGHTEEN_DECIMALS * EIGHTEEN_DECIMALS // priceZeroToOne
+
+    return altPrice * priceToOther // EIGHTEEN_DECIMALS
 
 
 @view

@@ -8,7 +8,17 @@ exports: gov.__interface__
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC721
+from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
+
+interface AeroSlipStreamPool:
+    def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[256]) -> (int256, int256): nonpayable
+    def slot0() -> (uint160, int24, uint16, uint16, uint16, bool): view
+    def tickSpacing() -> int24: view
+    def liquidity() -> uint128: view
+    def token0() -> address: view
+    def token1() -> address: view
+    def fee() -> uint24: view
 
 interface AeroNftPositionManager:
     def increaseLiquidity(_params: IncreaseLiquidityParams) -> (uint128, uint256, uint256): nonpayable
@@ -18,18 +28,16 @@ interface AeroNftPositionManager:
     def positions(_tokenId: uint256) -> PositionData: view
     def burn(_tokenId: uint256): nonpayable
 
-interface AeroSlipStreamPool:
-    def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[256]) -> (int256, int256): nonpayable
-    def tickSpacing() -> int24: view
-    def liquidity() -> uint128: view
-    def token0() -> address: view
-    def token1() -> address: view
+interface AeroQuoter:
+    def quoteExactOutputSingle(_params: QuoteExactOutputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
+    def quoteExactInputSingle(_params: QuoteExactInputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
 
 interface IUniswapV3Callback:
     def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+    def getPrice(_asset: address, _shouldRaise: bool = False) -> uint256: view
 
 interface AeroSlipStreamFactory:
     def getPool(_tokenA: address, _tokenB: address, _tickSpacing: int24) -> address: view
@@ -44,6 +52,26 @@ struct PoolSwapData:
     pool: address
     tokenIn: address
     amountIn: uint256
+
+struct BestPool:
+    pool: address
+    fee: uint256
+    liquidity: uint256
+    numCoins: uint256
+
+struct QuoteExactInputSingleParams:
+    tokenIn: address
+    tokenOut: address
+    amountIn: uint256
+    tickSpacing: int24
+    sqrtPriceLimitX96: uint160
+
+struct QuoteExactOutputSingleParams:
+    tokenIn: address
+    tokenOut: address
+    amount: uint256
+    tickSpacing: int24
+    sqrtPriceLimitX96: uint160
 
 struct ExactInputSingleParams:
     tokenIn: address
@@ -163,6 +191,7 @@ ADDY_REGISTRY: public(immutable(address))
 AERO_SLIPSTREAM_FACTORY: public(immutable(address))
 AERO_SLIPSTREAM_ROUTER: public(immutable(address))
 AERO_NFT_POSITION_MANAGER: public(immutable(address))
+AERO_QUOTER: public(immutable(address))
 
 TICK_SPACING: constant(int24[5]) = [1, 50, 100, 200, 2000]
 MIN_SQRT_RATIO_PLUS_ONE: constant(uint160) = 4295128740
@@ -170,14 +199,17 @@ MAX_SQRT_RATIO_MINUS_ONE: constant(uint160) = 1461446703485210103287273052203988
 TICK_LOWER: constant(int24) = -887272
 TICK_UPPER: constant(int24) = 887272
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
+EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
+UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
 
 
 @deploy
-def __init__(_aeroFactory: address, _aeroRouter: address, _aeroNftPositionManager: address, _addyRegistry: address):
-    assert empty(address) not in [_aeroFactory, _aeroRouter, _aeroNftPositionManager, _addyRegistry] # dev: invalid addrs
+def __init__(_aeroFactory: address, _aeroRouter: address, _aeroNftPositionManager: address, _aeroQuoter: address, _addyRegistry: address):
+    assert empty(address) not in [_aeroFactory, _aeroRouter, _aeroNftPositionManager, _aeroQuoter, _addyRegistry] # dev: invalid addrs
     AERO_SLIPSTREAM_FACTORY = _aeroFactory
     AERO_SLIPSTREAM_ROUTER = _aeroRouter
     AERO_NFT_POSITION_MANAGER = _aeroNftPositionManager
+    AERO_QUOTER = _aeroQuoter
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
@@ -189,40 +221,6 @@ def onERC721Received(_operator: address, _owner: address, _tokenId: uint256, _da
     # must implement method for safe NFT transfers
     assert _data == ERC721_RECEIVE_DATA # dev: did not receive from within Underscore wallet
     return method_id("onERC721Received(address,address,uint256,bytes)", output_type=bytes4)
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [AERO_SLIPSTREAM_FACTORY, AERO_SLIPSTREAM_ROUTER, AERO_NFT_POSITION_MANAGER]
-
-
-@view
-@internal
-def _getUsdValue(
-    _tokenA: address,
-    _amountA: uint256,
-    _tokenB: address,
-    _amountB: uint256,
-    _isSwap: bool,
-    _oracleRegistry: address,
-) -> uint256:
-    oracleRegistry: address = _oracleRegistry
-    if _oracleRegistry == empty(address):
-        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
-    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
-    if _isSwap:
-        return max(usdValueA, usdValueB)
-    else:
-        return usdValueA + usdValueB
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    # no lp tokens for aero slipstream (uni v3)
-    return empty(address)
 
 
 ########
@@ -333,25 +331,6 @@ def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: B
 # generic swap
 
 
-@view
-@internal
-def _getBestTickSpacing(_tokenIn: address, _tokenOut: address) -> int24:
-    bestLiquidity: uint128 = 0
-    bestTickSpacing: int24 = 0
-
-    factory: address = AERO_SLIPSTREAM_FACTORY
-    for i: uint256 in range(5):
-        tickSpacing: int24 = TICK_SPACING[i]
-        pool: address = staticcall AeroSlipStreamFactory(factory).getPool(_tokenIn, _tokenOut, tickSpacing)
-        if pool != empty(address):
-            liquidity: uint128 = staticcall AeroSlipStreamPool(pool).liquidity()
-            if liquidity > bestLiquidity:
-                bestLiquidity = liquidity
-                bestTickSpacing = tickSpacing
-
-    return bestTickSpacing
-
-
 @internal
 def _swapTokensGeneric(
     _tokenIn: address,
@@ -360,7 +339,9 @@ def _swapTokensGeneric(
     _minAmountOut: uint256, 
     _recipient: address,
 ) -> uint256:
-    bestTickSpacing: int24 = self._getBestTickSpacing(_tokenIn, _tokenOut)
+    na: address = empty(address)
+    bestTickSpacing: int24 = 0
+    na, bestTickSpacing = self._getDeepestLiqPool(_tokenIn, _tokenOut)
     assert bestTickSpacing != 0 # dev: no pool found
 
     swapRouter: address = AERO_SLIPSTREAM_ROUTER
@@ -670,6 +651,260 @@ def removeLiquidity(
     liquidityRemoved: uint256 = convert(originalLiquidity - positionData.liquidity, uint256)
     log AeroSlipStreamLiquidityRemoved(msg.sender, _pool, _nftTokenId, _tokenA, _tokenB, amountA, amountB, liquidityRemoved, usdValue, _recipient)
     return amountA, amountB, usdValue, liquidityRemoved, 0, isDepleted
+
+
+#############
+# Utilities #
+#############
+
+
+@view
+@external
+def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+    bestPoolAddr: address = empty(address)
+    na: int24 = 0
+    bestPoolAddr, na = self._getDeepestLiqPool(_tokenA, _tokenB)
+
+    if bestPoolAddr == empty(address):
+        return empty(BestPool)
+
+    # get token balances
+    tokenABal: uint256 = staticcall IERC20(_tokenA).balanceOf(bestPoolAddr)
+    tokenBBal: uint256 = staticcall IERC20(_tokenB).balanceOf(bestPoolAddr)
+
+    return BestPool(
+        pool=bestPoolAddr,
+        fee=convert(staticcall AeroSlipStreamPool(bestPoolAddr).fee() // 100, uint256), # normalize to have 100_00 denominator
+        liquidity=tokenABal + tokenBBal, # not exactly "liquidity" but this comparable to "reserves"
+        numCoins=2,
+    )
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [AERO_SLIPSTREAM_FACTORY, AERO_SLIPSTREAM_ROUTER, AERO_NFT_POSITION_MANAGER, AERO_QUOTER]
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    # no lp tokens for aero slipstream (uni v3)
+    return empty(address)
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    # no lp tokens for aero slipstream (uni v3)
+    return empty(address)
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
+def getSwapAmountOut(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+) -> uint256:
+    amountOut: uint256 = 0
+    sqrtPriceX96After: uint160 = 0
+    initializedTicksCrossed: uint32 = 0
+    gasEstimate: uint256 = 0
+    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_QUOTER).quoteExactInputSingle(
+        QuoteExactInputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amountIn=_amountIn,
+            tickSpacing=staticcall AeroSlipStreamPool(_pool).tickSpacing(),
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return amountOut
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
+def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
+    amountIn: uint256 = 0
+    sqrtPriceX96After: uint160 = 0
+    initializedTicksCrossed: uint32 = 0
+    gasEstimate: uint256 = 0
+    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_QUOTER).quoteExactOutputSingle(
+        QuoteExactOutputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amount=_amountOut,
+            tickSpacing=staticcall AeroSlipStreamPool(_pool).tickSpacing(),
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return amountIn
+
+
+@view
+@external
+def getAddLiqAmountsIn(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _availAmountA: uint256,
+    _availAmountB: uint256,
+) -> (uint256, uint256, uint256):
+    token0: address = staticcall AeroSlipStreamPool(_pool).token0()
+
+    # get correct numerator and denominator
+    numerator: uint256 = 0
+    denominator: uint256 = 0
+    sqrtPriceX96Squared: uint256 = self._getSqrtPriceX96(_pool) ** 2
+    if _tokenA == token0:
+        numerator = sqrtPriceX96Squared
+        denominator = UNISWAP_Q96 ** 2
+    else:
+        numerator = UNISWAP_Q96 ** 2
+        denominator = sqrtPriceX96Squared
+
+    # calculate optimal amounts
+    amountBOptimal: uint256 = _availAmountA * numerator // denominator
+    if amountBOptimal <= _availAmountB:
+        return _availAmountA, amountBOptimal, 0
+    else:
+        amountAOptimal: uint256 = _availAmountB * denominator // numerator
+        if amountAOptimal > _availAmountA:
+            return _availAmountA, amountBOptimal, 0 # prioritize _availAmountA
+        return amountAOptimal, _availAmountB, 0
+
+
+@view
+@external
+def getRemoveLiqAmountsOut(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256,
+) -> (uint256, uint256):
+    token0: address = staticcall AeroSlipStreamPool(_pool).token0()
+
+    # calculate expected amounts out
+    sqrtPriceX96: uint256 = self._getSqrtPriceX96(_pool)
+    amount0Out: uint256 = _lpAmount * UNISWAP_Q96 // sqrtPriceX96
+    amount1Out: uint256 = _lpAmount * sqrtPriceX96 // UNISWAP_Q96
+
+    # return amounts out
+    if _tokenA == token0:
+        return amount0Out, amount1Out
+    else:
+        return amount1Out, amount0Out
+
+
+@view
+@external
+def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
+    token0: address = staticcall AeroSlipStreamPool(_pool).token0()
+    token1: address = staticcall AeroSlipStreamPool(_pool).token1()
+
+    # oracle registry
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+
+    # alt price
+    altPrice: uint256 = 0
+    if _targetToken == token0:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token1, False)
+    else:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token0, False)
+
+    # return early if no alt price
+    if altPrice == 0:
+        return 0
+
+    # price of token0 in token1
+    sqrtPriceX96: uint256 = self._getSqrtPriceX96(_pool)
+    numerator: uint256 = sqrtPriceX96 ** 2 * EIGHTEEN_DECIMALS
+    priceZeroToOne: uint256 = numerator // (UNISWAP_Q96 ** 2)
+
+    # adjust for decimals: price should be in 18 decimals
+    decimals0: uint256 = convert(staticcall IERC20Detailed(token0).decimals(), uint256)
+    decimals1: uint256 = convert(staticcall IERC20Detailed(token1).decimals(), uint256)
+    if decimals0 > decimals1:
+        scaleFactor: uint256 = 10 ** (decimals0 - decimals1)
+        priceZeroToOne = priceZeroToOne * scaleFactor
+    elif decimals1 > decimals0:
+        scaleFactor: uint256 = 10 ** (decimals1 - decimals0)
+        priceZeroToOne = priceZeroToOne // scaleFactor
+
+    # if _targetToken is token1, make price inverse
+    priceToOther: uint256 = priceZeroToOne
+    if _targetToken == token1:
+        priceToOther = EIGHTEEN_DECIMALS * EIGHTEEN_DECIMALS // priceZeroToOne
+
+    return altPrice * priceToOther // EIGHTEEN_DECIMALS
+
+
+# internal utils
+
+
+@view
+@internal
+def _getDeepestLiqPool(_tokenA: address, _tokenB: address) -> (address, int24):
+    bestPoolAddr: address = empty(address)
+    bestTickSpacing: int24 = 0
+    bestLiquidity: uint128 = 0
+
+    factory: address = AERO_SLIPSTREAM_FACTORY
+    for i: uint256 in range(5):
+        tickSpacing: int24 = TICK_SPACING[i]
+        pool: address = staticcall AeroSlipStreamFactory(factory).getPool(_tokenA, _tokenB, tickSpacing)
+        if pool == empty(address):
+            continue
+        liquidity: uint128 = staticcall AeroSlipStreamPool(pool).liquidity()
+        if liquidity > bestLiquidity:
+            bestPoolAddr = pool
+            bestTickSpacing = tickSpacing
+            bestLiquidity = liquidity
+
+    return bestPoolAddr, bestTickSpacing
+
+
+@view
+@internal
+def _getUsdValue(
+    _tokenA: address,
+    _amountA: uint256,
+    _tokenB: address,
+    _amountB: uint256,
+    _isSwap: bool,
+    _oracleRegistry: address,
+) -> uint256:
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
+    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
+    if _isSwap:
+        return max(usdValueA, usdValueB)
+    else:
+        return usdValueA + usdValueB
+
+
+@view
+@internal
+def _getSqrtPriceX96(_pool: address) -> uint256:
+    sqrtPriceX96: uint160 = 0
+    tick: int24 = 0
+    observationIndex: uint16 = 0
+    observationCardinality: uint16 = 0
+    observationCardinalityNext: uint16 = 0
+    unlocked: bool = False
+    sqrtPriceX96, tick, observationIndex, observationCardinality, observationCardinalityNext, unlocked = staticcall AeroSlipStreamPool(_pool).slot0()
+    return convert(sqrtPriceX96, uint256)
 
 
 #################

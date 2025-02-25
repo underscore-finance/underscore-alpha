@@ -7,17 +7,9 @@ exports: gov.__interface__
 
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
-from ethereum.ercs import IERC20Detailed
 from ethereum.ercs import IERC721
+from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
-
-interface UniV3NftPositionManager:
-    def increaseLiquidity(_params: IncreaseLiquidityParams) -> (uint128, uint256, uint256): nonpayable
-    def decreaseLiquidity(_params: DecreaseLiquidityParams) -> (uint256, uint256): nonpayable
-    def mint(_params: MintParams) -> (uint256, uint128, uint256, uint256): nonpayable
-    def collect(_params: CollectParams) -> (uint256, uint256): nonpayable
-    def positions(_tokenId: uint256) -> PositionData: view
-    def burn(_tokenId: uint256): nonpayable
 
 interface UniV3Pool:
     def slot0() -> (uint160, int24, uint16, uint16, uint16, uint8, bool): view
@@ -28,9 +20,17 @@ interface UniV3Pool:
     def token1() -> address: view
     def fee() -> uint24: view
 
+interface UniV3NftPositionManager:
+    def increaseLiquidity(_params: IncreaseLiquidityParams) -> (uint128, uint256, uint256): nonpayable
+    def decreaseLiquidity(_params: DecreaseLiquidityParams) -> (uint256, uint256): nonpayable
+    def mint(_params: MintParams) -> (uint256, uint128, uint256, uint256): nonpayable
+    def collect(_params: CollectParams) -> (uint256, uint256): nonpayable
+    def positions(_tokenId: uint256) -> PositionData: view
+    def burn(_tokenId: uint256): nonpayable
+
 interface UniV3Quoter:
-    def quoteExactInputSingle(_params: QuoteExactInputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
     def quoteExactOutputSingle(_params: QuoteExactOutputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
+    def quoteExactInputSingle(_params: QuoteExactInputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
 
 interface IUniswapV3Callback:
     def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
@@ -339,25 +339,6 @@ def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: B
 # generic swap
 
 
-@view
-@internal
-def _getBestFeeTier(_tokenA: address, _tokenB: address) -> uint24:
-    bestLiquidity: uint128 = 0
-    bestFeeTier: uint24 = 0
-
-    factory: address = UNISWAP_V3_FACTORY
-    for i: uint256 in range(4):
-        fee: uint24 = FEE_TIERS[i]
-        pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)
-        if pool != empty(address):
-            liquidity: uint128 = staticcall UniV3Pool(pool).liquidity()
-            if liquidity > bestLiquidity:
-                bestLiquidity = liquidity
-                bestFeeTier = fee
-
-    return bestFeeTier
-
-
 @internal
 def _swapTokensGeneric(
     _tokenIn: address,
@@ -366,7 +347,9 @@ def _swapTokensGeneric(
     _minAmountOut: uint256, 
     _recipient: address,
 ) -> uint256:
-    bestFeeTier: uint24 = self._getBestFeeTier(_tokenIn, _tokenOut)
+    na: address = empty(address)
+    bestFeeTier: uint24 = 0
+    na, bestFeeTier = self._getDeepestLiqPool(_tokenIn, _tokenOut)
     assert bestFeeTier != 0 # dev: no pool found
 
     router: address = UNISWAP_V3_SWAP_ROUTER
@@ -687,20 +670,8 @@ def removeLiquidity(
 @external
 def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
     bestPoolAddr: address = empty(address)
-    bestLiquidity: uint128 = 0
     bestFeeTier: uint24 = 0
-
-    factory: address = UNISWAP_V3_FACTORY
-    for i: uint256 in range(4):
-        fee: uint24 = FEE_TIERS[i]
-        pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)
-        if pool == empty(address):
-            continue
-        liquidity: uint128 = staticcall UniV3Pool(pool).liquidity()
-        if liquidity > bestLiquidity:
-            bestLiquidity = liquidity
-            bestFeeTier = fee
-            bestPoolAddr = pool
+    bestPoolAddr, bestFeeTier = self._getDeepestLiqPool(_tokenA, _tokenB)
 
     if bestPoolAddr == empty(address):
         return empty(BestPool)
@@ -842,16 +813,72 @@ def getRemoveLiqAmountsOut(
 
 @view
 @external
-def getPrice(_pool: address, _targetToken: address) -> uint256:
+def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
     token0: address = staticcall UniV3Pool(_pool).token0()
     token1: address = staticcall UniV3Pool(_pool).token1()
+
+    # oracle registry
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+
+    # alt price
+    altPrice: uint256 = 0
+    if _targetToken == token0:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token1, False)
+    else:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token0, False)
+
+    # return early if no alt price
+    if altPrice == 0:
+        return 0
+
+    # price of token0 in token1
+    sqrtPriceX96: uint256 = self._getSqrtPriceX96(_pool)
+    numerator: uint256 = sqrtPriceX96 ** 2 * EIGHTEEN_DECIMALS
+    priceZeroToOne: uint256 = numerator // (UNISWAP_Q96 ** 2)
+
+    # adjust for decimals: price should be in 18 decimals
     decimals0: uint256 = convert(staticcall IERC20Detailed(token0).decimals(), uint256)
     decimals1: uint256 = convert(staticcall IERC20Detailed(token1).decimals(), uint256)
-    oracleRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    return self._getPrice(_pool, _targetToken, token0, token1, decimals0, decimals1, oracleRegistry)
+    if decimals0 > decimals1:
+        scaleFactor: uint256 = 10 ** (decimals0 - decimals1)
+        priceZeroToOne = priceZeroToOne * scaleFactor
+    elif decimals1 > decimals0:
+        scaleFactor: uint256 = 10 ** (decimals1 - decimals0)
+        priceZeroToOne = priceZeroToOne // scaleFactor
+
+    # if _targetToken is token1, make price inverse
+    priceToOther: uint256 = priceZeroToOne
+    if _targetToken == token1:
+        priceToOther = EIGHTEEN_DECIMALS * EIGHTEEN_DECIMALS // priceZeroToOne
+
+    return altPrice * priceToOther // EIGHTEEN_DECIMALS
 
 
 # internal utils
+
+
+@view
+@internal
+def _getDeepestLiqPool(_tokenA: address, _tokenB: address) -> (address, uint24):
+    bestPoolAddr: address = empty(address)
+    bestFeeTier: uint24 = 0
+    bestLiquidity: uint128 = 0
+
+    factory: address = UNISWAP_V3_FACTORY
+    for i: uint256 in range(4):
+        fee: uint24 = FEE_TIERS[i]
+        pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)
+        if pool == empty(address):
+            continue
+        liquidity: uint128 = staticcall UniV3Pool(pool).liquidity()
+        if liquidity > bestLiquidity:
+            bestPoolAddr = pool
+            bestFeeTier = fee
+            bestLiquidity = liquidity
+
+    return bestPoolAddr, bestFeeTier
 
 
 @view
@@ -873,48 +900,6 @@ def _getUsdValue(
         return max(usdValueA, usdValueB)
     else:
         return usdValueA + usdValueB
-
-
-@view
-@internal
-def _getPrice(
-    _pool: address,
-    _targetToken: address,
-    _token0: address,
-    _token1: address,
-    _decimals0: uint256,
-    _decimals1: uint256,
-    _oracleRegistry: address,
-) -> uint256:
-    altPrice: uint256 = 0
-    if _targetToken == _token0:
-        altPrice = staticcall OracleRegistry(_oracleRegistry).getPrice(_token1, False)
-    else:
-        altPrice = staticcall OracleRegistry(_oracleRegistry).getPrice(_token0, False)
-
-    # return early if no alt price
-    if altPrice == 0:
-        return 0
-
-    # price of _token0 in _token1
-    sqrtPriceX96: uint256 = self._getSqrtPriceX96(_pool)
-    numerator: uint256 = sqrtPriceX96 ** 2 * EIGHTEEN_DECIMALS
-    priceZeroToOne: uint256 = numerator // (UNISWAP_Q96 ** 2)
-
-    # adjust for decimals: price should be in 18 decimals
-    if _decimals0 > _decimals1:
-        scaleFactor: uint256 = 10 ** (_decimals0 - _decimals1)
-        priceZeroToOne = priceZeroToOne * scaleFactor
-    elif _decimals1 > _decimals0:
-        scaleFactor: uint256 = 10 ** (_decimals1 - _decimals0)
-        priceZeroToOne = priceZeroToOne // scaleFactor
-
-    # if _targetToken is _token1, make price inverse
-    priceToOther: uint256 = priceZeroToOne
-    if _targetToken == _token1:
-        priceToOther = EIGHTEEN_DECIMALS * EIGHTEEN_DECIMALS // priceZeroToOne
-
-    return altPrice * priceToOther // EIGHTEEN_DECIMALS
 
 
 @view

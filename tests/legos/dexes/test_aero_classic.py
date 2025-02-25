@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS, MAX_UINT256, EIGHTEEN_DECIMALS
 from conf_tokens import TEST_AMOUNTS
 
 
@@ -352,3 +352,148 @@ def test_aerodrome_classic_remove_liq_partial_stable(
 
     # test remove liquidity
     testLegoLiquidityRemoved(lego_aero_classic, ZERO_ADDRESS, 0, pool, tokenA, tokenB, lpAmountReceived // 2)
+
+
+# helper / utils
+
+
+@pytest.always
+def test_aerodrome_classic_get_best_pool(
+    getTokenAndWhale,
+    lego_aero_classic,
+):
+    tokenA, _ = getTokenAndWhale("usdc")
+    tokenB, _ = getTokenAndWhale("weth")
+
+    best_pool = lego_aero_classic.getBestPool(tokenA, tokenB)
+    assert best_pool.pool == "0xcDAC0d6c6C59727a65F871236188350531885C43"
+    assert best_pool.fee == 30
+    assert best_pool.liquidity != 0
+    assert best_pool.numCoins == 2
+
+    # aero
+    tokenB, _ = getTokenAndWhale("aero")
+    best_pool = lego_aero_classic.getBestPool(tokenA, tokenB)
+    assert best_pool.pool == "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d"
+    assert best_pool.fee == 30
+    assert best_pool.liquidity != 0
+    assert best_pool.numCoins == 2
+
+
+@pytest.always
+def test_aerodrome_classic_get_swap_amount_out(
+    getTokenAndWhale,
+    lego_aero_classic,
+    _test,
+):
+    tokenA, _ = getTokenAndWhale("usdc")
+    tokenB, _ = getTokenAndWhale("weth")
+    amount_out = lego_aero_classic.getSwapAmountOut("0xcDAC0d6c6C59727a65F871236188350531885C43", tokenA, tokenB, 2_500 * (10 ** tokenA.decimals()))
+    _test(1 * (10 ** tokenB.decimals()), amount_out, 100)
+
+    amount_out = lego_aero_classic.getSwapAmountOut("0xcDAC0d6c6C59727a65F871236188350531885C43", tokenB, tokenA, 1 * (10 ** tokenB.decimals()))
+    _test(2_500 * (10 ** tokenA.decimals()), amount_out, 100)
+
+
+@pytest.always
+def test_aerodrome_classic_get_swap_amount_in(
+    getTokenAndWhale,
+    lego_aero_classic,
+    _test,
+):
+    tokenA, _ = getTokenAndWhale("usdc")
+    tokenB, _ = getTokenAndWhale("weth")
+    amount_in = lego_aero_classic.getSwapAmountIn("0xcDAC0d6c6C59727a65F871236188350531885C43", tokenB, tokenA, 2_500 * (10 ** tokenA.decimals()))
+    _test(1 * (10 ** tokenB.decimals()), amount_in, 100)
+
+    amount_in = lego_aero_classic.getSwapAmountIn("0xcDAC0d6c6C59727a65F871236188350531885C43", tokenA, tokenB, 1 * (10 ** tokenB.decimals()))
+    _test(2_500 * (10 ** tokenA.decimals()), amount_in, 100)
+
+
+@pytest.always
+def test_aerodrome_classic_get_add_liq_amounts_in(
+    getTokenAndWhale,
+    lego_aero_classic,
+    _test,
+):
+    pool = boa.from_etherscan("0xcDAC0d6c6C59727a65F871236188350531885C43")
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenB, whaleB = getTokenAndWhale("weth")
+    amountB = 3 * (10 ** tokenB.decimals())
+
+    # reduce amount a
+    liq_amount_a, liq_amount_b, _ = lego_aero_classic.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, 7_500 * (10 ** tokenA.decimals()), 1_00)
+    _test(liq_amount_b, 3 * (10 ** tokenB.decimals()), 1_00)
+
+    # set new amount b
+    amountB = 10 * (10 ** tokenB.decimals())
+
+    # reduce amount b
+    liq_amount_a, liq_amount_b, _ = lego_aero_classic.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, 10_000 * (10 ** tokenA.decimals()), 1_00)
+    _test(liq_amount_b, 4 * (10 ** tokenB.decimals()), 1_00)
+
+
+@pytest.always
+def test_aerodrome_classic_get_remove_liq_amounts_out(
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+    bob_agent,
+    _test,
+):
+    legoId = lego_aero_classic.legoId()
+    pool = boa.from_etherscan("0xcDAC0d6c6C59727a65F871236188350531885C43")
+
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 7_500 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("weth")
+    amountB = 3 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    # add liquidity
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
+    assert liquidityAdded != 0
+
+    # test
+    amountAOut, amountBOut = lego_aero_classic.getRemoveLiqAmountsOut(pool, tokenA, tokenB, liquidityAdded)
+    _test(amountAOut, 7_500 * (10 ** tokenA.decimals()), 1_00)
+    _test(amountBOut, 3 * (10 ** tokenB.decimals()), 1_00)
+
+    # re-arrange amounts
+    first_amount, second_amount = lego_aero_classic.getRemoveLiqAmountsOut(pool, tokenB, tokenA, liquidityAdded)
+    _test(first_amount, 3 * (10 ** tokenB.decimals()), 1_00)
+    _test(second_amount, 7_500 * (10 ** tokenA.decimals()), 1_00)
+
+
+@pytest.always
+def test_aerodrome_classic_get_price(
+    getTokenAndWhale,
+    lego_aero_classic,
+    governor,
+    oracle_chainlink,
+    oracle_registry,
+    _test,
+):
+    pool = boa.from_etherscan("0xcDAC0d6c6C59727a65F871236188350531885C43")
+
+    tokenA, _ = getTokenAndWhale("usdc")
+    assert oracle_chainlink.setChainlinkFeed(tokenA, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", sender=governor)
+    assert oracle_chainlink.getPrice(tokenA) != 0
+    assert oracle_registry.getPrice(tokenA, False) != 0
+
+    tokenB, _ = getTokenAndWhale("weth")
+    exp_weth_price = oracle_chainlink.getPrice(tokenB)
+    assert exp_weth_price != 0
+    assert oracle_registry.getPrice(tokenB, False) != 0
+
+    price = lego_aero_classic.getPriceUnsafe(pool, tokenA)
+    assert int(0.98 * EIGHTEEN_DECIMALS) <= price <= int(1.02 * EIGHTEEN_DECIMALS)
+
+    price = lego_aero_classic.getPriceUnsafe(pool, tokenB)
+    _test(exp_weth_price, price, 1_00)

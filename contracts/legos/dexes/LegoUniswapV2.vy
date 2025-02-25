@@ -6,6 +6,7 @@ exports: gov.__interface__
 
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
+from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
 
 interface IUniswapV2Pair:
@@ -21,6 +22,7 @@ interface UniV2Router:
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+    def getPrice(_asset: address, _shouldRaise: bool = False) -> uint256: view
 
 interface UniV2Factory:
     def getPair(_tokenA: address, _tokenB: address) -> address: view
@@ -85,6 +87,7 @@ UNISWAP_V2_FACTORY: public(immutable(address))
 UNISWAP_V2_ROUTER: public(immutable(address))
 
 MAX_ASSETS: constant(uint256) = 5
+EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
 @deploy
@@ -418,8 +421,8 @@ def getSwapAmountOut(
     _tokenOut: address,
     _amountIn: uint256,
 ) -> uint256:
-    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
-    return self._getAmountOut(_pool, _tokenIn, _tokenOut, _tokenIn == tokens[0], _amountIn)
+    token0: address = staticcall IUniswapV2Pair(_pool).token0()
+    return self._getAmountOut(_pool, _tokenIn, _tokenOut, _tokenIn == token0, _amountIn)
 
 
 @view
@@ -430,8 +433,8 @@ def getSwapAmountIn(
     _tokenOut: address,
     _amountOut: uint256,
 ) -> uint256:
-    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
-    return self._getAmountIn(_pool, _tokenIn, _tokenOut, _tokenIn == tokens[0], _amountOut)
+    token0: address = staticcall IUniswapV2Pair(_pool).token0()
+    return self._getAmountIn(_pool, _tokenIn, _tokenOut, _tokenIn == token0, _amountOut)
 
 
 @view
@@ -443,11 +446,11 @@ def getAddLiqAmountsIn(
     _availAmountA: uint256,
     _availAmountB: uint256,
 ) -> (uint256, uint256, uint256):
-    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
+    token0: address = staticcall IUniswapV2Pair(_pool).token0()
 
     reserveA: uint256 = 0
     reserveB: uint256 = 0
-    reserveA, reserveB = self._getReserves(_pool, _tokenA, _tokenB, _tokenA == tokens[0])
+    reserveA, reserveB = self._getReserves(_pool, _tokenA, _tokenB, _tokenA == token0)
 
     # insufficient liquidity
     if reserveA == 0 or reserveB == 0:
@@ -472,11 +475,11 @@ def getRemoveLiqAmountsOut(
     _tokenB: address,
     _lpAmount: uint256,
 ) -> (uint256, uint256):
-    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
+    token0: address = staticcall IUniswapV2Pair(_pool).token0()
 
     reserveA: uint256 = 0
     reserveB: uint256 = 0
-    reserveA, reserveB = self._getReserves(_pool, _tokenA, _tokenB, _tokenA == tokens[0])
+    reserveA, reserveB = self._getReserves(_pool, _tokenA, _tokenB, _tokenA == token0)
 
     # insufficient liquidity
     if reserveA == 0 or reserveB == 0:
@@ -487,6 +490,59 @@ def getRemoveLiqAmountsOut(
     expectedAmountA: uint256 = _lpAmount * reserveA // totalSupply
     expectedAmountB: uint256 = _lpAmount * reserveB // totalSupply
     return expectedAmountA, expectedAmountB
+
+
+@view
+@external
+def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
+    token0: address = staticcall IUniswapV2Pair(_pool).token0()
+    token1: address = staticcall IUniswapV2Pair(_pool).token1()
+
+    # oracle registry
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+
+    # alt price
+    altPrice: uint256 = 0
+    if _targetToken == token0:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token1, False)
+    else:
+        altPrice = staticcall OracleRegistry(oracleRegistry).getPrice(token0, False)
+
+    # return early if no alt price
+    if altPrice == 0:
+        return 0
+
+    # reserves
+    reserve0: uint112 = 0
+    reserve1: uint112 = 0
+    na: uint32 = 0
+    reserve0, reserve1, na = staticcall IUniswapV2Pair(_pool).getReserves()
+
+    # avoid division by zero
+    if reserve0 == 0 or reserve1 == 0:
+        return 0  
+
+    # price of token0 in token1
+    priceZeroToOne: uint256 = convert(reserve1, uint256) * EIGHTEEN_DECIMALS // convert(reserve0, uint256)
+
+    # adjust for decimals: price should be in 18 decimals
+    decimals0: uint256 = convert(staticcall IERC20Detailed(token0).decimals(), uint256)
+    decimals1: uint256 = convert(staticcall IERC20Detailed(token1).decimals(), uint256)
+    if decimals0 > decimals1:
+        scaleFactor: uint256 = 10 ** (decimals0 - decimals1)
+        priceZeroToOne = priceZeroToOne * scaleFactor
+    elif decimals1 > decimals0:
+        scaleFactor: uint256 = 10 ** (decimals1 - decimals0)
+        priceZeroToOne = priceZeroToOne // scaleFactor
+
+    # if _targetToken is token1, make price inverse
+    priceToOther: uint256 = priceZeroToOne
+    if _targetToken == token1:
+        priceToOther = EIGHTEEN_DECIMALS * EIGHTEEN_DECIMALS // priceZeroToOne
+
+    return altPrice * priceToOther // EIGHTEEN_DECIMALS
 
 
 # internal utils

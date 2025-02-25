@@ -46,7 +46,7 @@ LEGO_REGISTRIES = {
         "local": [],
     },
     "aero_slipstream": {
-        "base": ["0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A", "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5", "0x827922686190790b37229fd06084350E74485b72"],
+        "base": ["0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A", "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5", "0x827922686190790b37229fd06084350E74485b72", "0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0"],
         "local": [],
     },
     "curve": {
@@ -201,7 +201,7 @@ def lego_aero_slipstream(fork, lego_registry, addy_registry_deploy, governor):
     registries = LEGO_REGISTRIES["aero_slipstream"][fork]
     if len(registries) == 0:
         pytest.skip("asset not relevant on this fork")
-    addr = boa.load("contracts/legos/dexes/LegoAeroSlipstream.vy", registries[0], registries[1], registries[2], addy_registry_deploy, name="lego_aero_slipstream")
+    addr = boa.load("contracts/legos/dexes/LegoAeroSlipstream.vy", registries[0], registries[1], registries[2], registries[3], addy_registry_deploy, name="lego_aero_slipstream")
     assert lego_registry.registerNewLego(addr, "aero_slipstream", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 
