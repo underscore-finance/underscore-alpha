@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS, MAX_UINT256, EIGHTEEN_DECIMALS
 from conf_tokens import TEST_AMOUNTS
 
 
@@ -281,3 +281,83 @@ def test_uniswapV3_remove_liq_partial(
     # test remove liquidity (partial)
     uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[2])
     testLegoLiquidityRemoved(lego_uniswap_v3, uniswap_nft_token_manager, nftTokenId, pool, tokenA, tokenB, liquidityAdded // 2)
+
+
+# helper / utils
+
+
+@pytest.always
+def test_uniswapV3_get_price(
+    getTokenAndWhale,
+    lego_uniswap_v3,
+    governor,
+    oracle_chainlink,
+    oracle_registry,
+    _test,
+):
+    pool = boa.from_etherscan("0xd0b53D9277642d899DF5C87A3966A349A798F224")
+
+    tokenA, _ = getTokenAndWhale("usdc")
+    assert oracle_chainlink.setChainlinkFeed(tokenA, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", sender=governor)
+    assert oracle_chainlink.getPrice(tokenA) != 0
+    assert oracle_registry.getPrice(tokenA, False) != 0
+
+    tokenB, _ = getTokenAndWhale("weth")
+    exp_weth_price = oracle_chainlink.getPrice(tokenB)
+    assert exp_weth_price != 0
+    assert oracle_registry.getPrice(tokenB, False) != 0
+
+    price = lego_uniswap_v3.getPrice(pool, tokenA)
+    assert int(0.98 * EIGHTEEN_DECIMALS) <= price <= int(1.02 * EIGHTEEN_DECIMALS)
+
+    price = lego_uniswap_v3.getPrice(pool, tokenB)
+    _test(exp_weth_price, price, 1_00)
+
+
+@pytest.always
+def test_uniswapV3_get_add_liq_amounts_in(
+    getTokenAndWhale,
+    lego_uniswap_v3,
+    _test,
+):
+    pool = boa.from_etherscan("0xd0b53D9277642d899DF5C87A3966A349A798F224")
+
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+
+    tokenB, whaleB = getTokenAndWhale("weth")
+    amountB = 3 * (10 ** tokenB.decimals())
+
+    liq_amount_a, liq_amount_b, _ = lego_uniswap_v3.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, 7_500 * (10 ** tokenA.decimals()), 1_00)
+    _test(liq_amount_b, 3 * (10 ** tokenB.decimals()), 1_00)
+
+
+@pytest.always
+def test_uniswapV3_get_remove_liq_amounts_out(
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_uniswap_v3,
+    bob_agent,
+    _test,
+):
+    legoId = lego_uniswap_v3.legoId()
+    pool = boa.from_etherscan("0xd0b53D9277642d899DF5C87A3966A349A798F224")
+
+    # setup
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 7_500 * (10 ** tokenA.decimals())
+    tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+    tokenB, whaleB = getTokenAndWhale("weth")
+    amountB = 3 * (10 ** tokenB.decimals())
+    tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+    # add liquidity
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
+    assert nftTokenId != 0 and liquidityAdded != 0
+
+    # test
+    amountAOut, amountBOut = lego_uniswap_v3.getRemoveLiqAmountsOut(pool, tokenA, tokenB, liquidityAdded)
+    _test(amountAOut, 7_500 * (10 ** tokenA.decimals()), 1_00)
+    _test(amountBOut, 3 * (10 ** tokenB.decimals()), 1_00)

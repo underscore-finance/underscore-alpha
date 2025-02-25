@@ -7,6 +7,7 @@ exports: gov.__interface__
 
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
+from ethereum.ercs import IERC20Detailed
 from ethereum.ercs import IERC721
 from interfaces import LegoDex
 
@@ -19,6 +20,7 @@ interface UniV3NftPositionManager:
     def burn(_tokenId: uint256): nonpayable
 
 interface UniV3Pool:
+    def slot0() -> (uint160, int24, uint16, uint16, uint16, uint8, bool): view
     def swap(_recipient: address, _zeroForOne: bool, _amountSpecified: int256, _sqrtPriceLimitX96: uint160, _data: Bytes[256]) -> (int256, int256): nonpayable
     def liquidity() -> uint128: view
     def tickSpacing() -> int24: view
@@ -26,11 +28,16 @@ interface UniV3Pool:
     def token1() -> address: view
     def fee() -> uint24: view
 
+interface UniV3Quoter:
+    def quoteExactInputSingle(_params: QuoteExactInputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
+    def quoteExactOutputSingle(_params: QuoteExactOutputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
+
 interface IUniswapV3Callback:
     def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+    def getPrice(_asset: address, _shouldRaise: bool = False) -> uint256: view
 
 interface UniV3Factory:
     def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view
@@ -49,6 +56,26 @@ struct ExactInputSingleParams:
     amountIn: uint256
     amountOutMinimum: uint256
     sqrtPriceLimitX96: uint160
+
+struct QuoteExactInputSingleParams:
+    tokenIn: address
+    tokenOut: address
+    amountIn: uint256
+    fee: uint24
+    sqrtPriceLimitX96: uint160
+
+struct QuoteExactOutputSingleParams:
+    tokenIn: address
+    tokenOut: address
+    amount: uint256
+    fee: uint24
+    sqrtPriceLimitX96: uint160
+
+struct BestPool:
+    pool: address
+    fee: uint256
+    liquidity: uint256
+    numCoins: uint256
 
 struct MintParams:
     token0: address
@@ -172,6 +199,7 @@ ADDY_REGISTRY: public(immutable(address))
 UNISWAP_V3_FACTORY: public(immutable(address))
 UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
 UNI_NFT_POSITION_MANAGER: public(immutable(address))
+UNI_V3_QUOTER: public(immutable(address))
 
 FEE_TIERS: constant(uint24[4]) = [100, 500, 3000, 10000] # 0.01%, 0.05%, 0.3%, 1%
 MIN_SQRT_RATIO_PLUS_ONE: constant(uint160) = 4295128740
@@ -179,14 +207,17 @@ MAX_SQRT_RATIO_MINUS_ONE: constant(uint160) = 1461446703485210103287273052203988
 TICK_LOWER: constant(int24) = -887272
 TICK_UPPER: constant(int24) = 887272
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
+EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
+UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
 
 
 @deploy
-def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _uniNftPositionManager: address, _addyRegistry: address):
-    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _addyRegistry] # dev: invalid addrs
+def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _uniNftPositionManager: address, _uniV3Quoter: address, _addyRegistry: address):
+    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry] # dev: invalid addrs
     UNISWAP_V3_FACTORY = _uniswapV3Factory
     UNISWAP_V3_SWAP_ROUTER = _uniswapV3SwapRouter
     UNI_NFT_POSITION_MANAGER = _uniNftPositionManager
+    UNI_V3_QUOTER = _uniV3Quoter
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
@@ -198,40 +229,6 @@ def onERC721Received(_operator: address, _owner: address, _tokenId: uint256, _da
     # must implement method for safe NFT transfers
     assert _data == ERC721_RECEIVE_DATA # dev: did not receive from within Underscore wallet
     return method_id("onERC721Received(address,address,uint256,bytes)", output_type=bytes4)
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [UNISWAP_V3_FACTORY, UNISWAP_V3_SWAP_ROUTER, UNI_NFT_POSITION_MANAGER]
-
-
-@view
-@internal
-def _getUsdValue(
-    _tokenA: address,
-    _amountA: uint256,
-    _tokenB: address,
-    _amountB: uint256,
-    _isSwap: bool,
-    _oracleRegistry: address,
-) -> uint256:
-    oracleRegistry: address = _oracleRegistry
-    if _oracleRegistry == empty(address):
-        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
-    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
-    if _isSwap:
-        return max(usdValueA, usdValueB)
-    else:
-        return usdValueA + usdValueB
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    # no lp tokens for uniswap v3
-    return empty(address)
 
 
 ########
@@ -679,6 +676,259 @@ def removeLiquidity(
     liquidityRemoved: uint256 = convert(originalLiquidity - positionData.liquidity, uint256)
     log UniswapV3LiquidityRemoved(msg.sender, _pool, _nftTokenId, _tokenA, _tokenB, amountA, amountB, liquidityRemoved, usdValue, _recipient)
     return amountA, amountB, usdValue, liquidityRemoved, 0, isDepleted
+
+
+#############
+# Utilities #
+#############
+
+
+@view
+@external
+def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+    bestPoolAddr: address = empty(address)
+    bestLiquidity: uint128 = 0
+    bestFeeTier: uint24 = 0
+
+    factory: address = UNISWAP_V3_FACTORY
+    for i: uint256 in range(4):
+        fee: uint24 = FEE_TIERS[i]
+        pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)
+        if pool == empty(address):
+            continue
+        liquidity: uint128 = staticcall UniV3Pool(pool).liquidity()
+        if liquidity > bestLiquidity:
+            bestLiquidity = liquidity
+            bestFeeTier = fee
+            bestPoolAddr = pool
+
+    if bestPoolAddr == empty(address):
+        return empty(BestPool)
+
+    # get token balances
+    tokenABal: uint256 = staticcall IERC20(_tokenA).balanceOf(bestPoolAddr)
+    tokenBBal: uint256 = staticcall IERC20(_tokenB).balanceOf(bestPoolAddr)
+
+    return BestPool(
+        pool=bestPoolAddr,
+        fee=convert(bestFeeTier // 100, uint256), # normalize to have 100_00 denominator
+        liquidity=tokenABal + tokenBBal, # not exactly "liquidity" but this comparable to "reserves"
+        numCoins=2,
+    )
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [UNISWAP_V3_FACTORY, UNISWAP_V3_SWAP_ROUTER, UNI_NFT_POSITION_MANAGER, UNI_V3_QUOTER]
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    # no lp tokens for uniswap v3
+    return empty(address)
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    # no lp tokens for uniswap v3
+    return empty(address)
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
+def getSwapAmountOut(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+) -> uint256:
+    amountOut: uint256 = 0
+    sqrtPriceX96After: uint160 = 0
+    initializedTicksCrossed: uint32 = 0
+    gasEstimate: uint256 = 0
+    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNI_V3_QUOTER).quoteExactInputSingle(
+        QuoteExactInputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amountIn=_amountIn,
+            fee=staticcall UniV3Pool(_pool).fee(),
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return amountOut
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
+def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
+    amountIn: uint256 = 0
+    sqrtPriceX96After: uint160 = 0
+    initializedTicksCrossed: uint32 = 0
+    gasEstimate: uint256 = 0
+    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNI_V3_QUOTER).quoteExactOutputSingle(
+        QuoteExactOutputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amount=_amountOut,
+            fee=staticcall UniV3Pool(_pool).fee(),
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return amountIn
+
+
+@view
+@external
+def getAddLiqAmountsIn(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _availAmountA: uint256,
+    _availAmountB: uint256,
+) -> (uint256, uint256, uint256):
+    token0: address = staticcall UniV3Pool(_pool).token0()
+
+    # get correct numerator and denominator
+    numerator: uint256 = 0
+    denominator: uint256 = 0
+    sqrtPriceX96Squared: uint256 = self._getSqrtPriceX96(_pool) ** 2
+    if _tokenA == token0:
+        numerator = sqrtPriceX96Squared
+        denominator = UNISWAP_Q96 ** 2
+    else:
+        numerator = UNISWAP_Q96 ** 2
+        denominator = sqrtPriceX96Squared
+
+    # calculate optimal amounts
+    amountBOptimal: uint256 = _availAmountA * numerator // denominator
+    if amountBOptimal <= _availAmountB:
+        return _availAmountA, amountBOptimal, 0
+    else:
+        amountAOptimal: uint256 = _availAmountB * denominator // numerator
+        if amountAOptimal > _availAmountA:
+            return _availAmountA, amountBOptimal, 0 # prioritize _availAmountA
+        return amountAOptimal, _availAmountB, 0
+
+
+@view
+@external
+def getRemoveLiqAmountsOut(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256,
+) -> (uint256, uint256):
+    token0: address = staticcall UniV3Pool(_pool).token0()
+
+    # calculate expected amounts out
+    sqrtPriceX96: uint256 = self._getSqrtPriceX96(_pool)
+    amount0Out: uint256 = _lpAmount * UNISWAP_Q96 // sqrtPriceX96
+    amount1Out: uint256 = _lpAmount * sqrtPriceX96 // UNISWAP_Q96
+
+    # return amounts out
+    if _tokenA == token0:
+        return amount0Out, amount1Out
+    else:
+        return amount1Out, amount0Out
+
+
+@view
+@external
+def getPrice(_pool: address, _targetToken: address) -> uint256:
+    token0: address = staticcall UniV3Pool(_pool).token0()
+    token1: address = staticcall UniV3Pool(_pool).token1()
+    decimals0: uint256 = convert(staticcall IERC20Detailed(token0).decimals(), uint256)
+    decimals1: uint256 = convert(staticcall IERC20Detailed(token1).decimals(), uint256)
+    oracleRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    return self._getPrice(_pool, _targetToken, token0, token1, decimals0, decimals1, oracleRegistry)
+
+
+# internal utils
+
+
+@view
+@internal
+def _getUsdValue(
+    _tokenA: address,
+    _amountA: uint256,
+    _tokenB: address,
+    _amountB: uint256,
+    _isSwap: bool,
+    _oracleRegistry: address,
+) -> uint256:
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
+    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
+    if _isSwap:
+        return max(usdValueA, usdValueB)
+    else:
+        return usdValueA + usdValueB
+
+
+@view
+@internal
+def _getPrice(
+    _pool: address,
+    _targetToken: address,
+    _token0: address,
+    _token1: address,
+    _decimals0: uint256,
+    _decimals1: uint256,
+    _oracleRegistry: address,
+) -> uint256:
+    altPrice: uint256 = 0
+    if _targetToken == _token0:
+        altPrice = staticcall OracleRegistry(_oracleRegistry).getPrice(_token1, False)
+    else:
+        altPrice = staticcall OracleRegistry(_oracleRegistry).getPrice(_token0, False)
+
+    # return early if no alt price
+    if altPrice == 0:
+        return 0
+
+    # price of _token0 in _token1
+    sqrtPriceX96: uint256 = self._getSqrtPriceX96(_pool)
+    numerator: uint256 = sqrtPriceX96 ** 2 * EIGHTEEN_DECIMALS
+    priceZeroToOne: uint256 = numerator // (UNISWAP_Q96 ** 2)
+
+    # adjust for decimals: price should be in 18 decimals
+    if _decimals0 > _decimals1:
+        scaleFactor: uint256 = 10 ** (_decimals0 - _decimals1)
+        priceZeroToOne = priceZeroToOne * scaleFactor
+    elif _decimals1 > _decimals0:
+        scaleFactor: uint256 = 10 ** (_decimals1 - _decimals0)
+        priceZeroToOne = priceZeroToOne // scaleFactor
+
+    # if _targetToken is _token1, make price inverse
+    priceToOther: uint256 = priceZeroToOne
+    if _targetToken == _token1:
+        priceToOther = EIGHTEEN_DECIMALS * EIGHTEEN_DECIMALS // priceZeroToOne
+
+    return altPrice * priceToOther // EIGHTEEN_DECIMALS
+
+
+@view
+@internal
+def _getSqrtPriceX96(_pool: address) -> uint256:
+    sqrtPriceX96: uint160 = 0
+    tick: int24 = 0
+    observationIndex: uint16 = 0
+    observationCardinality: uint16 = 0
+    observationCardinalityNext: uint16 = 0
+    feeProtocol: uint8 = 0
+    unlocked: bool = False
+    sqrtPriceX96, tick, observationIndex, observationCardinality, observationCardinalityNext, feeProtocol, unlocked = staticcall UniV3Pool(_pool).slot0()
+    return convert(sqrtPriceX96, uint256)
 
 
 #################

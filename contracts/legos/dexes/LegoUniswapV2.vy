@@ -28,6 +28,12 @@ interface UniV2Factory:
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
+struct BestPool:
+    pool: address
+    fee: uint256
+    liquidity: uint256
+    numCoins: uint256
+
 event UniswapV2LiquidityAdded:
     sender: indexed(address)
     tokenA: indexed(address)
@@ -89,40 +95,6 @@ def __init__(_uniswapV2Factory: address, _uniswapV2Router: address, _addyRegistr
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [UNISWAP_V2_FACTORY, UNISWAP_V2_ROUTER]
-
-
-@view
-@internal
-def _getUsdValue(
-    _tokenA: address,
-    _amountA: uint256,
-    _tokenB: address,
-    _amountB: uint256,
-    _isSwap: bool,
-    _oracleRegistry: address,
-) -> uint256:
-    oracleRegistry: address = _oracleRegistry
-    if _oracleRegistry == empty(address):
-        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
-    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
-    if _isSwap:
-        return max(usdValueA, usdValueB)
-    else:
-        return usdValueA + usdValueB
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    # in uniswap v2, the lp token is the pool address
-    return _pool
 
 
 ########
@@ -194,23 +166,8 @@ def _swapTokensInPool(
     zeroForOne: bool = _tokenIn == tokens[0]
     preRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
 
-    # get reserves
-    reserve0: uint112 = 0
-    reserve1: uint112 = 0
-    na: uint32 = 0
-    reserve0, reserve1, na = staticcall IUniswapV2Pair(_pool).getReserves()
-
-    # determine reserves based on input and output tokens
-    reserveIn: uint112 = reserve1
-    reserveOut: uint112 = reserve0
-    if zeroForOne:
-        reserveIn = reserve0
-        reserveOut = reserve1
-
     # finalize amount outs
-    amountOut: uint256 = self._getAmountOut(_amountIn, convert(reserveIn, uint256), convert(reserveOut, uint256))
-    assert amountOut >= _minAmountOut # dev: insufficient output
-
+    amountOut: uint256 = self._getAmountOut(_pool, _tokenIn, _tokenOut, zeroForOne, _amountIn)
     amount0Out: uint256 = amountOut
     amount1Out: uint256 = 0
     if zeroForOne:
@@ -227,17 +184,8 @@ def _swapTokensInPool(
     if postRecipientBalance > preRecipientBalance:
         toAmount = postRecipientBalance - preRecipientBalance
 
-    assert toAmount == amountOut # dev: incorrect amount out
+    assert toAmount != 0 and toAmount >= _minAmountOut # dev: insufficient output
     return toAmount
-
-
-@view
-@internal
-def _getAmountOut(_amountIn: uint256, _reserveIn: uint256, _reserveOut: uint256) -> uint256:
-    amountInWithFee: uint256 = _amountIn * 997 # 1000 - 3 (0.3% fee)
-    numerator: uint256 = amountInWithFee * _reserveOut
-    denominator: uint256 = (_reserveIn * 1000) + amountInWithFee
-    return numerator // denominator
 
 
 # generic swap
@@ -414,6 +362,204 @@ def removeLiquidity(
     usdValue: uint256 = self._getUsdValue(_tokenA, amountA, _tokenB, amountB, False, _oracleRegistry)
     log UniswapV2LiquidityRemoved(msg.sender, _pool, _tokenA, _tokenB, amountA, amountB, _lpToken, lpAmount, usdValue, _recipient)
     return amountA, amountB, usdValue, lpAmount, refundedLpAmount, refundedLpAmount != 0
+
+
+#############
+# Utilities #
+#############
+
+
+@view
+@external
+def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+    pool: address = staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenA, _tokenB)
+    if pool == empty(address):
+        return empty(BestPool)
+
+    # get reserves
+    reserve0: uint112 = 0
+    reserve1: uint112 = 0
+    na: uint32 = 0
+    reserve0, reserve1, na = staticcall IUniswapV2Pair(pool).getReserves()
+
+    return BestPool(
+        pool=pool,
+        fee=30, # 0.3%, denominator is 100_00
+        liquidity=convert(reserve0 + reserve1, uint256),
+        numCoins=2,
+    )
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [UNISWAP_V2_FACTORY, UNISWAP_V2_ROUTER]
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    # in uniswap v2, the lp token is the pool address
+    return _pool
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    # in uniswap v2, the pool is the lp token address
+    return _lpToken
+
+
+@view
+@external
+def getSwapAmountOut(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+) -> uint256:
+    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
+    return self._getAmountOut(_pool, _tokenIn, _tokenOut, _tokenIn == tokens[0], _amountIn)
+
+
+@view
+@external
+def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
+    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
+    return self._getAmountIn(_pool, _tokenIn, _tokenOut, _tokenIn == tokens[0], _amountOut)
+
+
+@view
+@external
+def getAddLiqAmountsIn(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _availAmountA: uint256,
+    _availAmountB: uint256,
+) -> (uint256, uint256, uint256):
+    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
+
+    reserveA: uint256 = 0
+    reserveB: uint256 = 0
+    reserveA, reserveB = self._getReserves(_pool, _tokenA, _tokenB, _tokenA == tokens[0])
+
+    # insufficient liquidity
+    if reserveA == 0 or reserveB == 0:
+        return 0, 0, 0
+
+    # calculate optimal amounts
+    amountBOptimal: uint256 = self._quote(_availAmountA, reserveA, reserveB)
+    if amountBOptimal <= _availAmountB:
+        return _availAmountA, amountBOptimal, 0
+    else:
+        amountAOptimal: uint256 = self._quote(_availAmountB, reserveB, reserveA)
+        if amountAOptimal > _availAmountA:
+            return _availAmountA, amountBOptimal, 0 # prioritize _availAmountA
+        return amountAOptimal, _availAmountB, 0
+
+
+@view
+@external
+def getRemoveLiqAmountsOut(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256,
+) -> (uint256, uint256):
+    tokens: address[2] = [staticcall IUniswapV2Pair(_pool).token0(), staticcall IUniswapV2Pair(_pool).token1()]
+
+    reserveA: uint256 = 0
+    reserveB: uint256 = 0
+    reserveA, reserveB = self._getReserves(_pool, _tokenA, _tokenB, _tokenA == tokens[0])
+
+    # insufficient liquidity
+    if reserveA == 0 or reserveB == 0:
+        return max_value(uint256), max_value(uint256)
+
+    # calculate expected amounts out
+    totalSupply: uint256 = staticcall IERC20(_pool).totalSupply()
+    expectedAmountA: uint256 = _lpAmount * reserveA // totalSupply
+    expectedAmountB: uint256 = _lpAmount * reserveB // totalSupply
+    return expectedAmountA, expectedAmountB
+
+
+# internal utils
+
+
+@view
+@internal
+def _getUsdValue(
+    _tokenA: address,
+    _amountA: uint256,
+    _tokenB: address,
+    _amountB: uint256,
+    _isSwap: bool,
+    _oracleRegistry: address,
+) -> uint256:
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
+    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
+    if _isSwap:
+        return max(usdValueA, usdValueB)
+    else:
+        return usdValueA + usdValueB
+
+
+@view
+@internal
+def _quote(_amountA: uint256, _reserveA: uint256, _reserveB: uint256) -> uint256:
+    return (_amountA * _reserveB) // _reserveA
+
+
+@view
+@internal
+def _getReserves(_pool: address, _tokenA: address, _tokenB: address, _isTokenAZeroIndex: bool) -> (uint256, uint256):
+    reserve0: uint112 = 0
+    reserve1: uint112 = 0
+    na: uint32 = 0
+    reserve0, reserve1, na = staticcall IUniswapV2Pair(_pool).getReserves()
+
+    # determine which token is which
+    reserveA: uint256 = convert(reserve0, uint256)
+    reserveB: uint256 = convert(reserve1, uint256)
+    if not _isTokenAZeroIndex:
+        reserveA = convert(reserve1, uint256)
+        reserveB = convert(reserve0, uint256)
+
+    return reserveA, reserveB
+
+
+@view
+@internal
+def _getAmountOut(_pool: address, _tokenIn: address, _tokenOut: address, _zeroForOne: bool, _amountIn: uint256) -> uint256:
+    reserveIn: uint256 = 0
+    reserveOut: uint256 = 0
+    reserveIn, reserveOut = self._getReserves(_pool, _tokenIn, _tokenOut, _zeroForOne)
+
+    amountInWithFee: uint256 = _amountIn * 997 # 1000 - 3 (0.3% fee)
+    numerator: uint256 = amountInWithFee * reserveOut
+    denominator: uint256 = (reserveIn * 1000) + amountInWithFee
+    return numerator // denominator
+
+
+@view
+@internal
+def _getAmountIn(_pool: address, _tokenIn: address, _tokenOut: address, _zeroForOne: bool, _amountOut: uint256) -> uint256:
+    reserveIn: uint256 = 0
+    reserveOut: uint256 = 0
+    reserveIn, reserveOut = self._getReserves(_pool, _tokenIn, _tokenOut, _zeroForOne)
+
+    numerator: uint256 = reserveIn * _amountOut * 1000
+    denominator: uint256 = (reserveOut - _amountOut) * 997
+    return (numerator // denominator) + 1
 
 
 #################

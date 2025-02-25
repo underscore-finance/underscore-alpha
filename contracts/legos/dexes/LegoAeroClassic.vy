@@ -11,6 +11,7 @@ from interfaces import LegoDex
 interface AeroClassicPool:
     def swap(_amount0Out: uint256, _amount1Out: uint256, _recipient: address, _data: Bytes[256]): nonpayable
     def getAmountOut(_amountIn: uint256, _tokenIn: address) -> uint256: view
+    def getReserves() -> (uint256, uint256, uint256): view
     def tokens() -> (address, address): view
     def stable() -> bool: view
 
@@ -18,15 +19,24 @@ interface AeroRouter:
     def addLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
     def removeLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _lpAmount: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256): nonpayable
     def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[Route, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
+    def quoteAddLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256) -> (uint256, uint256, uint256): view
+    def quoteRemoveLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _factory: address, _liquidity: uint256) -> (uint256, uint256): view
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface AeroFactory:
     def getPool(_tokenA: address, _tokenB: address, _isStable: bool) -> address: view
+    def getFee(_pool: address, _isStable: bool) -> uint256: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
+
+struct BestPool:
+    pool: address
+    fee: uint256
+    liquidity: uint256
+    numCoins: uint256
 
 struct Route:
     from_: address
@@ -95,40 +105,6 @@ def __init__(_aerodromeFactory: address, _aerodromeRouter: address, _addyRegistr
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [AERODROME_FACTORY, AERODROME_ROUTER]
-
-
-@view
-@internal
-def _getUsdValue(
-    _tokenA: address,
-    _amountA: uint256,
-    _tokenB: address,
-    _amountB: uint256,
-    _isSwap: bool,
-    _oracleRegistry: address,
-) -> uint256:
-    oracleRegistry: address = _oracleRegistry
-    if _oracleRegistry == empty(address):
-        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
-    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
-    if _isSwap:
-        return max(usdValueA, usdValueB)
-    else:
-        return usdValueA + usdValueB
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    # in uniswap v2, the lp token is the pool address
-    return _pool
 
 
 ########
@@ -206,7 +182,6 @@ def _swapTokensInPool(
 
     # finalize amount out
     amountOut: uint256 = staticcall AeroClassicPool(_pool).getAmountOut(_amountIn, _tokenIn)
-    assert amountOut >= _minAmountOut # dev: insufficient output
 
     amount0Out: uint256 = amountOut
     amount1Out: uint256 = 0
@@ -224,7 +199,7 @@ def _swapTokensInPool(
     if postRecipientBalance > preRecipientBalance:
         toAmount = postRecipientBalance - preRecipientBalance
 
-    assert toAmount == amountOut # dev: incorrect amount out
+    assert toAmount != 0 and toAmount >= _minAmountOut # dev: insufficient output
     return toAmount
 
 
@@ -336,6 +311,8 @@ def addLiquidity(
         block.timestamp,
     )
     assert lpAmountReceived != 0 # dev: no liquidity added
+    if _minLpAmount != 0:
+        assert lpAmountReceived >= _minLpAmount # dev: insufficient liquidity added
 
     # reset approvals
     assert extcall IERC20(_tokenA).approve(router, 0, default_return_value=True) # dev: approval failed
@@ -432,6 +409,173 @@ def removeLiquidity(
     usdValue: uint256 = self._getUsdValue(_tokenA, amountA, _tokenB, amountB, False, _oracleRegistry)
     log AerodromeLiquidityRemoved(msg.sender, _pool, _tokenA, _tokenB, amountA, amountB, _lpToken, lpAmount, usdValue, _recipient)
     return amountA, amountB, usdValue, lpAmount, refundedLpAmount, refundedLpAmount != 0
+
+
+#############
+# Utilities #
+#############
+
+
+@view
+@external
+def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+    factory: address = AERODROME_FACTORY
+    reserve0: uint256 = 0
+    reserve1: uint256 = 0
+    na: uint256 = 0
+
+    # get pool options
+    stablePool: address = staticcall AeroFactory(factory).getPool(_tokenA, _tokenB, True)
+    volatilePool: address = staticcall AeroFactory(factory).getPool(_tokenA, _tokenB, False)
+
+    # no pools found
+    if stablePool == empty(address) and volatilePool == empty(address):
+        return empty(BestPool)
+
+    # stable pool
+    stableLiquidity: uint256 = 0
+    if stablePool != empty(address):
+        reserve0, reserve1, na = staticcall AeroClassicPool(stablePool).getReserves()
+        stableLiquidity = reserve0 + reserve1
+
+    # volatile pool
+    volatileLiquidity: uint256 = 0
+    if volatilePool != empty(address):
+        reserve0, reserve1, na = staticcall AeroClassicPool(volatilePool).getReserves()
+        volatileLiquidity = reserve0 + reserve1
+
+    # best pool determined by liquidity
+    bestPoolAddr: address = stablePool
+    bestLiquidity: uint256 = stableLiquidity
+    isStable: bool = True
+    if volatileLiquidity > stableLiquidity:
+        bestPoolAddr = volatilePool
+        bestLiquidity = volatileLiquidity
+        isStable = False
+
+    return BestPool(
+        pool=bestPoolAddr,
+        fee=staticcall AeroFactory(factory).getFee(bestPoolAddr, isStable),
+        liquidity=bestLiquidity,
+        numCoins=2,
+    )
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [AERODROME_FACTORY, AERODROME_ROUTER]
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    # in uniswap v2, the lp token is the pool address
+    return _pool
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    # in uniswap v2, the pool is the lp token address
+    return _lpToken
+
+
+@view
+@external
+def getSwapAmountOut(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+) -> uint256:
+    return staticcall AeroClassicPool(_pool).getAmountOut(_amountIn, _tokenIn)
+
+
+@view
+@external
+def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
+    if staticcall AeroClassicPool(_pool).stable():
+        return 0 # TODO: implement this
+    else:
+        return self._getAmountInForVolatilePools(_pool, _tokenIn, _tokenOut, _amountOut)
+
+
+@view
+@external
+def getAddLiqAmountsIn(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _availAmountA: uint256,
+    _availAmountB: uint256,
+) -> (uint256, uint256, uint256):
+    return staticcall AeroRouter(AERODROME_ROUTER).quoteAddLiquidity(_tokenA, _tokenB, staticcall AeroClassicPool(_pool).stable(), _availAmountA, _availAmountB)
+
+
+@view
+@external
+def getRemoveLiqAmountsOut(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256,
+) -> (uint256, uint256):
+    return staticcall AeroRouter(AERODROME_ROUTER).quoteRemoveLiquidity(_tokenA, _tokenB, staticcall AeroClassicPool(_pool).stable(), AERODROME_FACTORY, _lpAmount)
+
+
+# internal utils
+
+
+@view
+@internal
+def _getUsdValue(
+    _tokenA: address,
+    _amountA: uint256,
+    _tokenB: address,
+    _amountB: uint256,
+    _isSwap: bool,
+    _oracleRegistry: address,
+) -> uint256:
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    usdValueA: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
+    usdValueB: uint256 = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
+    if _isSwap:
+        return max(usdValueA, usdValueB)
+    else:
+        return usdValueA + usdValueB
+
+
+@view
+@internal
+def _getAmountInForVolatilePools(_pool: address, _tokenIn: address, _tokenOut: address, _amountOut: uint256) -> uint256:
+    token0: address = empty(address)
+    token1: address = empty(address)
+    token0, token1 = staticcall AeroClassicPool(_pool).tokens()
+
+    reserve0: uint256 = 0
+    reserve1: uint256 = 0
+    na: uint256 = 0
+    reserve0, reserve1, na = staticcall AeroClassicPool(_pool).getReserves()
+
+    # determine which token is which
+    reserveIn: uint256 = reserve0
+    reserveOut: uint256 = reserve1
+    if _tokenIn != token0:
+        reserveIn = reserve1
+        reserveOut = reserve0
+
+    fee: uint256 = staticcall AeroFactory(AERODROME_FACTORY).getFee(_pool, False)
+    numerator: uint256 = reserveIn * _amountOut * 100_00
+    denominator: uint256 = (reserveOut - _amountOut) * (100_00 - fee)
+    return (numerator // denominator) + 1
 
 
 #################
