@@ -7,12 +7,14 @@ exports: gov.__interface__
 
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
+from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
 
 interface CurveMetaRegistry:
     def get_coin_indices(_pool: address, _from: address, _to: address) -> (int128, int128, bool): view
     def find_pools_for_coins(_from: address, _to: address) -> DynArray[address, MAX_POOLS]: view
     def get_registry_handlers_from_pool(_pool: address) -> address[10]: view
+    def get_pool_from_lp_token(_lpToken: address) -> address: view
     def get_base_registry(_addr: address) -> address: view
     def get_balances(_pool: address) -> uint256[8]: view
     def get_coins(_pool: address) -> address[8]: view
@@ -66,6 +68,7 @@ interface StableNgFour:
 
 interface CommonCurvePool:
     def exchange(_i: int128, _j: int128, _dx: uint256, _min_dy: uint256, _receiver: address = msg.sender) -> uint256: nonpayable
+    def fee() -> uint256: view
 
 interface CryptoLegacyPool:
     def exchange(_i: uint256, _j: uint256, _dx: uint256, _min_dy: uint256, _use_eth: bool = False) -> uint256: payable
@@ -79,6 +82,11 @@ interface CurveAddressProvider:
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
+interface CurveRateProvider:
+    def get_quotes(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> DynArray[Quote, MAX_QUOTES]: view
+    def get_aggregated_rate(_tokenIn: address, _tokenOut: address) -> uint256: view
+
+
 flag PoolType:
     STABLESWAP_NG
     TWO_CRYPTO_NG
@@ -87,11 +95,27 @@ flag PoolType:
     METAPOOL
     CRYPTO
 
+struct Quote:
+    source_token_index: uint256
+    dest_token_index: uint256
+    is_underlying: bool
+    amount_out: uint256
+    pool: address
+    source_token_pool_balance: uint256
+    dest_token_pool_balance: uint256
+    pool_type: uint8
+
 struct PoolData:
     pool: address
     indexTokenA: uint256
     indexTokenB: uint256
     poolType: PoolType
+    numCoins: uint256
+
+struct BestPool:
+    pool: address
+    fee: uint256
+    liquidity: uint256
     numCoins: uint256
 
 struct CurveRegistries:
@@ -100,7 +124,7 @@ struct CurveRegistries:
     TricryptoNg: address
     TwoCrypto: address
     MetaPool: address
-
+    RateProvider: address
 event CurveSwap:
     sender: indexed(address)
     tokenIn: indexed(address)
@@ -163,8 +187,11 @@ META_REGISTRY_ID: constant(uint256) = 7 # 0x87DD13Dd25a1DBde0E1EdcF5B8Fa6cfff7eA
 TRICRYPTO_NG_FACTORY_ID: constant(uint256) = 11 # 0xA5961898870943c68037F6848d2D866Ed2016bcB
 STABLESWAP_NG_FACTORY_ID: constant(uint256) = 12 # 0xd2002373543Ce3527023C75e7518C274A51ce712
 TWO_CRYPTO_NG_FACTORY_ID: constant(uint256) = 13 # 0xc9Fe0C63Af9A39402e8a5514f9c43Af0322b665F
+RATE_PROVIDER_ID: constant(uint256) = 18 # 0x33e72383472f77B0C6d8F791D1613C75aE2C5915
 
+EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 MAX_POOLS: constant(uint256) = 50
+MAX_QUOTES: constant(uint256) = 100
 
 
 @deploy
@@ -181,44 +208,8 @@ def __init__(_curveAddressProvider: address, _addyRegistry: address):
         TricryptoNg= staticcall CurveAddressProvider(_curveAddressProvider).get_address(TRICRYPTO_NG_FACTORY_ID),
         TwoCrypto= staticcall CurveAddressProvider(_curveAddressProvider).get_address(TWO_CRYPTO_FACTORY_ID),
         MetaPool= staticcall CurveAddressProvider(_curveAddressProvider).get_address(METAPOOL_FACTORY_ID),
+        RateProvider= staticcall CurveAddressProvider(_curveAddressProvider).get_address(RATE_PROVIDER_ID),
     )
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [CURVE_META_REGISTRY]
-
-
-@view
-@internal
-def _getUsdValue(
-    _tokenA: address,
-    _amountA: uint256,
-    _tokenB: address,
-    _amountB: uint256,
-    _isSwap: bool,
-    _oracleRegistry: address,
-) -> uint256:
-    oracleRegistry: address = _oracleRegistry
-    if _oracleRegistry == empty(address):
-        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
-    usdValueA: uint256 = 0
-    if _tokenA != empty(address) and _amountA != 0:
-        usdValueA = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
-    usdValueB: uint256 = 0
-    if _tokenB != empty(address) and _amountB != 0:
-        usdValueB = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
-    if _isSwap:
-        return max(usdValueA, usdValueB)
-    else:
-        return usdValueA + usdValueB
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_lp_token(_pool)
 
 
 ########
@@ -246,7 +237,7 @@ def swapTokens(
     if _pool != empty(address):
         p = self._getPoolData(_pool, _tokenIn, _tokenOut, CURVE_META_REGISTRY)
     else:
-        p = self._findBestPool(_tokenIn, _tokenOut, CURVE_META_REGISTRY)
+        p = self._getBestPoolForSwap(_tokenIn, _tokenOut, CURVE_META_REGISTRY)
 
     # pre balances
     preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
@@ -906,40 +897,156 @@ def _getTokenAmounts(_isEmptyTokenA: bool, _amountOut: uint256) -> (uint256, uin
 
 
 #############
-# Pool Data #
+# Utilities #
 #############
 
 
 @view
 @external
-def findBestPool(_tokenIn: address, _tokenOut: address) -> PoolData:
-    return self._findBestPool(_tokenIn, _tokenOut, CURVE_META_REGISTRY)
+def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+    metaRegistry: address = CURVE_META_REGISTRY
+
+    # all pools with tokens
+    allPools: DynArray[address, MAX_POOLS] = staticcall CurveMetaRegistry(metaRegistry).find_pools_for_coins(_tokenA, _tokenB)
+    if len(allPools) == 0:
+        return empty(BestPool)
+
+    # get deepest liquidity pool
+    bestPoolAddr: address = empty(address)
+    na1: int128 = 0
+    na2: int128 = 0
+    bestLiquidity: uint256 = 0
+    bestPoolAddr, na1, na2, bestLiquidity = self._getDeepestLiqPool(_tokenA, _tokenB, allPools, metaRegistry)
+
+    if bestPoolAddr == empty(address):
+        return empty(BestPool)
+
+    return BestPool(
+        pool=bestPoolAddr,
+        fee=staticcall CommonCurvePool(bestPoolAddr).fee() // 1000000, # normalize to have 100_00 denominator
+        liquidity=bestLiquidity,
+        numCoins=staticcall CurveMetaRegistry(metaRegistry).get_n_coins(bestPoolAddr),
+    )
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [CURVE_META_REGISTRY]
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_lp_token(_pool)
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_pool_from_lp_token(_lpToken)
+
+
+@view
+@external
+def getSwapAmountOut(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+) -> uint256:
+    quotes: DynArray[Quote, MAX_QUOTES] = staticcall CurveRateProvider(CURVE_REGISTRIES.RateProvider).get_quotes(_tokenIn, _tokenOut, _amountIn)
+    bestAmountOut: uint256 = 0
+    for quote: Quote in quotes:
+        if quote.amount_out > bestAmountOut:
+            bestAmountOut = quote.amount_out
+    return bestAmountOut
+
+
+@view
+@external
+def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
+    rate: uint256 = staticcall CurveRateProvider(CURVE_REGISTRIES.RateProvider).get_aggregated_rate(_tokenIn, _tokenOut)
+    if rate == 0:
+        return 0
+    decimalsTokenIn: uint256 = convert(staticcall IERC20Detailed(_tokenIn).decimals(), uint256)
+    return _amountOut * (10 ** decimalsTokenIn) // rate
+
+
+@view
+@external
+def getAddLiqAmountsIn(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _availAmountA: uint256,
+    _availAmountB: uint256,
+) -> (uint256, uint256, uint256):
+    return 0, 0, 0
+
+
+@view
+@external
+def getRemoveLiqAmountsOut(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256,
+) -> (uint256, uint256):
+    return 0, 0
+
+
+@view
+@external
+def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
+    return 0
+
+
+# internal utils
 
 
 @view
 @internal
-def _findBestPool(_tokenIn: address, _tokenOut: address, _metaRegistry: address) -> PoolData:
+def _getUsdValue(
+    _tokenA: address,
+    _amountA: uint256,
+    _tokenB: address,
+    _amountB: uint256,
+    _isSwap: bool,
+    _oracleRegistry: address,
+) -> uint256:
+    oracleRegistry: address = _oracleRegistry
+    if _oracleRegistry == empty(address):
+        oracleRegistry = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
+    usdValueA: uint256 = 0
+    if _tokenA != empty(address) and _amountA != 0:
+        usdValueA = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenA, _amountA)
+    usdValueB: uint256 = 0
+    if _tokenB != empty(address) and _amountB != 0:
+        usdValueB = staticcall OracleRegistry(oracleRegistry).getUsdValue(_tokenB, _amountB)
+    if _isSwap:
+        return max(usdValueA, usdValueB)
+    else:
+        return usdValueA + usdValueB
+
+
+@view
+@internal
+def _getDeepestLiqPool(_tokenA: address, _tokenB: address, _allPools: DynArray[address, MAX_POOLS], _metaRegistry: address) -> (address, int128, int128, uint256):
+    bestPoolAddr: address = empty(address)
+    bestTokenAIndex: int128 = 0
+    bestTokenBIndex: int128 = 0
     bestLiquidity: uint256 = 0
-    bestPoolData: PoolData = empty(PoolData)
 
-    pools: DynArray[address, MAX_POOLS] = staticcall CurveMetaRegistry(_metaRegistry).find_pools_for_coins(_tokenIn, _tokenOut)
-    assert len(pools) != 0 # dev: no pools found
-
-    preferredPools: DynArray[address, MAX_POOLS] = self.preferredPools
-    for i: uint256 in range(len(pools), bound=MAX_POOLS):
-        pool: address = pools[i]
+    for i: uint256 in range(len(_allPools), bound=MAX_POOLS):
+        pool: address = _allPools[i]
         if pool == empty(address):
             continue
-
-        na: bool = False
-        indexTokenA: int128 = 0
-        indexTokenB: int128 = 0
-
-        # check if pool is preferred
-        if pool in preferredPools:
-            indexTokenA, indexTokenB, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(pool, _tokenIn, _tokenOut)
-            bestPoolData = PoolData(pool=pool, indexTokenA=convert(indexTokenA, uint256), indexTokenB=convert(indexTokenB, uint256), poolType=empty(PoolType), numCoins=0)
-            break
 
         # balances
         balances: uint256[8] = staticcall CurveMetaRegistry(_metaRegistry).get_balances(pool)
@@ -947,24 +1054,61 @@ def _findBestPool(_tokenIn: address, _tokenOut: address, _metaRegistry: address)
             continue
 
         # token indexes 
-        indexTokenA, indexTokenB, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(pool, _tokenIn, _tokenOut)
-        
+        indexTokenA: int128 = 0
+        indexTokenB: int128 = 0
+        na: bool = False
+        indexTokenA, indexTokenB, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(pool, _tokenA, _tokenB)
+
         # compare liquidity
         liquidity: uint256 = balances[indexTokenA] + balances[indexTokenB]
         if liquidity > bestLiquidity:
+            bestPoolAddr = pool
+            bestTokenAIndex = indexTokenA
+            bestTokenBIndex = indexTokenB
             bestLiquidity = liquidity
-            bestPoolData = PoolData(pool=pool, indexTokenA=convert(indexTokenA, uint256), indexTokenB=convert(indexTokenB, uint256), poolType=empty(PoolType), numCoins=0)
 
-    assert bestPoolData.pool != empty(address) # dev: no pool found
-    bestPoolData.poolType = self._getPoolType(bestPoolData.pool, _metaRegistry)
-    bestPoolData.numCoins = staticcall CurveMetaRegistry(_metaRegistry).get_n_coins(bestPoolData.pool)
-    return bestPoolData
+    return bestPoolAddr, bestTokenAIndex, bestTokenBIndex, bestLiquidity
 
 
 @view
-@external
-def getPoolData(_pool: address, _tokenA: address, _tokenB: address) -> PoolData:
-    return self._getPoolData(_pool, _tokenA, _tokenB, CURVE_META_REGISTRY)
+@internal
+def _getBestPoolForSwap(_tokenA: address, _tokenB: address, _metaRegistry: address) -> PoolData:
+    allPools: DynArray[address, MAX_POOLS] = staticcall CurveMetaRegistry(_metaRegistry).find_pools_for_coins(_tokenA, _tokenB)
+    if len(allPools) == 0:
+        return empty(PoolData)
+
+    bestPoolAddr: address = empty(address)
+    bestTokenAIndex: int128 = 0
+    bestTokenBIndex: int128 = 0
+
+    # check preferred pools first
+    preferredPools: DynArray[address, MAX_POOLS] = self.preferredPools
+    for i: uint256 in range(len(preferredPools), bound=MAX_POOLS):
+        preferredPool: address = preferredPools[i]
+        if preferredPool in allPools:
+            bestPoolAddr = preferredPool
+            break
+
+    # get missing data on preferred pool
+    if bestPoolAddr != empty(address):
+        na: bool = False
+        bestTokenAIndex, bestTokenBIndex, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(bestPoolAddr, _tokenA, _tokenB)
+
+    # get deepest liquidity pool
+    else:
+        na: uint256 = 0
+        bestPoolAddr, bestTokenAIndex, bestTokenBIndex, na = self._getDeepestLiqPool(_tokenA, _tokenB, allPools, _metaRegistry)
+
+    if bestPoolAddr == empty(address):
+        return empty(PoolData)
+
+    return PoolData(
+        pool=bestPoolAddr,
+        indexTokenA=convert(bestTokenAIndex, uint256),
+        indexTokenB=convert(bestTokenBIndex, uint256),
+        poolType=self._getPoolType(bestPoolAddr, _metaRegistry),
+        numCoins=staticcall CurveMetaRegistry(_metaRegistry).get_n_coins(bestPoolAddr),
+    )
 
 
 @view

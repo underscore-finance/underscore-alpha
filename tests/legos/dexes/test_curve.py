@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS, MAX_UINT256, EIGHTEEN_DECIMALS
 from conf_tokens import TEST_AMOUNTS, TOKENS
 from conf_utils import filter_logs
 
@@ -654,3 +654,182 @@ def test_curve_remove_liquidity_4pool_one_coin(
 
     # test remove liquidity
     testLegoLiquidityRemoved(lego_curve, ZERO_ADDRESS, 0, pool, tokenA, ZERO_ADDRESS)
+
+
+
+# helper / utils
+
+
+@pytest.always
+def test_curve_get_best_pool(
+    getTokenAndWhale,
+    lego_curve,
+):
+    tokenA, _ = getTokenAndWhale("cbeth")
+    tokenB, _ = getTokenAndWhale("weth")
+
+    best_pool = lego_curve.getBestPool(tokenA, tokenB)
+    assert best_pool.pool == "0x11C1fBd4b3De66bC0565779b35171a6CF3E71f59"
+    assert best_pool.fee == 3
+    assert best_pool.liquidity != 0
+    assert best_pool.numCoins == 2
+
+    # tricrypto
+    tokenA, _ = getTokenAndWhale("crvusd")
+    best_pool = lego_curve.getBestPool(tokenA, tokenB)
+    assert best_pool.pool == "0x6e53131F68a034873b6bFA15502aF094Ef0c5854"
+    assert best_pool.fee == 163
+    assert best_pool.liquidity != 0
+    assert best_pool.numCoins == 3
+
+
+@pytest.always
+def test_curve_get_swap_amount_out(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    tokenA, _ = getTokenAndWhale("crvusd")
+    tokenB, _ = getTokenAndWhale("weth")
+    amount_out = lego_curve.getSwapAmountOut("0x6e53131F68a034873b6bFA15502aF094Ef0c5854", tokenA, tokenB, 2_500 * (10 ** tokenA.decimals()))
+    _test(int(0.97 * (10 ** tokenB.decimals())), amount_out, 100)
+
+    amount_out = lego_curve.getSwapAmountOut("0x6e53131F68a034873b6bFA15502aF094Ef0c5854", tokenB, tokenA, 1 * (10 ** tokenB.decimals()))
+    _test(2_450 * (10 ** tokenA.decimals()), amount_out, 100)
+
+
+@pytest.always
+def test_curve_get_swap_amount_out_diff_decimals(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    tokenA, _ = getTokenAndWhale("crvusd")
+    tokenB, _ = getTokenAndWhale("usdc")
+    amount_out = lego_curve.getSwapAmountOut("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f", tokenA, tokenB, 1_000 * (10 ** tokenA.decimals()))
+    _test(1_000 * (10 ** tokenB.decimals()), amount_out, 100)
+
+    amount_out = lego_curve.getSwapAmountOut("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f", tokenB, tokenA, 1_000 * (10 ** tokenB.decimals()))
+    _test(1_000 * (10 ** tokenA.decimals()), amount_out, 100)
+
+
+@pytest.always
+def test_curve_get_swap_amount_in(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    tokenA, _ = getTokenAndWhale("crvusd")
+    tokenB, _ = getTokenAndWhale("weth")
+    amount_in = lego_curve.getSwapAmountIn("0x6e53131F68a034873b6bFA15502aF094Ef0c5854", tokenB, tokenA, 2_500 * (10 ** tokenA.decimals()))
+    _test(int(1.02 * (10 ** tokenB.decimals())), amount_in, 100)
+
+    amount_in = lego_curve.getSwapAmountIn("0x6e53131F68a034873b6bFA15502aF094Ef0c5854", tokenA, tokenB, 1 * (10 ** tokenB.decimals()))
+    _test(2_555 * (10 ** tokenA.decimals()), amount_in, 100)
+
+
+@pytest.always
+def test_curve_get_swap_amount_in_diff_decimals(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    tokenA, _ = getTokenAndWhale("crvusd")
+    tokenB, _ = getTokenAndWhale("usdc")
+
+    # crvusd in, usdc out
+    amount_in = lego_curve.getSwapAmountIn("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f", tokenA, tokenB, 1_000 * (10 ** tokenB.decimals()))
+    _test(1_000 * (10 ** tokenA.decimals()), amount_in, 100)
+
+    # usdc in, crvusd out
+    amount_in = lego_curve.getSwapAmountIn("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f", tokenB, tokenA, 1_000 * (10 ** tokenA.decimals()))
+    _test(1_000 * (10 ** tokenB.decimals()), amount_in, 100)
+
+
+# @pytest.always
+# def test_curve_get_add_liq_amounts_in(
+#     getTokenAndWhale,
+#     lego_curve,
+#     _test,
+# ):
+#     pool = boa.from_etherscan("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C")
+#     tokenA, whaleA = getTokenAndWhale("usdc")
+#     amountA = 10_000 * (10 ** tokenA.decimals())
+#     tokenB, whaleB = getTokenAndWhale("weth")
+#     amountB = 3 * (10 ** tokenB.decimals())
+
+#     # reduce amount a
+#     liq_amount_a, liq_amount_b, _ = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+#     _test(liq_amount_a, 7_500 * (10 ** tokenA.decimals()), 1_00)
+#     _test(liq_amount_b, 3 * (10 ** tokenB.decimals()), 1_00)
+
+#     # set new amount b
+#     amountB = 10 * (10 ** tokenB.decimals())
+
+#     # reduce amount b
+#     liq_amount_a, liq_amount_b, _ = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+#     _test(liq_amount_a, 10_000 * (10 ** tokenA.decimals()), 1_00)
+#     _test(liq_amount_b, 4 * (10 ** tokenB.decimals()), 1_00)
+
+
+# @pytest.always
+# def test_curve_get_remove_liq_amounts_out(
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_curve,
+#     bob_agent,
+#     _test,
+# ):
+#     legoId = lego_curve.legoId()
+#     pool = boa.from_etherscan("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C")
+
+#     # setup
+#     tokenA, whaleA = getTokenAndWhale("usdc")
+#     amountA = 7_500 * (10 ** tokenA.decimals())
+#     tokenA.transfer(bob_ai_wallet.address, amountA, sender=whaleA)
+
+#     tokenB, whaleB = getTokenAndWhale("weth")
+#     amountB = 3 * (10 ** tokenB.decimals())
+#     tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
+
+#     # add liquidity
+#     liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = bob_ai_wallet.addLiquidity(legoId, ZERO_ADDRESS, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
+#     assert liquidityAdded != 0
+
+#     # test
+#     amountAOut, amountBOut = lego_curve.getRemoveLiqAmountsOut(pool, tokenA, tokenB, liquidityAdded)
+#     _test(amountAOut, 7_500 * (10 ** tokenA.decimals()), 1_00)
+#     _test(amountBOut, 3 * (10 ** tokenB.decimals()), 1_00)
+
+#     # re-arrange amounts
+#     first_amount, second_amount = lego_curve.getRemoveLiqAmountsOut(pool, tokenB, tokenA, liquidityAdded)
+#     _test(first_amount, 3 * (10 ** tokenB.decimals()), 1_00)
+#     _test(second_amount, 7_500 * (10 ** tokenA.decimals()), 1_00)
+
+
+# @pytest.always
+# def test_curve_get_price(
+#     getTokenAndWhale,
+#     lego_curve,
+#     governor,
+#     oracle_chainlink,
+#     oracle_registry,
+#     _test,
+# ):
+#     pool = boa.from_etherscan("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C")
+
+#     tokenA, _ = getTokenAndWhale("usdc")
+#     assert oracle_chainlink.setChainlinkFeed(tokenA, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", sender=governor)
+#     assert oracle_chainlink.getPrice(tokenA) != 0
+#     assert oracle_registry.getPrice(tokenA, False) != 0
+
+#     tokenB, _ = getTokenAndWhale("weth")
+#     exp_weth_price = oracle_chainlink.getPrice(tokenB)
+#     assert exp_weth_price != 0
+#     assert oracle_registry.getPrice(tokenB, False) != 0
+
+#     price = lego_curve.getPriceUnsafe(pool, tokenA)
+#     assert int(0.98 * EIGHTEEN_DECIMALS) <= price <= int(1.02 * EIGHTEEN_DECIMALS)
+
+#     price = lego_curve.getPriceUnsafe(pool, tokenB)
+#     _test(exp_weth_price, price, 1_00)
