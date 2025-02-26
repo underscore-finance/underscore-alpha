@@ -76,6 +76,7 @@ struct BestPool:
     fee: uint256
     liquidity: uint256
     numCoins: uint256
+    legoId: uint256
 
 struct MintParams:
     token0: address
@@ -685,6 +686,7 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
         fee=convert(bestFeeTier // 100, uint256), # normalize to have 100_00 denominator
         liquidity=tokenABal + tokenBBal, # not exactly "liquidity" but this comparable to "reserves"
         numCoins=2,
+        legoId=self.legoId,
     )
 
 
@@ -779,14 +781,14 @@ def getAddLiqAmountsIn(
         denominator = sqrtPriceX96Squared
 
     # calculate optimal amounts
-    amountBOptimal: uint256 = _availAmountA * numerator // denominator
-    if amountBOptimal <= _availAmountB:
-        return _availAmountA, amountBOptimal, 0
-    else:
-        amountAOptimal: uint256 = _availAmountB * denominator // numerator
-        if amountAOptimal > _availAmountA:
-            return _availAmountA, amountBOptimal, 0 # prioritize _availAmountA
-        return amountAOptimal, _availAmountB, 0
+    amountA: uint256 = _availAmountA
+    amountB: uint256 = _availAmountA * numerator // denominator
+    if amountB > _availAmountB:
+        maybeAmountA: uint256 = _availAmountB * denominator // numerator
+        if maybeAmountA <= _availAmountA:
+            amountA = maybeAmountA
+            amountB = _availAmountB
+    return amountA, amountB, 0
 
 
 @view

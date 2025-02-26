@@ -39,6 +39,7 @@ struct BestPool:
     fee: uint256
     liquidity: uint256
     numCoins: uint256
+    legoId: uint256
 
 struct Route:
     from_: address
@@ -461,6 +462,7 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
         fee=staticcall AeroFactory(factory).getFee(bestPoolAddr, isStable),
         liquidity=bestLiquidity,
         numCoins=2,
+        legoId=self.legoId,
     )
 
 

@@ -131,6 +131,7 @@ struct BestPool:
     fee: uint256
     liquidity: uint256
     numCoins: uint256
+    legoId: uint256
 
 struct CurveRegistries:
     StableSwapNg: address
@@ -911,6 +912,7 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
         fee=staticcall CommonCurvePool(bestPoolAddr).fee() // 1000000, # normalize to have 100_00 denominator
         liquidity=bestLiquidity,
         numCoins=staticcall CurveMetaRegistry(metaRegistry).get_n_coins(bestPoolAddr),
+        legoId=self.legoId,
     )
 
 

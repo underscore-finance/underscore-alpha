@@ -35,6 +35,7 @@ struct BestPool:
     fee: uint256
     liquidity: uint256
     numCoins: uint256
+    legoId: uint256
 
 event UniswapV2LiquidityAdded:
     sender: indexed(address)
@@ -390,6 +391,7 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
         fee=30, # 0.3%, denominator is 100_00
         liquidity=convert(reserve0 + reserve1, uint256),
         numCoins=2,
+        legoId=self.legoId,
     )
 
 
@@ -457,14 +459,14 @@ def getAddLiqAmountsIn(
         return 0, 0, 0
 
     # calculate optimal amounts
-    amountBOptimal: uint256 = self._quote(_availAmountA, reserveA, reserveB)
-    if amountBOptimal <= _availAmountB:
-        return _availAmountA, amountBOptimal, 0
-    else:
-        amountAOptimal: uint256 = self._quote(_availAmountB, reserveB, reserveA)
-        if amountAOptimal > _availAmountA:
-            return _availAmountA, amountBOptimal, 0 # prioritize _availAmountA
-        return amountAOptimal, _availAmountB, 0
+    amountA: uint256 = _availAmountA
+    amountB: uint256 = self._quote(_availAmountA, reserveA, reserveB)
+    if amountB > _availAmountB:
+        maybeAmountA: uint256 = self._quote(_availAmountB, reserveB, reserveA)
+        if maybeAmountA <= _availAmountA:
+            amountA = maybeAmountA
+            amountB = _availAmountB
+    return amountA, amountB, 0
 
 
 @view
