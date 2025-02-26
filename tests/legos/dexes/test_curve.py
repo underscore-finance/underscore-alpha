@@ -746,30 +746,108 @@ def test_curve_get_swap_amount_in_diff_decimals(
     _test(1_000 * (10 ** tokenB.decimals()), amount_in, 100)
 
 
-# @pytest.always
-# def test_curve_get_add_liq_amounts_in(
-#     getTokenAndWhale,
-#     lego_curve,
-#     _test,
-# ):
-#     pool = boa.from_etherscan("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C")
-#     tokenA, whaleA = getTokenAndWhale("usdc")
-#     amountA = 10_000 * (10 ** tokenA.decimals())
-#     tokenB, whaleB = getTokenAndWhale("weth")
-#     amountB = 3 * (10 ** tokenB.decimals())
+@pytest.always
+def test_curve_get_add_liq_amounts_in_stable_ng(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    pool = boa.from_etherscan("0x63Eb7846642630456707C3efBb50A03c79B89D81")
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 20_000 * (10 ** tokenA.decimals())
+    tokenB, whaleB = getTokenAndWhale("usdm")
+    amountB = 10_000 * (10 ** tokenB.decimals())
 
-#     # reduce amount a
-#     liq_amount_a, liq_amount_b, _ = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
-#     _test(liq_amount_a, 7_500 * (10 ** tokenA.decimals()), 1_00)
-#     _test(liq_amount_b, 3 * (10 ** tokenB.decimals()), 1_00)
+    # reduce amount a
+    liq_amount_a, liq_amount_b, lp_amount = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, 9_360 * (10 ** tokenA.decimals()), 1_00)
+    _test(liq_amount_b, 10_000 * (10 ** tokenB.decimals()), 1_00)
+    assert lp_amount != 0
 
-#     # set new amount b
-#     amountB = 10 * (10 ** tokenB.decimals())
+    # set new amount b
+    amountB = 30_000 * (10 ** tokenB.decimals())
 
-#     # reduce amount b
-#     liq_amount_a, liq_amount_b, _ = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
-#     _test(liq_amount_a, 10_000 * (10 ** tokenA.decimals()), 1_00)
-#     _test(liq_amount_b, 4 * (10 ** tokenB.decimals()), 1_00)
+    # reduce amount b
+    liq_amount_a, liq_amount_b, lp_amount = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, 20_000 * (10 ** tokenA.decimals()), 1_00)
+    _test(liq_amount_b, 21_367 * (10 ** tokenB.decimals()), 1_00)
+    assert lp_amount != 0
+
+
+@pytest.always
+def test_curve_get_add_liq_amounts_in_crypto_ng(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    pool = boa.from_etherscan("0xa0D3911349e701A1F49C1Ba2dDA34b4ce9636569")
+    tokenA, whaleA = getTokenAndWhale("weth")
+    amountA = 1 * (10 ** tokenA.decimals())
+    tokenB, whaleB = getTokenAndWhale("frok")
+    amountB = 70_000 * (10 ** tokenB.decimals())
+
+    # reduce amount a
+    liq_amount_a, liq_amount_b, lp_amount = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, 1 * (10 ** tokenA.decimals()), 1_00)
+    _test(liq_amount_b, 69_000 * (10 ** tokenB.decimals()), 1_00)
+    assert lp_amount != 0
+
+
+@pytest.always
+def test_curve_get_add_liq_amounts_in_two_crypto(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    pool = boa.from_etherscan("0x11C1fBd4b3De66bC0565779b35171a6CF3E71f59")
+    tokenA, whaleA = getTokenAndWhale("weth")
+    amountA = 2 * (10 ** tokenA.decimals())
+    tokenB, whaleB = getTokenAndWhale("cbeth")
+    amountB = 2 * (10 ** tokenB.decimals())
+
+    # reduce amount a
+    liq_amount_a, liq_amount_b, lp_amount = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, 2 * (10 ** tokenA.decimals()), 1_00)
+    _test(liq_amount_b, int(1.72 * (10 ** tokenB.decimals())), 1_00)
+    assert lp_amount != 0
+
+
+@pytest.always
+def test_curve_get_add_liq_amounts_in_tricrypto(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    pool = boa.from_etherscan("0x6e53131F68a034873b6bFA15502aF094Ef0c5854")
+    tokenA, whaleA = getTokenAndWhale("tbtc")
+    amountA = int(0.1 * (10 ** tokenA.decimals()))
+    tokenB, whaleB = getTokenAndWhale("crvusd")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+
+    # reduce amount a
+    liq_amount_a, liq_amount_b, lp_amount = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, int(0.1 * (10 ** tokenA.decimals())), 1_00)
+    _test(liq_amount_b, 9_189 * (10 ** tokenB.decimals()), 1_00)
+    assert lp_amount != 0
+
+
+@pytest.always
+def test_curve_get_add_liq_amounts_in_meta_pool(
+    getTokenAndWhale,
+    lego_curve,
+    _test,
+):
+    pool = boa.from_etherscan("0xf6C5F01C7F3148891ad0e19DF78743D31E390D1f")
+    tokenA, whaleA = getTokenAndWhale("usdc")
+    amountA = 10_000 * (10 ** tokenA.decimals())
+    tokenB, whaleB = getTokenAndWhale("crvusd")
+    amountB = 10_000 * (10 ** tokenB.decimals())
+
+    # reduce amount a
+    liq_amount_a, liq_amount_b, lp_amount = lego_curve.getAddLiqAmountsIn(pool, tokenA, tokenB, amountA, amountB)
+    _test(liq_amount_a, amountA, 1_00)
+    _test(liq_amount_b, amountB, 1_00)
+    assert lp_amount != 0
 
 
 # @pytest.always
