@@ -11,6 +11,12 @@ interface AddyRegistry:
 interface OracleRegistry:
     def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256: view
 
+interface AgentFactory:
+    def isAgent(_agent: address) -> bool: view
+
+interface Agent:
+    def owner() -> address: view
+
 flag ActionType:
     DEPOSIT
     WITHDRAWAL
@@ -182,6 +188,9 @@ priceChangeDelay: public(uint256) # number of blocks that must pass before price
 ADDY_REGISTRY: public(immutable(address))
 isActivated: public(bool)
 
+AGENT_FACTORY_ID: constant(uint256) = 1
+ORACLE_REGISTRY_ID: constant(uint256) = 4
+
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 MAX_TX_FEE: constant(uint256) = 10_00 # 10.00%
 MIN_TRIAL_PERIOD: constant(uint256) = 43_200 # 1 day on Base (2 seconds per block)
@@ -198,6 +207,13 @@ def __init__(_addyRegistry: address):
     ADDY_REGISTRY = _addyRegistry
     self.protocolRecipient = staticcall AddyRegistry(_addyRegistry).governor()
     self.isActivated = True
+
+
+@view
+@internal
+def _isRegisteredAgent(_agent: address) -> bool:
+    agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
+    return staticcall AgentFactory(agentFactory).isAgent(_agent)
 
 
 ######################
@@ -327,10 +343,11 @@ def setAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _tria
     @param _payPeriod The payment period in blocks
     @return bool True if pending subscription price was set successfully
     """
-    isAgent: bool = msg.sender == _agent
-    assert isAgent or gov._isGovernor(msg.sender) # dev: no perms
+    assert self._isRegisteredAgent(_agent) # dev: agent not registered
+    isAgentOwner: bool = staticcall Agent(_agent).owner() == msg.sender
+    assert isAgentOwner or gov._isGovernor(msg.sender) # dev: no perms
 
-    if isAgent:
+    if isAgentOwner:
         assert self.isActivated # dev: not active
 
     # validation
@@ -400,6 +417,7 @@ def removeAgentSubPrice(_agent: address) -> bool:
     @return bool True if agent subscription price was removed successfully
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
+    assert self._isRegisteredAgent(_agent) # dev: agent not registered
 
     prevInfo: SubscriptionInfo = self.agentSubPriceData[_agent]
     if empty(address) in [prevInfo.asset, _agent]:
@@ -422,6 +440,7 @@ def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
     @return bool True if agent subscription pricing state was changed successfully
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
+
     assert _isEnabled != self.isAgentSubPricingEnabled # dev: no change
     self.isAgentSubPricingEnabled = _isEnabled
     log AgentSubPricingEnabled(_isEnabled)
@@ -531,7 +550,7 @@ def getAgentTransactionFeeData(_agent: address, _action: ActionType, _usdValue: 
     """
     if not self.isAgentTxPricingEnabled:
         return empty(TxCostInfo)
-    return self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent], staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4))
+    return self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent], staticcall AddyRegistry(ADDY_REGISTRY).getAddy(ORACLE_REGISTRY_ID))
 
 
 @view
@@ -544,7 +563,7 @@ def getProtocolTransactionFeeData(_action: ActionType, _usdValue: uint256) -> Tx
     @param _usdValue The USD value of the transaction
     @return TxCostInfo struct containing cost amounts and recipient addresses for the protocol
     """
-    return self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData, staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4))
+    return self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData, staticcall AddyRegistry(ADDY_REGISTRY).getAddy(ORACLE_REGISTRY_ID))
 
 
 @view
@@ -666,10 +685,11 @@ def setAgentTxPriceSheet(
     @param _removeLiqFee The fee percentage for removing liquidity
     @return bool True if pending price sheet was set successfully
     """
-    isAgent: bool = msg.sender == _agent
-    assert isAgent or gov._isGovernor(msg.sender) # dev: no perms
+    assert self._isRegisteredAgent(_agent) # dev: agent not registered
+    isAgentOwner: bool = staticcall Agent(_agent).owner() == msg.sender
+    assert isAgentOwner or gov._isGovernor(msg.sender) # dev: no perms
 
-    if isAgent:
+    if isAgentOwner:
         assert self.isActivated # dev: not active
 
     # validation
@@ -743,7 +763,8 @@ def removeAgentTxPriceSheet(_agent: address) -> bool:
     @return bool True if agent price sheet was removed successfully
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
-
+    assert self._isRegisteredAgent(_agent) # dev: agent not registered
+    
     prevInfo: TxPriceSheet = self.agentTxPriceData[_agent]
     if empty(address) in [prevInfo.asset, _agent]:
         return False

@@ -10,9 +10,9 @@ TRIAL_AMOUNT = 10 * EIGHTEEN_DECIMALS
 
 @pytest.fixture(scope="module")
 def new_ai_wallet(agent_factory, owner, agent):
-    w = agent_factory.createAgenticWallet(owner, agent, sender=owner)
+    w = agent_factory.createUserWallet(owner, agent, sender=owner)
     assert w != ZERO_ADDRESS
-    assert agent_factory.isAgenticWallet(w)
+    assert agent_factory.isUserWallet(w)
     return WalletFunds.at(w)
 
 
@@ -78,7 +78,7 @@ def test_wallet_creation_with_trial_funds(agent_factory, alpha_token, owner, age
     """Test wallet creation with trial funds transfer"""
 
     # Create wallet and verify trial funds transfer
-    wallet_addr = agent_factory.createAgenticWallet(owner, agent)
+    wallet_addr = agent_factory.createUserWallet(owner, agent)
     assert wallet_addr != ZERO_ADDRESS
 
     # Verify trial funds in new wallet
@@ -171,7 +171,7 @@ def test_wallet_creation_insufficient_trial_funds(agent_factory, bravo_token, br
     bravo_token.transfer(agent_factory, TRIAL_AMOUNT // 2, sender=bravo_token_whale)
 
     # Create wallet - should work but with reduced trial funds
-    wallet_addr = agent_factory.createAgenticWallet(owner, agent)
+    wallet_addr = agent_factory.createUserWallet(owner, agent)
     wallet = WalletFunds.at(wallet_addr)
 
     # Verify reduced trial funds
@@ -251,7 +251,7 @@ def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_toke
     assert agent_factory.setTrialFundsData(alpha_token, alpha_amount, sender=governor)
 
     # Create first wallet
-    wallet1 = agent_factory.createAgenticWallet(owner, agent)
+    wallet1 = agent_factory.createUserWallet(owner, agent)
     wallet1_contract = WalletFunds.at(wallet1)
 
     # Verify first wallet trial funds
@@ -263,7 +263,7 @@ def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_toke
     assert agent_factory.setTrialFundsData(bravo_token, bravo_amount, sender=governor)
 
     # Create second wallet
-    wallet2 = agent_factory.createAgenticWallet(owner, agent)
+    wallet2 = agent_factory.createUserWallet(owner, agent)
     wallet2_contract = WalletFunds.at(wallet2)
 
     # Verify second wallet trial funds
@@ -389,7 +389,7 @@ def test_batch_actions_deposit_usdc_in_many_legos_trial_funds(owner, agent, getT
     assert agent_factory.setTrialFundsData(usdc, amount, sender=governor)
 
     # create fresh wallet
-    fresh_wallet = WalletFunds.at(agent_factory.createAgenticWallet(owner, agent, sender=owner))
+    fresh_wallet = WalletFunds.at(agent_factory.createUserWallet(owner, agent, sender=owner))
 
     # check trial funds
     assert usdc.balanceOf(fresh_wallet) == amount

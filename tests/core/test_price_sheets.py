@@ -121,7 +121,7 @@ def test_agent_subscription_price(price_sheets, governor, bob_agent, alpha_token
         )
     
     # Cannot set for zero address agent
-    with boa.reverts("invalid agent"):
+    with boa.reverts("agent not registered"):
         price_sheets.setAgentSubPrice(
             ZERO_ADDRESS,
             alpha_token,
@@ -494,7 +494,7 @@ def test_combined_transaction_costs(price_sheets, governor, bob_agent, oracle_cu
     assert agent_cost.usdValue == 0
 
 
-def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally):
+def test_deactivated_state(price_sheets, governor, bob_agent, bob_agent_dev, alpha_token, sally):
     """Test all operations in deactivated state"""
     
     # Deactivate contract
@@ -508,7 +508,7 @@ def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally
             1000,
             43_200,
             302_400,
-            sender=bob_agent
+            sender=bob_agent_dev
         )
     
     with boa.reverts("not active"):
@@ -522,7 +522,7 @@ def test_deactivated_state(price_sheets, governor, bob_agent, alpha_token, sally
             500,
             600,
             700,
-            sender=bob_agent
+            sender=bob_agent_dev
         )
 
 def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custom, oracle_registry, sally):
@@ -553,7 +553,8 @@ def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custo
     assert cost.usdValue == 0
 
     # Test removing non-existent price sheets
-    assert not price_sheets.removeAgentTxPriceSheet(sally, sender=governor)  # non-existent agent
+    with boa.reverts("agent not registered"):
+        price_sheets.removeAgentTxPriceSheet(sally, sender=governor)  # non-existent agent
     assert not price_sheets.removeProtocolTxPriceSheet(sender=governor)  # already removed
 
     # Test setting invalid trial/pay periods
@@ -1132,3 +1133,206 @@ def test_zero_delay_price_changes(price_sheets, governor, bob_agent, alpha_token
     
     pending = price_sheets.pendingAgentSubPrices(bob_agent)
     assert pending.effectiveBlock == 0
+
+
+
+def test_agent_owner_permissions(price_sheets, governor, bob_agent, bob_agent_dev, sally, alpha_token):
+    """Test agent owner permissions for setting prices"""
+    
+    # Enable pricing features
+    price_sheets.setAgentTxPricingEnabled(True, sender=governor)
+    price_sheets.setAgentSubPricingEnabled(True, sender=governor)
+    
+    # Test 1: Agent owner can set subscription price when activated
+    assert price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000,
+        43_200,  # trial period
+        302_400, # pay period
+        sender=bob_agent_dev  # bob_agent_dev is the owner
+    )
+    
+    # Verify subscription was set
+    info = price_sheets.agentSubPriceData(bob_agent)
+    assert info.asset == alpha_token.address
+    assert info.usdValue == 1000
+    
+    # Test 2: Agent owner can set transaction price sheet when activated
+    assert price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100,    # depositFee
+        200,    # withdrawalFee
+        300,    # rebalanceFee
+        400,    # transferFee
+        500,    # swapFee
+        600,    # addLiqFee
+        700,    # removeLiqFee
+        sender=bob_agent_dev
+    )
+    
+    # Verify price sheet was set
+    sheet = price_sheets.agentTxPriceData(bob_agent)
+    assert sheet.asset == alpha_token.address
+    assert sheet.depositFee == 100
+    
+    # Test 3: Non-owner cannot set prices
+    with boa.reverts("no perms"):
+        price_sheets.setAgentSubPrice(
+            bob_agent,
+            alpha_token,
+            2000,
+            43_200,
+            302_400,
+            sender=sally
+        )
+    
+    with boa.reverts("no perms"):
+        price_sheets.setAgentTxPriceSheet(
+            bob_agent,
+            alpha_token,
+            100, 200, 300, 400, 500, 600, 700,
+            sender=sally
+        )
+    
+    # Test 4: Governor can still set prices
+    assert price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        2000,
+        43_200,
+        302_400,
+        sender=governor
+    )
+    
+    assert price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        150, 250, 350, 450, 550, 650, 750,
+        sender=governor
+    )
+    
+    # Test 5: Agent owner cannot set prices when contract is deactivated
+    price_sheets.activate(False, sender=governor)
+    
+    with boa.reverts("not active"):
+        price_sheets.setAgentSubPrice(
+            bob_agent,
+            alpha_token,
+            3000,
+            43_200,
+            302_400,
+            sender=bob_agent_dev
+        )
+    
+    with boa.reverts("not active"):
+        price_sheets.setAgentTxPriceSheet(
+            bob_agent,
+            alpha_token,
+            100, 200, 300, 400, 500, 600, 700,
+            sender=bob_agent_dev
+        )
+    
+    # Governor can still set prices when deactivated
+    assert price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        3000,
+        43_200,
+        302_400,
+        sender=governor
+    )
+    
+    assert price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100, 200, 300, 400, 500, 600, 700,
+        sender=governor
+    )
+
+def test_agent_owner_pending_price_changes(price_sheets, governor, bob_agent, bob_agent_dev, sally, alpha_token):
+    """Test agent owner permissions with pending price changes"""
+    
+    # Set price change delay
+    delay = 43_200
+    price_sheets.setPriceChangeDelay(delay, sender=governor)
+    
+    # Agent owner can set pending price changes
+    assert price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000,
+        43_200,
+        302_400,
+        sender=bob_agent_dev
+    )
+    
+    # Verify pending sub price is set
+    pending_sub = price_sheets.pendingAgentSubPrices(bob_agent)
+    assert pending_sub.subInfo.usdValue == 1000
+    assert pending_sub.effectiveBlock == boa.env.evm.patch.block_number + delay
+    
+    assert price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100, 200, 300, 400, 500, 600, 700,
+        sender=bob_agent_dev
+    )
+    
+    # Verify pending tx price is set
+    pending_tx = price_sheets.pendingAgentTxPrices(bob_agent)
+    assert pending_tx.priceSheet.depositFee == 100
+    assert pending_tx.effectiveBlock == boa.env.evm.patch.block_number + delay
+    
+    # Anyone can finalize pending changes after delay
+    boa.env.time_travel(blocks=delay)
+    
+    assert price_sheets.finalizePendingAgentSubPrice(bob_agent, sender=sally)
+    assert price_sheets.finalizePendingTxPriceSheet(bob_agent, sender=sally)
+    
+    # Verify changes are applied
+    info = price_sheets.agentSubPriceData(bob_agent)
+    assert info.usdValue == 1000
+    
+    sheet = price_sheets.agentTxPriceData(bob_agent)
+    assert sheet.depositFee == 100
+
+def test_agent_owner_zero_delay_changes(price_sheets, governor, bob_agent, bob_agent_dev, alpha_token):
+    """Test agent owner permissions with zero delay price changes"""
+    
+    # Set zero delay
+    price_sheets.setPriceChangeDelay(0, sender=governor)
+    
+    # Changes should take effect immediately for agent owner
+    assert price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        1000,
+        43_200,
+        302_400,
+        sender=bob_agent_dev
+    )
+    
+    # Verify immediate effect
+    info = price_sheets.agentSubPriceData(bob_agent)
+    assert info.usdValue == 1000
+    
+    # No pending changes
+    pending = price_sheets.pendingAgentSubPrices(bob_agent)
+    assert pending.effectiveBlock == 0
+    
+    assert price_sheets.setAgentTxPriceSheet(
+        bob_agent,
+        alpha_token,
+        100, 200, 300, 400, 500, 600, 700,
+        sender=bob_agent_dev
+    )
+    
+    # Verify immediate effect
+    sheet = price_sheets.agentTxPriceData(bob_agent)
+    assert sheet.depositFee == 100
+    
+    # No pending changes
+    pending = price_sheets.pendingAgentTxPrices(bob_agent)
+    assert pending.effectiveBlock == 0 

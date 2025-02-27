@@ -14,24 +14,9 @@ def deploy3r(env):
     return env.eoa
 
 
-@pytest.fixture(scope="package")
+@pytest.fixture(scope="session")
 def owner(env):
     return env.generate_address("owner")
-
-
-@pytest.fixture(scope="package")
-def agent(agent_signer):
-    return agent_signer.address
-
-
-@pytest.fixture(scope="package")
-def agent_signer():
-    return Account.from_key('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
-
-
-@pytest.fixture(scope="package")
-def broadcaster(env):
-    return env.generate_address("broadcaster")
 
 
 @pytest.fixture(scope="session")
@@ -50,8 +35,26 @@ def bob(env):
 
 
 @pytest.fixture(scope="session")
-def bob_agent(env):
-    return env.generate_address("bob_agent")
+def broadcaster(env):
+    return env.generate_address("broadcaster")
+
+
+@pytest.fixture(scope="session")
+def agent(env):
+    return env.generate_address("agent")
+
+
+@pytest.fixture(scope="session")
+def bob_agent(bob_agent_dev, agent_factory):
+    w = agent_factory.createAgent(bob_agent_dev, sender=bob_agent_dev)
+    assert w != ZERO_ADDRESS
+    assert agent_factory.isAgent(w)
+    return w
+
+
+@pytest.fixture(scope="session")
+def bob_agent_dev(env):
+    return env.generate_address("bob_agent_dev")
 
 
 # agentic wallets 
@@ -59,9 +62,9 @@ def bob_agent(env):
 
 @pytest.fixture(scope="session")
 def bob_ai_wallet(agent_factory, bob, bob_agent):
-    w = agent_factory.createAgenticWallet(bob, bob_agent, sender=bob)
+    w = agent_factory.createUserWallet(bob, bob_agent, sender=bob)
     assert w != ZERO_ADDRESS
-    assert agent_factory.isAgenticWallet(w)
+    assert agent_factory.isUserWallet(w)
     return WalletFunds.at(w)
 
 

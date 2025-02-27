@@ -27,9 +27,10 @@ def lego_registry(addy_registry_deploy):
 
 
 @pytest.fixture(scope="session")
-def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, governor):
-    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, name="agent_factory")
-    assert f.setNumAgenticWalletsAllowed(MAX_UINT256, sender=governor)
+def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, governor):
+    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, name="agent_factory")
+    assert f.setNumUserWalletsAllowed(MAX_UINT256, sender=governor)
+    assert f.setNumAgentsAllowed(MAX_UINT256, sender=governor)
     return f
 
 
@@ -54,6 +55,11 @@ def wallet_funds_template():
 @pytest.fixture(scope="session")
 def wallet_config_template():
     return boa.load("contracts/core/WalletConfig.vy", name="wallet_config_template")
+
+
+@pytest.fixture(scope="session")
+def agent_template():
+    return boa.load("contracts/core/AgentTemplate.vy", name="agent_template")
 
 
 @pytest.fixture(scope="session")

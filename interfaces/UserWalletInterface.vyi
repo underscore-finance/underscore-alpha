@@ -1,0 +1,100 @@
+# @version 0.4.0
+
+@external
+def depositTokens(
+    _legoId: uint256,
+    _asset: address,
+    _vault: address,
+    _amount: uint256 = max_value(uint256),
+) -> (uint256, address, uint256, uint256):
+    ...
+
+@external
+def withdrawTokens(
+    _legoId: uint256,
+    _asset: address,
+    _vaultToken: address,
+    _vaultTokenAmount: uint256 = max_value(uint256),
+) -> (uint256, uint256, uint256):
+    ...
+
+@external
+def rebalance(
+    _fromLegoId: uint256,
+    _fromAsset: address,
+    _fromVaultToken: address,
+    _toLegoId: uint256,
+    _toVault: address,
+    _fromVaultTokenAmount: uint256 = max_value(uint256),
+) -> (uint256, address, uint256, uint256):
+    ...
+
+@external
+def swapTokens(
+    _legoId: uint256,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256 = max_value(uint256),
+    _minAmountOut: uint256 = 0,
+    _pool: address = empty(address),
+) -> (uint256, uint256, uint256):
+    ...
+
+@external
+def addLiquidity(
+    _legoId: uint256,
+    _nftAddr: address,
+    _nftTokenId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256 = max_value(uint256),
+    _amountB: uint256 = max_value(uint256),
+    _tickLower: int24 = min_value(int24),
+    _tickUpper: int24 = max_value(int24),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+    _minLpAmount: uint256 = 0,
+) -> (uint256, uint256, uint256, uint256, uint256):
+    ...
+
+@external
+def removeLiquidity(
+    _legoId: uint256,
+    _nftAddr: address,
+    _nftTokenId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _liqToRemove: uint256 = max_value(uint256),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+) -> (uint256, uint256, uint256, bool):
+    ...
+
+@external
+def transferFunds(
+    _recipient: address,
+    _amount: uint256 = max_value(uint256),
+    _asset: address = empty(address),
+) -> (uint256, uint256):
+    ...
+
+@payable
+@external
+def convertEthToWeth(
+    _amount: uint256 = max_value(uint256),
+    _depositLegoId: uint256 = 0,
+    _depositVault: address = empty(address),
+) -> (uint256, address, uint256):
+    ...
+
+
+@external
+def convertWethToEth(
+    _amount: uint256 = max_value(uint256),
+    _recipient: address = empty(address),
+    _withdrawLegoId: uint256 = 0,
+    _withdrawVaultToken: address = empty(address),
+) -> uint256:
+    ...

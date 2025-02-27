@@ -61,18 +61,6 @@ def test_deposit_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego
     new_wallet_bal = alpha_token_erc4626_vault.balanceOf(ai_wallet)
     assert new_wallet_bal == wallet_bal + vaultTokenAmountReceived
 
-    # Test deposit with transfer
-    alpha_token.approve(ai_wallet, deposit_amount, sender=alpha_token_whale)
-    assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokensWithTransfer(
-        lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=alpha_token_whale)
-    log = filter_logs(ai_wallet, "AgenticDeposit")[0]
-    assert log.signer == alpha_token_whale
-    assert log.assetAmountDeposited == deposit_amount == assetAmountDeposited
-    assert not log.isSignerAgent
-
-    assert alpha_token.balanceOf(ai_wallet) == 0
-    assert alpha_token_erc4626_vault.balanceOf(ai_wallet) == new_wallet_bal + vaultTokenAmountReceived
-
     # Test deposit permissions
     assert not ai_wallet_config.canAgentAccess(
         agent, DEPOSIT_UINT256, [bravo_token.address], [mock_lego_bravo.legoId()])
