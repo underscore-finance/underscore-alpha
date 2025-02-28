@@ -1,4 +1,3 @@
-
 # pragma optimize codesize
 
 implements: UserWalletInterface
@@ -7,6 +6,7 @@ from ethereum.ercs import IERC20
 from ethereum.ercs import IERC721
 from interfaces import LegoDex
 from interfaces import LegoYield
+from interfaces import LegoCommon
 from interfaces import UserWalletInterface
 
 interface WalletConfig:
@@ -1022,6 +1022,7 @@ def claimRewards(
     cd: CoreData = self._getCoreData()
     legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
+    self._giveLegoOperatorAccess(legoAddr)
     extcall LegoYield(legoAddr).claimRewards(self, _markets, _rewardTokens, _rewardAmounts, _proofs)
 
 
@@ -1196,6 +1197,66 @@ def _payTransactionFees(_protocolCost: TxCostInfo, _agentCost: TxCostInfo, _acti
     if _agentCost.amount != 0:
         assert extcall IERC20(_agentCost.asset).transfer(_agentCost.recipient, _agentCost.amount, default_return_value=True) # dev: agent tx fee payment failed
         log TransactionFeePaid(_agentCost.recipient, _agentCost.asset, _agentCost.amount, _agentCost.usdValue, _action, True)
+
+
+# grant operator access
+
+
+@internal
+def _giveLegoOperatorAccess(_legoAddr: address):
+    targetAddr: address = empty(address)
+    operatorAbi: String[64] = empty(String[64])
+    numInputs: uint256 = 0
+    targetAddr, operatorAbi, numInputs = staticcall LegoCommon(_legoAddr).getOperatorAccessAbi(self)
+
+    # nothing to do here
+    if targetAddr == empty(address):
+        return
+
+    # method_abi: bytes4 = method_id(operatorAbi, output_type=bytes4)
+    # success: bool = False
+    # response: Bytes[32] = b""
+
+    # # assumes input is: lego addr (operator)
+    # if numInputs == 1:
+    #     success, response = raw_call(
+    #         targetAddr,
+    #         concat(
+    #             method_abi,
+    #             convert(_legoAddr, bytes32),
+    #         ),
+    #         revert_on_failure=False,
+    #         max_outsize=32,
+    #     )
+    
+    # # assumes input (and order) is: user addr (owner), lego addr (operator)
+    # elif numInputs == 2:
+    #     success, response = raw_call(
+    #         targetAddr,
+    #         concat(
+    #             method_abi,
+    #             convert(self, bytes32),
+    #             convert(_legoAddr, bytes32),
+    #         ),
+    #         revert_on_failure=False,
+    #         max_outsize=32,
+    #     )
+
+    # # assumes input (and order) is: user addr (owner), lego addr (operator), allowed bool
+    # elif numInputs == 3:
+    #     success, response = raw_call(
+    #         targetAddr,
+    #         concat(
+    #             method_abi,
+    #             convert(self, bytes32),
+    #             convert(_legoAddr, bytes32),
+    #             convert(True, bytes32),
+    #         ),
+    #         revert_on_failure=False,
+    #         max_outsize=32,
+    #     )
+
+    # assert success # dev: failed to set operator
 
 
 # trial funds

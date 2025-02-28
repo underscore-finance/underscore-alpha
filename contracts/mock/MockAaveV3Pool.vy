@@ -37,6 +37,12 @@ def getReserveTokensAddresses(_asset: address) -> (address, address, address):
 
 @view
 @external
+def getPoolDataProvider() -> address:
+    return self
+
+
+@view
+@external
 def getAllATokens() -> DynArray[TokenData, 40]:
     return [TokenData(
         symbol="aUSDC",

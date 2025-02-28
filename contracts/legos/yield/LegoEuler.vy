@@ -20,6 +20,10 @@ interface Erc4626Interface:
     def totalAssets() -> uint256: view
     def asset() -> address: view
 
+interface EulerRewardsDistributor:
+    def claim(_users: DynArray[address, MAX_ASSETS], _rewardTokens: DynArray[address, MAX_ASSETS], _claimAmounts: DynArray[uint256, MAX_ASSETS], _proofs: DynArray[bytes32, MAX_ASSETS]): nonpayable
+    def operators(_user: address, _operator: address) -> bool: view
+
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
@@ -58,11 +62,16 @@ event FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
+event EulerRewardsAddrSet:
+    addr: address
+
 event EulerLegoIdSet:
     legoId: uint256
 
 event EulerActivated:
     isActivated: bool
+
+eulerRewards: public(address)
 
 # config
 legoId: public(uint256)
@@ -325,15 +334,45 @@ def claimRewards(
     _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
     _proofs: DynArray[bytes32, MAX_ASSETS] = [],
 ):
-    # TODO: implement
-    pass
+    eulerRewards: address = self.eulerRewards
+    assert eulerRewards != empty(address) # dev: no euler rewards addr set
+    assert len(_rewardTokens) == len(_rewardAmounts) # dev: arrays must be same length
+
+    # need to create array of users (must be same length as reward tokens)
+    users: DynArray[address, MAX_ASSETS] = []
+    for i: uint256 in range(len(_rewardTokens), bound=MAX_ASSETS):
+        users.append(_user)
+    
+    extcall EulerRewardsDistributor(eulerRewards).claim(users, _rewardTokens, _rewardAmounts, _proofs)
 
 
 @view
 @external
 def hasClaimableRewards(_user: address) -> bool:
-    # TODO: implement
+    # as far as we can tell, this must be done offchain
     return False
+
+
+@view
+@external
+def getOperatorAccessAbi(_user: address) -> (address, String[64], uint256):
+    eulerRewards: address = self.eulerRewards
+    if staticcall EulerRewardsDistributor(eulerRewards).operators(_user, self):
+        return empty(address), empty(String[64]), 0
+    else:
+        return eulerRewards, "toggleOperator(address,address)", 2
+
+
+# set rewards addr
+
+
+@external
+def setEulerRewardsAddr(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert _addr != empty(address) # dev: invalid addr
+    self.eulerRewards = _addr
+    log EulerRewardsAddrSet(_addr)
+    return True
 
 
 ##################

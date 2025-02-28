@@ -62,6 +62,7 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: immutable(address)
 withdrawFails: public(bool)
+MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -364,6 +365,23 @@ def removeLiquidity(
 @external
 def getLpToken(_pool: address) -> address:
     return _pool
+
+
+
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+):
+    pass
 
 
 ##################

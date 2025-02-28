@@ -348,7 +348,7 @@ def claimRewards(
         self._hasClaimableOrShouldClaim(_user, True)
 
 
-# sadly, this is not a view function
+# sadly, this is not a view function because of `getRewardOwed()`
 @external
 def hasClaimableRewards(_user: address) -> bool:
     return self._hasClaimableOrShouldClaim(_user, False)
