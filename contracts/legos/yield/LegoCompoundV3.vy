@@ -12,6 +12,11 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
 
+# `hasClaimableRewards()` is not a view function, sadly due to compound v3 constraints
+# keeping here to uncomment to test all other functions
+# implements: LegoCommon 
+# from interfaces import LegoCommon
+
 interface CompoundV3:
     def withdrawTo(_recipient: address, _asset: address, _amount: uint256): nonpayable
     def supplyTo(_recipient: address, _asset: address, _amount: uint256): nonpayable
@@ -54,7 +59,7 @@ event CompoundV3Withdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
-event FundsRecovered:
+event CompoundV3FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -68,8 +73,8 @@ event CompoundV3LegoIdSet:
 event CompoundV3Activated:
     isActivated: bool
 
+# compound v3
 compoundRewards: public(address)
-
 COMPOUND_V3_CONFIGURATOR: public(immutable(address))
 
 # config
@@ -94,6 +99,12 @@ def __init__(_configurator: address, _addyRegistry: address):
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [COMPOUND_V3_CONFIGURATOR]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 #############
@@ -376,6 +387,9 @@ def _hasClaimableOrShouldClaim(_user: address, _shouldClaim: bool) -> bool:
     return hasClaimable
 
 
+# set rewards addr
+
+
 @external
 def setCompRewardsAddr(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
@@ -388,9 +402,6 @@ def setCompRewardsAddr(_addr: address) -> bool:
 ##################
 # Asset Registry #
 ##################
-
-
-# settings
 
 
 @external
@@ -428,7 +439,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log CompoundV3FundsRecovered(_asset, _recipient, balance)
     return True
 
 

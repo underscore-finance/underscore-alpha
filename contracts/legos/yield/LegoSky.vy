@@ -1,12 +1,14 @@
 # @version 0.4.0
 
 implements: LegoYield
+implements: LegoCommon
 initializes: gov
 exports: gov.__interface__
 
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
+from interfaces import LegoCommon
 
 interface SkyPsm:
     def swapExactIn(_assetIn: address, _assetOut: address, _amountIn: uint256, _minAmountOut: uint256, _receiver: address, _referralCode: uint256) -> uint256: nonpayable
@@ -49,7 +51,7 @@ event AssetOpportunityRemoved:
     asset: indexed(address)
     vaultToken: indexed(address)
 
-event FundsRecovered:
+event SkyFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -64,11 +66,11 @@ event SkyActivated:
 usdc: public(address)
 usds: public(address)
 susds: public(address)
+SKY_PSM: public(immutable(address))
 
 # config
 legoId: public(uint256)
 isActivated: public(bool)
-SKY_PSM: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
@@ -104,6 +106,12 @@ def __init__(_skyPsm: address, _addyRegistry: address):
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [SKY_PSM]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 #############
@@ -390,7 +398,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log SkyFundsRecovered(_asset, _recipient, balance)
     return True
 
 

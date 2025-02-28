@@ -1,6 +1,7 @@
-# @version 0.4.0
+
 
 implements: LegoDex
+implements: LegoCommon
 initializes: gov
 exports: gov.__interface__
 
@@ -8,6 +9,7 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
+from interfaces import LegoCommon
 
 interface AeroRouter:
     def addLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
@@ -78,7 +80,7 @@ event AerodromeLiquidityRemoved:
     usdValue: uint256
     recipient: address
 
-event FundsRecovered:
+event AeroClassicFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -89,15 +91,17 @@ event AerodromeLegoIdSet:
 event AerodromeActivated:
     isActivated: bool
 
+# aero
+AERODROME_FACTORY: public(immutable(address))
+AERODROME_ROUTER: public(immutable(address))
+
 # config
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-AERODROME_FACTORY: public(immutable(address))
-AERODROME_ROUTER: public(immutable(address))
-
 MAX_ASSETS: constant(uint256) = 5
+MAX_REWARDS_ASSETS: constant(uint256) = 25
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
@@ -109,6 +113,18 @@ def __init__(_aerodromeFactory: address, _aerodromeRouter: address, _addyRegistr
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [AERODROME_FACTORY, AERODROME_ROUTER]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 ########
@@ -415,9 +431,45 @@ def removeLiquidity(
     return amountA, amountB, usdValue, lpAmount, refundedLpAmount, refundedLpAmount != 0
 
 
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_REWARDS_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_REWARDS_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_REWARDS_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_REWARDS_ASSETS] = [],
+):
+    pass
+
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    return False
+
+
 #############
 # Utilities #
 #############
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    # in uniswap v2, the lp token is the pool address
+    return _pool
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    # in uniswap v2, the pool is the lp token address
+    return _lpToken
 
 
 @view
@@ -464,26 +516,6 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
         numCoins=2,
         legoId=self.legoId,
     )
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [AERODROME_FACTORY, AERODROME_ROUTER]
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    # in uniswap v2, the lp token is the pool address
-    return _pool
-
-
-@view
-@external
-def getPoolForLpToken(_lpToken: address) -> address:
-    # in uniswap v2, the pool is the lp token address
-    return _lpToken
 
 
 @view
@@ -660,7 +692,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log AeroClassicFundsRecovered(_asset, _recipient, balance)
     return True
 
 

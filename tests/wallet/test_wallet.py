@@ -384,7 +384,7 @@ def test_eth_weth_conversion_edge_cases(ai_wallet, ai_wallet_config, owner, agen
     assert amount == eth_amount  # Should only convert available balance
 
     # Test non-agent cannot convert when agent permissions set
-    allowed_actions = (True, True, False, False, True, False, False, False, False)  # No conversion permission
+    allowed_actions = (True, True, False, False, True, False, False, False, False, False, False, False)  # No conversion permission
     ai_wallet_config.modifyAllowedActions(agent, allowed_actions, sender=owner)
     with boa.reverts("agent not allowed"):
         ai_wallet.convertEthToWeth(eth_amount, sender=agent)

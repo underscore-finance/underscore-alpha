@@ -6,9 +6,7 @@ exports: gov.__interface__
 from ethereum.ercs import IERC20
 import contracts.modules.Governable as gov
 from interfaces import LegoYield
-
-interface LegoPartner:
-    def setLegoId(_legoId: uint256) -> bool: nonpayable
+from interfaces import LegoCommon
 
 flag LegoType:
     YIELD_OPP
@@ -121,7 +119,7 @@ def registerNewLego(_addr: address, _description: String[64], _legoType: LegoTyp
     self.legoAddrToId[_addr] = legoId
     self.numLegos = legoId + 1
     self.legoInfo[legoId] = data
-    assert extcall LegoPartner(_addr).setLegoId(legoId) # dev: set id failed
+    assert extcall LegoCommon(_addr).setLegoId(legoId) # dev: set id failed
 
     log NewLegoRegistered(_addr, legoId, _description, _legoType)
     return legoId
@@ -178,7 +176,7 @@ def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     data.version += 1
     self.legoInfo[_legoId] = data
     self.legoAddrToId[_newAddr] = _legoId
-    assert extcall LegoPartner(_newAddr).setLegoId(_legoId) # dev: set id failed
+    assert extcall LegoCommon(_newAddr).setLegoId(_legoId) # dev: set id failed
 
     # handle previous addr
     if prevAddr != empty(address):

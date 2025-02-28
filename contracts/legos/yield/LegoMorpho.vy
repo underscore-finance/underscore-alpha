@@ -1,6 +1,7 @@
 # @version 0.4.0
 
 implements: LegoYield
+implements: LegoCommon
 initializes: yld
 initializes: gov
 
@@ -11,6 +12,7 @@ import contracts.modules.YieldLegoData as yld
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
+from interfaces import LegoCommon
 
 interface Erc4626Interface:
     def redeem(_vaultTokenAmount: uint256, _recipient: address, _owner: address) -> uint256: nonpayable
@@ -53,7 +55,7 @@ event MorphoWithdrawal:
 event MorphoRewardsAddrSet:
     addr: address
 
-event FundsRecovered:
+event MorphoFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -64,15 +66,16 @@ event MorphoLegoIdSet:
 event MorphoActivated:
     isActivated: bool
 
+# morpho
 morphoRewards: public(address)
+META_MORPHO_FACTORY: public(immutable(address))
+META_MORPHO_FACTORY_LEGACY: public(immutable(address))
 
 # config
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-META_MORPHO_FACTORY: public(immutable(address))
-META_MORPHO_FACTORY_LEGACY: public(immutable(address))
 MAX_ASSETS: constant(uint256) = 25
 
 
@@ -91,6 +94,12 @@ def __init__(_morphoFactory: address, _morphoFactoryLegacy: address, _addyRegist
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [META_MORPHO_FACTORY, META_MORPHO_FACTORY_LEGACY]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 #############
@@ -343,6 +352,9 @@ def hasClaimableRewards(_user: address) -> bool:
     return False
 
 
+# set rewards addr
+
+
 @external
 def setMorphoRewardsAddr(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
@@ -355,9 +367,6 @@ def setMorphoRewardsAddr(_addr: address) -> bool:
 ##################
 # Asset Registry #
 ##################
-
-
-# settings
 
 
 @external
@@ -395,7 +404,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log MorphoFundsRecovered(_asset, _recipient, balance)
     return True
 
 

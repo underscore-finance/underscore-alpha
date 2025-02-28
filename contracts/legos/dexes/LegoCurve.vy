@@ -2,6 +2,7 @@
 # pragma optimize codesize
 
 implements: LegoDex
+implements: LegoCommon
 initializes: gov
 exports: gov.__interface__
 
@@ -9,6 +10,7 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
+from interfaces import LegoCommon
 
 interface CurveMetaRegistry:
     def get_coin_indices(_pool: address, _from: address, _to: address) -> (int128, int128, bool): view
@@ -100,7 +102,6 @@ interface CurveRateProvider:
     def get_quotes(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> DynArray[Quote, MAX_QUOTES]: view
     def get_aggregated_rate(_tokenIn: address, _tokenOut: address) -> uint256: view
 
-
 flag PoolType:
     STABLESWAP_NG
     TWO_CRYPTO_NG
@@ -140,6 +141,7 @@ struct CurveRegistries:
     TwoCrypto: address
     MetaPool: address
     RateProvider: address
+
 event CurveSwap:
     sender: indexed(address)
     tokenIn: indexed(address)
@@ -171,12 +173,12 @@ event CurveLiquidityRemoved:
     usdValue: uint256
     recipient: address
 
-event FundsRecovered:
+event CurveFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
 
-event PreferredPoolsSet:
+event CurvePreferredPoolsSet:
     numPools: uint256
 
 event CurveLegoIdSet:
@@ -185,28 +187,29 @@ event CurveLegoIdSet:
 event CurveActivated:
     isActivated: bool
 
+# curve
 preferredPools: public(DynArray[address, MAX_POOLS])
+CURVE_META_REGISTRY: public(immutable(address))
+CURVE_REGISTRIES: public(immutable(CurveRegistries))
+
+# curve address provider ids
+METAPOOL_FACTORY_ID: constant(uint256) = 3
+TWO_CRYPTO_FACTORY_ID: constant(uint256) = 6
+META_REGISTRY_ID: constant(uint256) = 7
+TRICRYPTO_NG_FACTORY_ID: constant(uint256) = 11
+STABLESWAP_NG_FACTORY_ID: constant(uint256) = 12
+TWO_CRYPTO_NG_FACTORY_ID: constant(uint256) = 13
+RATE_PROVIDER_ID: constant(uint256) = 18
 
 # config
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-CURVE_META_REGISTRY: public(immutable(address))
-CURVE_REGISTRIES: public(immutable(CurveRegistries))
-
-# curve ids
-METAPOOL_FACTORY_ID: constant(uint256) = 3 # 0x3093f9B57A428F3EB6285a589cb35bEA6e78c336
-TWO_CRYPTO_FACTORY_ID: constant(uint256) = 6 # 0x5EF72230578b3e399E6C6F4F6360edF95e83BBfd
-META_REGISTRY_ID: constant(uint256) = 7 # 0x87DD13Dd25a1DBde0E1EdcF5B8Fa6cfff7eABCaD
-TRICRYPTO_NG_FACTORY_ID: constant(uint256) = 11 # 0xA5961898870943c68037F6848d2D866Ed2016bcB
-STABLESWAP_NG_FACTORY_ID: constant(uint256) = 12 # 0xd2002373543Ce3527023C75e7518C274A51ce712
-TWO_CRYPTO_NG_FACTORY_ID: constant(uint256) = 13 # 0xc9Fe0C63Af9A39402e8a5514f9c43Af0322b665F
-RATE_PROVIDER_ID: constant(uint256) = 18 # 0x33e72383472f77B0C6d8F791D1613C75aE2C5915
-
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 MAX_POOLS: constant(uint256) = 50
 MAX_QUOTES: constant(uint256) = 100
+MAX_REWARDS_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -225,6 +228,18 @@ def __init__(_curveAddressProvider: address, _addyRegistry: address):
         MetaPool= staticcall CurveAddressProvider(_curveAddressProvider).get_address(METAPOOL_FACTORY_ID),
         RateProvider= staticcall CurveAddressProvider(_curveAddressProvider).get_address(RATE_PROVIDER_ID),
     )
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [CURVE_META_REGISTRY]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 ########
@@ -882,9 +897,43 @@ def _getTokenAmounts(_isEmptyTokenA: bool, _amountOut: uint256) -> (uint256, uin
     return amountA, amountB
 
 
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_REWARDS_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_REWARDS_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_REWARDS_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_REWARDS_ASSETS] = [],
+):
+    pass
+
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    return False
+
+
 #############
 # Utilities #
 #############
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_lp_token(_pool)
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_pool_from_lp_token(_lpToken)
 
 
 @view
@@ -914,24 +963,6 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
         numCoins=staticcall CurveMetaRegistry(metaRegistry).get_n_coins(bestPoolAddr),
         legoId=self.legoId,
     )
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [CURVE_META_REGISTRY]
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_lp_token(_pool)
-
-
-@view
-@external
-def getPoolForLpToken(_lpToken: address) -> address:
-    return staticcall CurveMetaRegistry(CURVE_META_REGISTRY).get_pool_from_lp_token(_lpToken)
 
 
 @view
@@ -1392,7 +1423,7 @@ def setPreferredPools(_pools: DynArray[address, MAX_POOLS]) -> bool:
             pools.append(p)
 
     self.preferredPools = pools
-    log PreferredPoolsSet(len(pools))
+    log CurvePreferredPoolsSet(len(pools))
     return True
 
 
@@ -1410,7 +1441,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log CurveFundsRecovered(_asset, _recipient, balance)
     return True
 
 

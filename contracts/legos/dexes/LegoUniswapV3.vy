@@ -1,7 +1,7 @@
 # @version 0.4.0
 
 implements: IUniswapV3Callback
-implements: LegoDex
+implements: LegoCommon
 initializes: gov
 exports: gov.__interface__
 
@@ -9,7 +9,12 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC721
 from ethereum.ercs import IERC20Detailed
-from interfaces import LegoDex
+from interfaces import LegoCommon
+
+# `getSwapAmountOut()` and `getSwapAmountIn()` cannot be view functions, sadly
+# keeping here to uncomment to test all other functions
+# implements: LegoDex
+# from interfaces import LegoDex
 
 interface UniV3Pool:
     def slot0() -> (uint160, int24, uint16, uint16, uint16, uint8, bool): view
@@ -173,12 +178,12 @@ event UniswapV3LiquidityRemoved:
     usdValue: uint256
     recipient: address
 
-event FundsRecovered:
+event UniV3FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
 
-event NftRecovered:
+event UniV3NftRecovered:
     collection: indexed(address)
     nftTokenId: uint256
     recipient: indexed(address)
@@ -192,15 +197,16 @@ event UniswapV3Activated:
 # transient
 poolSwapData: transient(PoolSwapData)
 
-# config
-legoId: public(uint256)
-isActivated: public(bool)
-ADDY_REGISTRY: public(immutable(address))
-
+# uni
 UNISWAP_V3_FACTORY: public(immutable(address))
 UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
 UNI_NFT_POSITION_MANAGER: public(immutable(address))
 UNI_V3_QUOTER: public(immutable(address))
+
+# config
+legoId: public(uint256)
+isActivated: public(bool)
+ADDY_REGISTRY: public(immutable(address))
 
 FEE_TIERS: constant(uint24[4]) = [100, 500, 3000, 10000] # 0.01%, 0.05%, 0.3%, 1%
 MIN_SQRT_RATIO_PLUS_ONE: constant(uint160) = 4295128740
@@ -210,6 +216,7 @@ TICK_UPPER: constant(int24) = 887272
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
+MAX_REWARDS_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -230,6 +237,18 @@ def onERC721Received(_operator: address, _owner: address, _tokenId: uint256, _da
     # must implement method for safe NFT transfers
     assert _data == ERC721_RECEIVE_DATA # dev: did not receive from within Underscore wallet
     return method_id("onERC721Received(address,address,uint256,bytes)", output_type=bytes4)
+
+
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    return [UNISWAP_V3_FACTORY, UNISWAP_V3_SWAP_ROUTER, UNI_NFT_POSITION_MANAGER, UNI_V3_QUOTER]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 ########
@@ -662,9 +681,45 @@ def removeLiquidity(
     return amountA, amountB, usdValue, liquidityRemoved, 0, isDepleted
 
 
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_REWARDS_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_REWARDS_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_REWARDS_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_REWARDS_ASSETS] = [],
+):
+    pass
+
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    return False
+
+
 #############
 # Utilities #
 #############
+
+
+@view
+@external
+def getLpToken(_pool: address) -> address:
+    # no lp tokens for uniswap v3
+    return empty(address)
+
+
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    # no lp tokens for uniswap v3
+    return empty(address)
 
 
 @view
@@ -688,26 +743,6 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
         numCoins=2,
         legoId=self.legoId,
     )
-
-
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    return [UNISWAP_V3_FACTORY, UNISWAP_V3_SWAP_ROUTER, UNI_NFT_POSITION_MANAGER, UNI_V3_QUOTER]
-
-
-@view
-@external
-def getLpToken(_pool: address) -> address:
-    # no lp tokens for uniswap v3
-    return empty(address)
-
-
-@view
-@external
-def getPoolForLpToken(_lpToken: address) -> address:
-    # no lp tokens for uniswap v3
-    return empty(address)
 
 
 # annoying that this cannot be view function, thanks uni v3
@@ -932,7 +967,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log UniV3FundsRecovered(_asset, _recipient, balance)
     return True
 
 
@@ -944,7 +979,7 @@ def recoverNft(_collection: address, _nftTokenId: uint256, _recipient: address) 
         return False
 
     extcall IERC721(_collection).safeTransferFrom(self, _recipient, _nftTokenId)
-    log NftRecovered(_collection, _nftTokenId, _recipient)
+    log UniV3NftRecovered(_collection, _nftTokenId, _recipient)
     return True
 
 

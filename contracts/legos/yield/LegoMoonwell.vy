@@ -1,6 +1,7 @@
 # @version 0.4.0
 
 implements: LegoYield
+implements: LegoCommon
 initializes: yld
 initializes: gov
 
@@ -11,6 +12,7 @@ import contracts.modules.YieldLegoData as yld
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
+from interfaces import LegoCommon
 
 interface CompoundV2:
     def redeem(_ctokenAmount: uint256) -> uint256: nonpayable
@@ -65,7 +67,7 @@ event MoonwellWithdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
-event FundsRecovered:
+event MoonwellFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -76,12 +78,14 @@ event MoonwellLegoIdSet:
 event MoonwellActivated:
     isActivated: bool
 
+# moonwell
+MOONWELL_COMPTROLLER: public(immutable(address))
+
 # config
 legoId: public(uint256)
 isActivated: public(bool)
-MOONWELL_COMPTROLLER: public(immutable(address))
-WETH: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
+WETH: public(immutable(address))
 
 MAX_MARKETS: constant(uint256) = 50
 MAX_ASSETS: constant(uint256) = 25
@@ -108,6 +112,12 @@ def __default__():
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [MOONWELL_COMPTROLLER]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 #############
@@ -379,9 +389,6 @@ def hasClaimableRewards(_user: address) -> bool:
 ##################
 
 
-# settings
-
-
 @external
 def addAssetOpportunity(_asset: address, _vault: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
@@ -417,7 +424,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log MoonwellFundsRecovered(_asset, _recipient, balance)
     return True
 
 

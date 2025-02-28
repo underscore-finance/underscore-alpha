@@ -1,6 +1,7 @@
 # @version 0.4.0
 
 implements: LegoYield
+implements: LegoCommon
 initializes: yld
 initializes: gov
 
@@ -11,6 +12,7 @@ import contracts.modules.YieldLegoData as yld
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
+from interfaces import LegoCommon
 
 interface AaveProtocolDataProvider:
     def getReserveTokensAddresses(_asset: address) -> (address, address, address): view
@@ -56,7 +58,7 @@ event AaveV3Withdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
-event FundsRecovered:
+event AaveV3FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -67,11 +69,13 @@ event AaveV3LegoIdSet:
 event AaveV3Activated:
     isActivated: bool
 
+# aave v3
+AAVE_V3_POOL: public(immutable(address))
+AAVE_V3_ADDRESS_PROVIDER: public(immutable(address))
+
 # config
 legoId: public(uint256)
 isActivated: public(bool)
-AAVE_V3_POOL: public(immutable(address))
-AAVE_V3_ADDRESS_PROVIDER: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
 MAX_ATOKENS: constant(uint256) = 40
@@ -93,6 +97,12 @@ def __init__(_aaveV3: address, _addressProvider: address, _addyRegistry: address
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [AAVE_V3_POOL, AAVE_V3_ADDRESS_PROVIDER]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 @view
@@ -378,9 +388,6 @@ def hasClaimableRewards(_user: address) -> bool:
 ##################
 
 
-# settings
-
-
 @external
 def addAssetOpportunity(_asset: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
@@ -419,7 +426,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log AaveV3FundsRecovered(_asset, _recipient, balance)
     return True
 
 

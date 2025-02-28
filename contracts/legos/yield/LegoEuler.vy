@@ -1,6 +1,7 @@
 # @version 0.4.0
 
 implements: LegoYield
+implements: LegoCommon
 initializes: yld
 initializes: gov
 
@@ -11,6 +12,7 @@ import contracts.modules.YieldLegoData as yld
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
+from interfaces import LegoCommon
 
 interface Erc4626Interface:
     def redeem(_vaultTokenAmount: uint256, _recipient: address, _owner: address) -> uint256: nonpayable
@@ -57,7 +59,7 @@ event EulerWithdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
-event FundsRecovered:
+event EulerFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -71,16 +73,18 @@ event EulerLegoIdSet:
 event EulerActivated:
     isActivated: bool
 
+# euler
 eulerRewards: public(address)
+EVAULT_FACTORY: public(immutable(address))
+EARN_FACTORY: public(immutable(address))
 
 # config
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-EVAULT_FACTORY: public(immutable(address))
-EARN_FACTORY: public(immutable(address))
 MAX_ASSETS: constant(uint256) = 25
+LEGO_ACCESS_ABI: constant(String[64]) = "toggleOperator(address,address)"
 
 
 @deploy
@@ -98,6 +102,16 @@ def __init__(_evaultFactory: address, _earnFactory: address, _addyRegistry: addr
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [EVAULT_FACTORY, EARN_FACTORY]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    eulerRewards: address = self.eulerRewards
+    if staticcall EulerRewardsDistributor(eulerRewards).operators(_user, self):
+        return empty(address), empty(String[64]), 0
+    else:
+        return eulerRewards, LEGO_ACCESS_ABI, 2
 
 
 #############
@@ -336,9 +350,11 @@ def claimRewards(
 ):
     eulerRewards: address = self.eulerRewards
     assert eulerRewards != empty(address) # dev: no euler rewards addr set
-    assert len(_rewardTokens) == len(_rewardAmounts) # dev: arrays must be same length
+    if len(_rewardTokens) == 0:
+        return
 
     # need to create array of users (must be same length as reward tokens)
+    assert len(_rewardTokens) == len(_rewardAmounts) # dev: arrays must be same length
     users: DynArray[address, MAX_ASSETS] = []
     for i: uint256 in range(len(_rewardTokens), bound=MAX_ASSETS):
         users.append(_user)
@@ -351,16 +367,6 @@ def claimRewards(
 def hasClaimableRewards(_user: address) -> bool:
     # as far as we can tell, this must be done offchain
     return False
-
-
-@view
-@external
-def getOperatorAccessAbi(_user: address) -> (address, String[64], uint256):
-    eulerRewards: address = self.eulerRewards
-    if staticcall EulerRewardsDistributor(eulerRewards).operators(_user, self):
-        return empty(address), empty(String[64]), 0
-    else:
-        return eulerRewards, "toggleOperator(address,address)", 2
 
 
 # set rewards addr
@@ -378,9 +384,6 @@ def setEulerRewardsAddr(_addr: address) -> bool:
 ##################
 # Asset Registry #
 ##################
-
-
-# settings
 
 
 @external
@@ -418,7 +421,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log EulerFundsRecovered(_asset, _recipient, balance)
     return True
 
 

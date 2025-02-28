@@ -2,6 +2,7 @@
 
 implements: LegoDex
 implements: LegoYield
+implements: LegoCommon
 initializes: yld
 initializes: gov
 
@@ -13,6 +14,7 @@ import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoDex
 from interfaces import LegoYield
+from interfaces import LegoCommon
 
 interface Erc4626Interface:
     def redeem(_vaultTokenAmount: uint256, _recipient: address, _owner: address) -> uint256: nonpayable
@@ -78,6 +80,12 @@ def __init__(_addyRegistry: address):
 @external
 def getRegistries() -> DynArray[address, 10]:
     return []
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 #############
@@ -321,51 +329,77 @@ def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAm
     return tokenInAmount, tokenInAmount, 0, usdValue
 
 
+#############
+# Other DEX #
+#############
+
+
 @external
-def addLiquidity(
-    _nftTokenId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _tickLower: int24,
-    _tickUpper: int24,
-    _amountA: uint256,
-    _amountB: uint256,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _minLpAmount: uint256,
-    _recipient: address,
-    _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
-    # not implemented
+def addLiquidity(_nftTokenId: uint256, _pool: address, _tokenA: address, _tokenB: address, _tickLower: int24, _tickUpper: int24, _amountA: uint256, _amountB: uint256, _minAmountA: uint256, _minAmountB: uint256, _minLpAmount: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256, uint256, uint256, uint256):
     return 0, 0, 0, 0, 0, 0, 0
 
-
-# remove liq
-
-
 @external
-def removeLiquidity(
-    _nftTokenId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _lpToken: address,
-    _liqToRemove: uint256,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _recipient: address,
-    _oracleRegistry: address = empty(address),
-) -> (uint256, uint256, uint256, uint256, uint256, bool):
-    # not implemented
+def removeLiquidity(_nftTokenId: uint256, _pool: address, _tokenA: address, _tokenB: address, _lpToken: address, _liqToRemove: uint256, _minAmountA: uint256, _minAmountB: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256, uint256, bool):
     return 0, 0, 0, 0, 0, False
-
 
 @view
 @external
 def getLpToken(_pool: address) -> address:
-    return _pool
+    return empty(address)
 
+@view
+@external
+def getPoolForLpToken(_lpToken: address) -> address:
+    return empty(address)
+
+@view
+@external
+def getSwapAmountOut(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+) -> uint256:
+    return 0
+
+
+@view
+@external
+def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
+    return 0
+
+
+@view
+@external
+def getAddLiqAmountsIn(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _availAmountA: uint256,
+    _availAmountB: uint256,
+) -> (uint256, uint256, uint256):
+    return 0, 0, 0
+
+
+@view
+@external
+def getRemoveLiqAmountsOut(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256,
+) -> (uint256, uint256):
+    return 0, 0
+
+@view
+@external
+def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
+    return 0
 
 
 #################
@@ -384,12 +418,15 @@ def claimRewards(
     pass
 
 
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    return False
+
+
 ##################
 # Asset Registry #
 ##################
-
-
-# settings
 
 
 @external

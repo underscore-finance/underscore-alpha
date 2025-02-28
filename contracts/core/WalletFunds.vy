@@ -47,6 +47,9 @@ flag ActionType:
     CONVERSION
     ADD_LIQ
     REMOVE_LIQ
+    CLAIM_REWARDS
+    BORROW
+    REPAY
 
 struct CoreData:
     owner: address
@@ -164,6 +167,16 @@ event WalletFundsTransferred:
     asset: indexed(address)
     amount: uint256
     usdValue: uint256
+    isSignerAgent: bool
+
+event RewardsClaimed:
+    signer: address
+    numMarkets: uint256
+    numRewardTokens: uint256
+    numRewardAmounts: uint256
+    numProofs: uint256
+    legoId: uint256
+    legoAddr: address
     isSignerAgent: bool
 
 event EthConvertedToWeth:
@@ -1017,13 +1030,21 @@ def claimRewards(
     @param _markets The markets to claim rewards from
     @param _rewardTokens The reward tokens to claim
     @param _rewardAmounts The reward amounts to claim
-    @param _proofs The proofs to claim rewards from
+    @param _proofs The proofs to verify the rewards
     """
     cd: CoreData = self._getCoreData()
     legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
-    self._giveLegoOperatorAccess(legoAddr)
-    extcall LegoYield(legoAddr).claimRewards(self, _markets, _rewardTokens, _rewardAmounts, _proofs)
+
+    # pass in empty action, lego ids, and assets here
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, empty(ActionType), [], [], cd)
+
+    # some legos require access to be granted to claim rewards
+    self._checkLegoAccessForAction(legoAddr)
+
+    # claim rewards
+    extcall LegoCommon(legoAddr).claimRewards(self, _markets, _rewardTokens, _rewardAmounts, _proofs)
+    log RewardsClaimed(msg.sender, len(_markets), len(_rewardTokens), len(_rewardAmounts), len(_proofs), _legoId, legoAddr, isSignerAgent)
 
 
 #################
@@ -1199,64 +1220,64 @@ def _payTransactionFees(_protocolCost: TxCostInfo, _agentCost: TxCostInfo, _acti
         log TransactionFeePaid(_agentCost.recipient, _agentCost.asset, _agentCost.amount, _agentCost.usdValue, _action, True)
 
 
-# grant operator access
+# allow lego to perform action
 
 
 @internal
-def _giveLegoOperatorAccess(_legoAddr: address):
+def _checkLegoAccessForAction(_legoAddr: address):
     targetAddr: address = empty(address)
-    operatorAbi: String[64] = empty(String[64])
+    accessAbi: String[64] = empty(String[64])
     numInputs: uint256 = 0
-    targetAddr, operatorAbi, numInputs = staticcall LegoCommon(_legoAddr).getOperatorAccessAbi(self)
+    targetAddr, accessAbi, numInputs = staticcall LegoCommon(_legoAddr).getAccessForLego(self)
 
     # nothing to do here
     if targetAddr == empty(address):
         return
 
-    # method_abi: bytes4 = method_id(operatorAbi, output_type=bytes4)
-    # success: bool = False
-    # response: Bytes[32] = b""
+    method_abi: bytes4 = convert(slice(keccak256(accessAbi), 0, 4), bytes4)
+    success: bool = False
+    response: Bytes[32] = b""
 
-    # # assumes input is: lego addr (operator)
-    # if numInputs == 1:
-    #     success, response = raw_call(
-    #         targetAddr,
-    #         concat(
-    #             method_abi,
-    #             convert(_legoAddr, bytes32),
-    #         ),
-    #         revert_on_failure=False,
-    #         max_outsize=32,
-    #     )
+    # assumes input is: lego addr (operator)
+    if numInputs == 1:
+        success, response = raw_call(
+            targetAddr,
+            concat(
+                method_abi,
+                convert(_legoAddr, bytes32),
+            ),
+            revert_on_failure=False,
+            max_outsize=32,
+        )
     
-    # # assumes input (and order) is: user addr (owner), lego addr (operator)
-    # elif numInputs == 2:
-    #     success, response = raw_call(
-    #         targetAddr,
-    #         concat(
-    #             method_abi,
-    #             convert(self, bytes32),
-    #             convert(_legoAddr, bytes32),
-    #         ),
-    #         revert_on_failure=False,
-    #         max_outsize=32,
-    #     )
+    # assumes input (and order) is: user addr (owner), lego addr (operator)
+    elif numInputs == 2:
+        success, response = raw_call(
+            targetAddr,
+            concat(
+                method_abi,
+                convert(self, bytes32),
+                convert(_legoAddr, bytes32),
+            ),
+            revert_on_failure=False,
+            max_outsize=32,
+        )
 
-    # # assumes input (and order) is: user addr (owner), lego addr (operator), allowed bool
-    # elif numInputs == 3:
-    #     success, response = raw_call(
-    #         targetAddr,
-    #         concat(
-    #             method_abi,
-    #             convert(self, bytes32),
-    #             convert(_legoAddr, bytes32),
-    #             convert(True, bytes32),
-    #         ),
-    #         revert_on_failure=False,
-    #         max_outsize=32,
-    #     )
+    # assumes input (and order) is: user addr (owner), lego addr (operator), allowed bool
+    elif numInputs == 3:
+        success, response = raw_call(
+            targetAddr,
+            concat(
+                method_abi,
+                convert(self, bytes32),
+                convert(_legoAddr, bytes32),
+                convert(True, bytes32),
+            ),
+            revert_on_failure=False,
+            max_outsize=32,
+        )
 
-    # assert success # dev: failed to set operator
+    assert success # dev: failed to set operator
 
 
 # trial funds

@@ -1,10 +1,5 @@
 # @version 0.4.0
 
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    ...
-
 # yield opportunities
 
 @external
@@ -15,10 +10,24 @@ def depositTokens(_asset: address, _amount: uint256, _vault: address, _recipient
 def withdrawTokens(_asset: address, _amount: uint256, _vaultToken: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     ...
 
+# used in smart contracts
+
 @view
 @external
 def getAssetOpportunities(_asset: address) -> DynArray[address, 15]:
     ...
+
+@view
+@external
+def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
+    ...
+
+@view
+@external
+def getUnderlyingAsset(_vaultToken: address) -> address:
+    ...
+
+# helper functions for server
 
 @view
 @external
@@ -32,17 +41,7 @@ def isVaultToken(_vaultToken: address) -> bool:
 
 @view
 @external
-def getUnderlyingAsset(_vaultToken: address) -> address:
-    ...
-
-@view
-@external
 def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: address) -> uint256:
-    ...
-
-@view
-@external
-def getUnderlyingAmount(_vaultToken: address, _vaultTokenAmount: uint256) -> uint256:
     ...
 
 @view
@@ -63,29 +62,4 @@ def totalAssets(_vaultToken: address) -> uint256:
 @view
 @external
 def totalBorrows(_vaultToken: address) -> uint256:
-    ...
-
-@external
-def claimRewards(
-    _user: address,
-    _markets: DynArray[address, 25] = [],
-    _rewardTokens: DynArray[address, 25] = [],
-    _rewardAmounts: DynArray[uint256, 25] = [],
-    _proofs: DynArray[bytes32, 25] = [],
-):
-    ...
-
-# config
-
-@external
-def recoverFunds(_asset: address, _recipient: address) -> bool:
-    ...
-
-@view
-@external
-def legoId() -> uint256:
-    ...
-
-@external
-def setLegoId(_legoId: uint256) -> bool:
     ...

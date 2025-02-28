@@ -29,6 +29,9 @@ flag ActionType:
     CONVERSION
     ADD_LIQ
     REMOVE_LIQ
+    CLAIM_REWARDS
+    BORROW
+    REPAY
 
 struct AgentInfo:
     isActive: bool
@@ -77,6 +80,9 @@ struct AllowedActions:
     canConvert: bool
     canAddLiq: bool
     canRemoveLiq: bool
+    canClaimRewards: bool
+    canBorrow: bool
+    canRepay: bool
 
 struct ReserveAsset:
     asset: address
@@ -126,6 +132,9 @@ event AllowedActionsModified:
     canConvert: bool
     canAddLiq: bool
     canRemoveLiq: bool
+    canClaimRewards: bool
+    canBorrow: bool
+    canRepay: bool
 
 event WhitelistAddrSet:
     addr: indexed(address)
@@ -319,7 +328,7 @@ def _canAgentAccess(
 @view
 @internal
 def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions) -> bool:
-    if not _allowedActions.isSet:
+    if not _allowedActions.isSet or _action == empty(ActionType):
         return True
     if _action == ActionType.DEPOSIT:
         return _allowedActions.canDeposit
@@ -337,6 +346,12 @@ def _canAgentPerformAction(_action: ActionType, _allowedActions: AllowedActions)
         return _allowedActions.canAddLiq
     elif _action == ActionType.REMOVE_LIQ:
         return _allowedActions.canRemoveLiq
+    elif _action == ActionType.CLAIM_REWARDS:
+        return _allowedActions.canClaimRewards
+    elif _action == ActionType.BORROW:
+        return _allowedActions.canBorrow
+    elif _action == ActionType.REPAY:
+        return _allowedActions.canRepay
     else:
         return True # no action specified
 
@@ -825,7 +840,7 @@ def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empt
     agentInfo.allowedActions.isSet = self._hasAllowedActionsSet(_allowedActions)
     self.agentSettings[_agent] = agentInfo
 
-    log AllowedActionsModified(_agent, _allowedActions.canDeposit, _allowedActions.canWithdraw, _allowedActions.canRebalance, _allowedActions.canTransfer, _allowedActions.canSwap, _allowedActions.canConvert, _allowedActions.canAddLiq, _allowedActions.canRemoveLiq)
+    log AllowedActionsModified(_agent, _allowedActions.canDeposit, _allowedActions.canWithdraw, _allowedActions.canRebalance, _allowedActions.canTransfer, _allowedActions.canSwap, _allowedActions.canConvert, _allowedActions.canAddLiq, _allowedActions.canRemoveLiq, _allowedActions.canClaimRewards, _allowedActions.canBorrow, _allowedActions.canRepay)
     return True
 
 

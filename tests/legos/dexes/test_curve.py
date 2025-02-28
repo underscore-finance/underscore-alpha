@@ -146,7 +146,7 @@ def test_curve_preferred_pool(
     # set preferred pool
     four_pool = "0xf6c5f01c7f3148891ad0e19df78743d31e390d1f"
     assert lego_curve.setPreferredPools([four_pool], sender=governor)
-    log = filter_logs(lego_curve, "PreferredPoolsSet")[0]
+    log = filter_logs(lego_curve, "CurvePreferredPoolsSet")[0]
     assert log.numPools == 1
 
     fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_curve.legoId(), fromAsset.address, toToken.address, MAX_UINT256, 0, sender=bob_agent)

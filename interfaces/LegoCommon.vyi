@@ -1,7 +1,46 @@
 # @version 0.4.0
 
+@view
+@external
+def getRegistries() -> DynArray[address, 10]:
+    ...
 
 @view
 @external
-def getOperatorAccessAbi(_user: address) -> (address, String[64], uint256):
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    ...
+
+# rewards
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, 25] = [],
+    _rewardTokens: DynArray[address, 25] = [],
+    _rewardAmounts: DynArray[uint256, 25] = [],
+    _proofs: DynArray[bytes32, 25] = [],
+):
+    ...
+
+# config
+
+@external
+def recoverFunds(_asset: address, _recipient: address) -> bool:
+    ...
+
+@view
+@external
+def legoId() -> uint256:
+    ...
+
+@external
+def setLegoId(_legoId: uint256) -> bool:
+    ...
+
+
+# used by server
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
     ...

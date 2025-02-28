@@ -15,6 +15,9 @@ flag ActionType:
     CONVERSION
     ADD_LIQ
     REMOVE_LIQ
+    CLAIM_REWARDS
+    BORROW
+    REPAY
 
 struct Signature:
     signature: Bytes[65]

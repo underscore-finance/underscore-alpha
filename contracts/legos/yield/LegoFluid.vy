@@ -1,6 +1,7 @@
 # @version 0.4.0
 
 implements: LegoYield
+implements: LegoCommon
 initializes: yld
 initializes: gov
 
@@ -11,6 +12,7 @@ import contracts.modules.YieldLegoData as yld
 import contracts.modules.Governable as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
+from interfaces import LegoCommon
 
 interface Erc4626Interface:
     def redeem(_vaultTokenAmount: uint256, _recipient: address, _owner: address) -> uint256: nonpayable
@@ -47,7 +49,7 @@ event FluidWithdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
-event FundsRecovered:
+event FluidFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
@@ -58,12 +60,14 @@ event FluidLegoIdSet:
 event FluidActivated:
     isActivated: bool
 
+# fluid
+FLUID_RESOLVER: public(immutable(address))
+
 # config
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-FLUID_RESOLVER: public(immutable(address))
 MAX_FTOKENS: constant(uint256) = 50
 MAX_ASSETS: constant(uint256) = 25
 
@@ -82,6 +86,12 @@ def __init__(_fluidResolver: address, _addyRegistry: address):
 @external
 def getRegistries() -> DynArray[address, 10]:
     return [FLUID_RESOLVER]
+
+
+@view
+@external
+def getAccessForLego(_user: address) -> (address, String[64], uint256):
+    return empty(address), empty(String[64]), 0
 
 
 #############
@@ -331,9 +341,6 @@ def hasClaimableRewards(_user: address) -> bool:
 ##################
 
 
-# settings
-
-
 @external
 def addAssetOpportunity(_asset: address, _vault: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
@@ -369,7 +376,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, _recipient, balance)
+    log FluidFundsRecovered(_asset, _recipient, balance)
     return True
 
 

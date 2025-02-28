@@ -1,11 +1,6 @@
 # @version 0.4.0
 
-@view
-@external
-def getRegistries() -> DynArray[address, 10]:
-    ...
-
-# dex
+# core dex
 
 @external
 def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _pool: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
@@ -19,22 +14,69 @@ def addLiquidity(_nftTokenId: uint256, _pool: address, _tokenA: address, _tokenB
 def removeLiquidity(_nftTokenId: uint256, _pool: address, _tokenA: address, _tokenB: address, _lpToken: address, _liqToRemove: uint256, _minAmountA: uint256, _minAmountB: uint256, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256, uint256, bool):
     ...
 
+# used in smart contracts
+
 @view
 @external
 def getLpToken(_pool: address) -> address:
     ...
 
-# config
+# helper functions for server
 
+@view
 @external
-def recoverFunds(_asset: address, _recipient: address) -> bool:
+def getPoolForLpToken(_lpToken: address) -> address:
     ...
 
 @view
 @external
-def legoId() -> uint256:
+def getSwapAmountOut(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+) -> uint256:
     ...
 
+
+@view
 @external
-def setLegoId(_legoId: uint256) -> bool:
+def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
     ...
+
+
+@view
+@external
+def getAddLiqAmountsIn(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _availAmountA: uint256,
+    _availAmountB: uint256,
+) -> (uint256, uint256, uint256):
+    ...
+
+@view
+@external
+def getRemoveLiqAmountsOut(
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpAmount: uint256,
+) -> (uint256, uint256):
+    ...
+
+@view
+@external
+def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
+    ...
+
+# @view
+# @external
+# def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+#     ...
