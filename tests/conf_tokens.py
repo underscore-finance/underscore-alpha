@@ -2,6 +2,7 @@ import pytest
 import boa
 
 from constants import ZERO_ADDRESS
+from utils.BluePrint import ADDYS
 
 
 TOKENS = {
@@ -162,7 +163,6 @@ def getTokenAndWhale(fork, env, alpha_token, alpha_token_whale):
 
 @pytest.fixture(scope="session")
 def weth(fork, mock_weth):
-    weth_addr = TOKENS["weth"][fork]
-    if weth_addr == ZERO_ADDRESS:
+    if fork == "local":
         return mock_weth
-    return boa.from_etherscan(weth_addr, name="weth")
+    return boa.from_etherscan(ADDYS[fork]["WETH"], name="weth")

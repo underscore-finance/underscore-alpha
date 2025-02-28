@@ -1,7 +1,6 @@
 import pytest
 import boa
 
-from eth_account import Account
 from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
 from contracts.core import WalletFunds
 

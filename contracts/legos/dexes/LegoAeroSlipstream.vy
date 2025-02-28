@@ -189,8 +189,8 @@ event AeroSlipStreamActivated:
 # aero
 AERO_SLIPSTREAM_FACTORY: public(immutable(address))
 AERO_SLIPSTREAM_ROUTER: public(immutable(address))
-AERO_NFT_POSITION_MANAGER: public(immutable(address))
-AERO_QUOTER: public(immutable(address))
+AERO_SLIPSTREAM_NFT_MANAGER: public(immutable(address))
+AERO_SLIPSTREAM_QUOTER: public(immutable(address))
 
 # transient
 poolSwapData: transient(PoolSwapData)
@@ -216,8 +216,8 @@ def __init__(_aeroFactory: address, _aeroRouter: address, _aeroNftPositionManage
     assert empty(address) not in [_aeroFactory, _aeroRouter, _aeroNftPositionManager, _aeroQuoter, _addyRegistry] # dev: invalid addrs
     AERO_SLIPSTREAM_FACTORY = _aeroFactory
     AERO_SLIPSTREAM_ROUTER = _aeroRouter
-    AERO_NFT_POSITION_MANAGER = _aeroNftPositionManager
-    AERO_QUOTER = _aeroQuoter
+    AERO_SLIPSTREAM_NFT_MANAGER = _aeroNftPositionManager
+    AERO_SLIPSTREAM_QUOTER = _aeroQuoter
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
@@ -234,7 +234,7 @@ def onERC721Received(_operator: address, _owner: address, _tokenId: uint256, _da
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
-    return [AERO_SLIPSTREAM_FACTORY, AERO_SLIPSTREAM_ROUTER, AERO_NFT_POSITION_MANAGER, AERO_QUOTER]
+    return [AERO_SLIPSTREAM_FACTORY, AERO_SLIPSTREAM_ROUTER, AERO_SLIPSTREAM_NFT_MANAGER, AERO_SLIPSTREAM_QUOTER]
 
 
 @view
@@ -428,7 +428,7 @@ def addLiquidity(
     liqAmountB: uint256 = min(transferAmountB, staticcall IERC20(_tokenB).balanceOf(self))
 
     # approvals
-    nftPositionManager: address = AERO_NFT_POSITION_MANAGER
+    nftPositionManager: address = AERO_SLIPSTREAM_NFT_MANAGER
     assert extcall IERC20(_tokenA).approve(nftPositionManager, liqAmountA, default_return_value=True) # dev: approval failed
     assert extcall IERC20(_tokenB).approve(nftPositionManager, liqAmountB, default_return_value=True) # dev: approval failed
 
@@ -610,7 +610,7 @@ def removeLiquidity(
     assert self.isActivated # dev: not activated
 
     # make sure nft is here
-    nftPositionManager: address = AERO_NFT_POSITION_MANAGER
+    nftPositionManager: address = AERO_SLIPSTREAM_NFT_MANAGER
     assert staticcall IERC721(nftPositionManager).ownerOf(_nftTokenId) == self # dev: nft not here
 
     # get position data
@@ -749,7 +749,7 @@ def getSwapAmountOut(
     sqrtPriceX96After: uint160 = 0
     initializedTicksCrossed: uint32 = 0
     gasEstimate: uint256 = 0
-    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_QUOTER).quoteExactInputSingle(
+    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactInputSingle(
         QuoteExactInputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -773,7 +773,7 @@ def getSwapAmountIn(
     sqrtPriceX96After: uint160 = 0
     initializedTicksCrossed: uint32 = 0
     gasEstimate: uint256 = 0
-    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_QUOTER).quoteExactOutputSingle(
+    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactOutputSingle(
         QuoteExactOutputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,

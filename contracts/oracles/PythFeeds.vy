@@ -54,10 +54,10 @@ MAX_PRICE_UPDATES: constant(uint256) = 15
 
 
 @deploy
-def __init__(_addyRegistry: address, _pyth: address):
-    assert empty(address) not in [_addyRegistry, _pyth] # dev: invalid addrs
-    ADDY_REGISTRY = _addyRegistry
+def __init__(_pyth: address, _addyRegistry: address):
+    assert empty(address) not in [_pyth, _addyRegistry] # dev: invalid addrs
     PYTH = _pyth
+    ADDY_REGISTRY = _addyRegistry
     gov.__init__(_addyRegistry)
     oad.__init__()
 

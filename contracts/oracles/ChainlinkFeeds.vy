@@ -47,29 +47,38 @@ oraclePartnerId: public(uint256)
 ADDY_REGISTRY: public(immutable(address))
 
 # default assets
-ETH: constant(address) = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
-WETH: constant(address) = 0x4200000000000000000000000000000000000006
-BTC: constant(address) = 0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB
-
-# default chainlink feeds (Base L2)
-ETH_USD: constant(address) = 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70
-BTC_USD: constant(address) = 0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F
+WETH: immutable(address)
+ETH: immutable(address)
+BTC: immutable(address)
 
 NORMALIZED_DECIMALS: constant(uint256) = 18
 
 
 @deploy
-def __init__(_addyRegistry: address, _shouldSetDefaultFeeds: bool):
-    assert _addyRegistry != empty(address) # dev: invalid addy registry
+def __init__(
+    _wethAddr: address,
+    _ethAddr: address,
+    _btcAddr: address,
+    _ethUsdFeed: address,
+    _btcUsdFeed: address,
+    _addyRegistry: address,
+):
+    assert empty(address) not in [_wethAddr, _ethAddr, _btcAddr, _addyRegistry] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
     gov.__init__(_addyRegistry)
     oad.__init__()
 
+    # set default assets
+    WETH = _wethAddr
+    ETH = _ethAddr
+    BTC = _btcAddr
+
     # set default feeds
-    if _shouldSetDefaultFeeds:
-        assert self._setChainlinkFeed(ETH, ETH_USD, False, False)
-        assert self._setChainlinkFeed(WETH, ETH_USD, False, False)
-        assert self._setChainlinkFeed(BTC, BTC_USD, False, False)
+    if _ethUsdFeed != empty(address):
+        assert self._setChainlinkFeed(ETH, _ethUsdFeed, False, False)
+        assert self._setChainlinkFeed(WETH, _ethUsdFeed, False, False)
+    if _btcUsdFeed != empty(address):
+        assert self._setChainlinkFeed(BTC, _btcUsdFeed, False, False)
 
 
 #############

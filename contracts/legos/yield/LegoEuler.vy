@@ -75,8 +75,8 @@ event EulerActivated:
 
 # euler
 eulerRewards: public(address)
-EVAULT_FACTORY: public(immutable(address))
-EARN_FACTORY: public(immutable(address))
+EULER_EVAULT_FACTORY: public(immutable(address))
+EULER_EARN_FACTORY: public(immutable(address))
 
 # config
 legoId: public(uint256)
@@ -90,8 +90,8 @@ LEGO_ACCESS_ABI: constant(String[64]) = "toggleOperator(address,address)"
 @deploy
 def __init__(_evaultFactory: address, _earnFactory: address, _addyRegistry: address):
     assert empty(address) not in [_evaultFactory, _earnFactory, _addyRegistry] # dev: invalid addrs
-    EVAULT_FACTORY = _evaultFactory
-    EARN_FACTORY = _earnFactory
+    EULER_EVAULT_FACTORY = _evaultFactory
+    EULER_EARN_FACTORY = _earnFactory
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
@@ -101,7 +101,7 @@ def __init__(_evaultFactory: address, _earnFactory: address, _addyRegistry: addr
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
-    return [EVAULT_FACTORY, EARN_FACTORY]
+    return [EULER_EVAULT_FACTORY, EULER_EARN_FACTORY]
 
 
 @view
@@ -139,7 +139,7 @@ def _isVaultToken(_vaultToken: address) -> bool:
 @view
 @internal
 def _isValidEulerVault(_vaultToken: address) -> bool:
-    return staticcall EulerEvaultFactory(EVAULT_FACTORY).isProxy(_vaultToken) or staticcall EulerEarnFactory(EARN_FACTORY).isValidDeployment(_vaultToken)
+    return staticcall EulerEvaultFactory(EULER_EVAULT_FACTORY).isProxy(_vaultToken) or staticcall EulerEarnFactory(EULER_EARN_FACTORY).isValidDeployment(_vaultToken)
 
 
 @view

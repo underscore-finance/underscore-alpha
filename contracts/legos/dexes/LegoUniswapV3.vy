@@ -198,10 +198,10 @@ event UniswapV3Activated:
 poolSwapData: transient(PoolSwapData)
 
 # uni
-UNISWAP_V3_FACTORY: public(immutable(address))
-UNISWAP_V3_SWAP_ROUTER: public(immutable(address))
-UNI_NFT_POSITION_MANAGER: public(immutable(address))
-UNI_V3_QUOTER: public(immutable(address))
+UNIV3_FACTORY: public(immutable(address))
+UNIV3_SWAP_ROUTER: public(immutable(address))
+UNIV3_NFT_MANAGER: public(immutable(address))
+UNIV3_QUOTER: public(immutable(address))
 
 # config
 legoId: public(uint256)
@@ -222,10 +222,10 @@ MAX_REWARDS_ASSETS: constant(uint256) = 25
 @deploy
 def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _uniNftPositionManager: address, _uniV3Quoter: address, _addyRegistry: address):
     assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry] # dev: invalid addrs
-    UNISWAP_V3_FACTORY = _uniswapV3Factory
-    UNISWAP_V3_SWAP_ROUTER = _uniswapV3SwapRouter
-    UNI_NFT_POSITION_MANAGER = _uniNftPositionManager
-    UNI_V3_QUOTER = _uniV3Quoter
+    UNIV3_FACTORY = _uniswapV3Factory
+    UNIV3_SWAP_ROUTER = _uniswapV3SwapRouter
+    UNIV3_NFT_MANAGER = _uniNftPositionManager
+    UNIV3_QUOTER = _uniV3Quoter
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
@@ -242,7 +242,7 @@ def onERC721Received(_operator: address, _owner: address, _tokenId: uint256, _da
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
-    return [UNISWAP_V3_FACTORY, UNISWAP_V3_SWAP_ROUTER, UNI_NFT_POSITION_MANAGER, UNI_V3_QUOTER]
+    return [UNIV3_FACTORY, UNIV3_SWAP_ROUTER, UNIV3_NFT_MANAGER, UNIV3_QUOTER]
 
 
 @view
@@ -372,7 +372,7 @@ def _swapTokensGeneric(
     na, bestFeeTier = self._getDeepestLiqPool(_tokenIn, _tokenOut)
     assert bestFeeTier != 0 # dev: no pool found
 
-    router: address = UNISWAP_V3_SWAP_ROUTER
+    router: address = UNIV3_SWAP_ROUTER
     assert extcall IERC20(_tokenIn).approve(router, _amountIn, default_return_value=True) # dev: approval failed
     toAmount: uint256 = extcall UniV3SwapRouter(router).exactInputSingle(
         ExactInputSingleParams(
@@ -435,7 +435,7 @@ def addLiquidity(
     liqAmountB: uint256 = min(transferAmountB, staticcall IERC20(_tokenB).balanceOf(self))
 
     # approvals
-    nftPositionManager: address = UNI_NFT_POSITION_MANAGER
+    nftPositionManager: address = UNIV3_NFT_MANAGER
     assert extcall IERC20(_tokenA).approve(nftPositionManager, liqAmountA, default_return_value=True) # dev: approval failed
     assert extcall IERC20(_tokenB).approve(nftPositionManager, liqAmountB, default_return_value=True) # dev: approval failed
 
@@ -618,7 +618,7 @@ def removeLiquidity(
     assert self.isActivated # dev: not activated
 
     # make sure nft is here
-    nftPositionManager: address = UNI_NFT_POSITION_MANAGER
+    nftPositionManager: address = UNIV3_NFT_MANAGER
     assert staticcall IERC721(nftPositionManager).ownerOf(_nftTokenId) == self # dev: nft not here
 
     # get position data
@@ -757,7 +757,7 @@ def getSwapAmountOut(
     sqrtPriceX96After: uint160 = 0
     initializedTicksCrossed: uint32 = 0
     gasEstimate: uint256 = 0
-    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNI_V3_QUOTER).quoteExactInputSingle(
+    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactInputSingle(
         QuoteExactInputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -781,7 +781,7 @@ def getSwapAmountIn(
     sqrtPriceX96After: uint160 = 0
     initializedTicksCrossed: uint32 = 0
     gasEstimate: uint256 = 0
-    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNI_V3_QUOTER).quoteExactOutputSingle(
+    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactOutputSingle(
         QuoteExactOutputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -903,7 +903,7 @@ def _getDeepestLiqPool(_tokenA: address, _tokenB: address) -> (address, uint24):
     bestFeeTier: uint24 = 0
     bestLiquidity: uint128 = 0
 
-    factory: address = UNISWAP_V3_FACTORY
+    factory: address = UNIV3_FACTORY
     for i: uint256 in range(4):
         fee: uint24 = FEE_TIERS[i]
         pool: address = staticcall UniV3Factory(factory).getPool(_tokenA, _tokenB, fee)

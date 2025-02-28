@@ -3,6 +3,7 @@ import boa
 
 from conf_utils import filter_logs
 from conf_tokens import TOKENS
+from utils.BluePrint import ADDYS
 
 from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MONTH_IN_SECONDS, HOUR_IN_SECONDS
 
@@ -45,8 +46,12 @@ def chainlink_mock_feed():
 
 
 @pytest.fixture(scope="module")
-def new_chainlink(addy_registry, fork):
-    return boa.load("contracts/oracles/ChainlinkFeeds.vy", addy_registry, fork == "base", name="new_chainlink")
+def new_chainlink(addy_registry, fork, weth):
+    ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" if fork == "local" else ADDYS[fork]["ETH"]
+    BTC = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB" if fork == "local" else ADDYS[fork]["BTC"]
+    CHAINLINK_ETH_USD = ZERO_ADDRESS if fork == "local" else ADDYS[fork]["CHAINLINK_ETH_USD"]
+    CHAINLINK_BTC_USD = ZERO_ADDRESS if fork == "local" else ADDYS[fork]["CHAINLINK_BTC_USD"]
+    return boa.load("contracts/oracles/ChainlinkFeeds.vy", weth, ETH, BTC, CHAINLINK_ETH_USD, CHAINLINK_BTC_USD, addy_registry)
 
 
 ###################

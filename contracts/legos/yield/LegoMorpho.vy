@@ -68,8 +68,8 @@ event MorphoActivated:
 
 # morpho
 morphoRewards: public(address)
-META_MORPHO_FACTORY: public(immutable(address))
-META_MORPHO_FACTORY_LEGACY: public(immutable(address))
+MORPHO_FACTORY: public(immutable(address))
+MORPHO_FACTORY_LEGACY: public(immutable(address))
 
 # config
 legoId: public(uint256)
@@ -82,8 +82,8 @@ MAX_ASSETS: constant(uint256) = 25
 @deploy
 def __init__(_morphoFactory: address, _morphoFactoryLegacy: address, _addyRegistry: address):
     assert empty(address) not in [_morphoFactory, _morphoFactoryLegacy, _addyRegistry] # dev: invalid addrs
-    META_MORPHO_FACTORY = _morphoFactory
-    META_MORPHO_FACTORY_LEGACY = _morphoFactoryLegacy
+    MORPHO_FACTORY = _morphoFactory
+    MORPHO_FACTORY_LEGACY = _morphoFactoryLegacy
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
@@ -93,7 +93,7 @@ def __init__(_morphoFactory: address, _morphoFactoryLegacy: address, _addyRegist
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
-    return [META_MORPHO_FACTORY, META_MORPHO_FACTORY_LEGACY]
+    return [MORPHO_FACTORY, MORPHO_FACTORY_LEGACY]
 
 
 @view
@@ -127,7 +127,7 @@ def _isVaultToken(_vaultToken: address) -> bool:
 @view
 @internal
 def _isValidMorphoVault(_vaultToken: address) -> bool:
-    return staticcall MetaMorphoFactory(META_MORPHO_FACTORY).isMetaMorpho(_vaultToken) or staticcall MetaMorphoFactory(META_MORPHO_FACTORY_LEGACY).isMetaMorpho(_vaultToken)
+    return staticcall MetaMorphoFactory(MORPHO_FACTORY).isMetaMorpho(_vaultToken) or staticcall MetaMorphoFactory(MORPHO_FACTORY_LEGACY).isMetaMorpho(_vaultToken)
 
 
 @view

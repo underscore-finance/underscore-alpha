@@ -4,15 +4,13 @@ import pytest
 from constants import ZERO_ADDRESS, MONTH_IN_SECONDS
 from conf_utils import filter_logs
 from conf_tokens import TOKENS
+from utils.BluePrint import ADDYS
 
 
 @pytest.fixture(scope="session")
 def new_oracle_pyth(addy_registry, mock_pyth, fork):
-    if fork == "base":
-        pyth = "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a"
-    else:
-        pyth = mock_pyth
-    return boa.load("contracts/oracles/PythFeeds.vy", addy_registry, pyth, name="new_oracle_pyth")
+    PYTH_NETWORK = mock_pyth if fork == "local" else ADDYS[fork]["PYTH_NETWORK"]
+    return boa.load("contracts/oracles/PythFeeds.vy", PYTH_NETWORK, addy_registry, name="new_oracle_pyth")
 
 
 ##############

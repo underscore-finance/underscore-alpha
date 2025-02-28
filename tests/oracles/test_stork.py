@@ -4,15 +4,13 @@ import pytest
 from constants import ZERO_ADDRESS, MONTH_IN_SECONDS
 from conf_utils import filter_logs
 from conf_tokens import TOKENS
+from utils.BluePrint import ADDYS
 
 
 @pytest.fixture(scope="session")
 def new_oracle_stork(addy_registry, mock_stork, fork):
-    if fork == "base":
-        stork = "0x647DFd812BC1e116c6992CB2bC353b2112176fD6"
-    else:
-        stork = mock_stork
-    return boa.load("contracts/oracles/StorkFeeds.vy", addy_registry, stork, name="new_oracle_stork")
+    STORK_NETWORK = mock_stork if fork == "local" else ADDYS[fork]["STORK_NETWORK"]
+    return boa.load("contracts/oracles/StorkFeeds.vy", STORK_NETWORK, addy_registry, name="new_oracle_stork")
 
 
 ###############
