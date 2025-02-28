@@ -61,10 +61,11 @@ event FluidActivated:
 # config
 legoId: public(uint256)
 isActivated: public(bool)
-FLUID_RESOLVER: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
+FLUID_RESOLVER: public(immutable(address))
 MAX_FTOKENS: constant(uint256) = 50
+MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -301,6 +302,28 @@ def withdrawTokens(
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
     log FluidWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, usdValue, vaultTokenAmount, _recipient)
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
+
+
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+):
+    pass
+
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    return False
 
 
 ##################

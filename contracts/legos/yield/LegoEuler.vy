@@ -67,9 +67,11 @@ event EulerActivated:
 # config
 legoId: public(uint256)
 isActivated: public(bool)
+ADDY_REGISTRY: public(immutable(address))
+
 EVAULT_FACTORY: public(immutable(address))
 EARN_FACTORY: public(immutable(address))
-ADDY_REGISTRY: public(immutable(address))
+MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -308,6 +310,30 @@ def withdrawTokens(
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
     log EulerWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, usdValue, vaultTokenAmount, _recipient)
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
+
+
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+):
+    # TODO: implement
+    pass
+
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    # TODO: implement
+    return False
 
 
 ##################
