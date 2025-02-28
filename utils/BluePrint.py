@@ -38,3 +38,41 @@ ADDYS = {
         "BTC": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
     },
 }
+
+
+PARAMS = {
+    "base": {
+        # user wallet config (blocks)
+        "USER_MIN_OWNER_CHANGE_DELAY": 21_600, # 12 hours on Base
+        "USER_MAX_OWNER_CHANGE_DELAY": 302_400, # 7 days on Base
+        # agent wallet config (blocks)
+        "AGENT_MIN_OWNER_CHANGE_DELAY": 21_600, # 12 hours on Base
+        "AGENT_MAX_OWNER_CHANGE_DELAY": 302_400, # 7 days on Base
+        # price sheets (blocks)
+        "PRICES_MIN_TRIAL_PERIOD": 43_200, # 1 day on Base
+        "PRICES_MAX_TRIAL_PERIOD": 1_296_000, # 1 month on Base
+        "PRICES_MIN_PAY_PERIOD": 302_400, # 7 days on Base
+        "PRICES_MAX_PAY_PERIOD": 3_900_000, # 3 months on Base
+        "PRICES_MIN_PRICE_CHANGE_BUFFER": 43_200, # 1 day on Base
+        # oracle registry (timestamps, not blocks!)
+        "ORACLE_REGISTRY_MIN_STALE_TIME": 60 * 5, # 5 mins
+        "ORACLE_REGISTRY_MAX_STALE_TIME": 60 * 60 * 24 * 3, # 3 days
+    },
+    "local": {
+        # user wallet config (blocks)
+        "USER_MIN_OWNER_CHANGE_DELAY": 21_600,
+        "USER_MAX_OWNER_CHANGE_DELAY": 302_400,
+        # agent wallet config (blocks)
+        "AGENT_MIN_OWNER_CHANGE_DELAY": 21_600,
+        "AGENT_MAX_OWNER_CHANGE_DELAY": 302_400,
+        # price sheets (blocks)
+        "PRICES_MIN_TRIAL_PERIOD": 43_200,
+        "PRICES_MAX_TRIAL_PERIOD": 1_296_000,
+        "PRICES_MIN_PAY_PERIOD": 302_400,
+        "PRICES_MAX_PAY_PERIOD": 3_900_000,
+        "PRICES_MIN_PRICE_CHANGE_BUFFER": 43_200,
+        # oracle registry (timestamps, not blocks!)
+        "ORACLE_REGISTRY_MIN_STALE_TIME": 60 * 5,
+        "ORACLE_REGISTRY_MAX_STALE_TIME": 60 * 60 * 24 * 3,
+    },
+}

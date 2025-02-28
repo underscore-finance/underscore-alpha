@@ -191,25 +191,40 @@ priceChangeDelay: public(uint256) # number of blocks that must pass before price
 ADDY_REGISTRY: public(immutable(address))
 isActivated: public(bool)
 
+# registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
+MIN_TRIAL_PERIOD: public(immutable(uint256))
+MAX_TRIAL_PERIOD: public(immutable(uint256))
+MIN_PAY_PERIOD: public(immutable(uint256))
+MAX_PAY_PERIOD: public(immutable(uint256))
+MIN_PRICE_CHANGE_BUFFER: public(immutable(uint256))
+
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 MAX_TX_FEE: constant(uint256) = 10_00 # 10.00%
-MIN_TRIAL_PERIOD: constant(uint256) = 43_200 # 1 day on Base (2 seconds per block)
-MAX_TRIAL_PERIOD: constant(uint256) = 1_296_000 # 1 month on Base (2 seconds per block)
-MIN_PAY_PERIOD: constant(uint256) = 302_400 # 7 days on Base (2 seconds per block)
-MAX_PAY_PERIOD: constant(uint256) = 3_900_000 # 3 months on Base (2 seconds per block)
-MIN_PRICE_CHANGE_BUFFER: constant(uint256) = 43_200 # 1 day on Base (2 seconds per block)
 
 
 @deploy
-def __init__(_addyRegistry: address):
+def __init__(
+    _minTrialPeriod: uint256,
+    _maxTrialPeriod: uint256,
+    _minPayPeriod: uint256,
+    _maxPayPeriod: uint256,
+    _minPriceChangeBuffer: uint256,
+    _addyRegistry: address,
+):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
     gov.__init__(_addyRegistry)
-    ADDY_REGISTRY = _addyRegistry
     self.protocolRecipient = staticcall AddyRegistry(_addyRegistry).governor()
     self.isActivated = True
+
+    ADDY_REGISTRY = _addyRegistry
+    MIN_TRIAL_PERIOD = _minTrialPeriod
+    MAX_TRIAL_PERIOD = _maxTrialPeriod
+    MIN_PAY_PERIOD = _minPayPeriod
+    MAX_PAY_PERIOD = _maxPayPeriod
+    MIN_PRICE_CHANGE_BUFFER = _minPriceChangeBuffer
 
 
 @view

@@ -2,6 +2,7 @@ import pytest
 import boa
 
 from constants import MAX_UINT256
+from utils.BluePrint import PARAMS, ADDYS
 
 
 # core
@@ -35,13 +36,30 @@ def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_conf
 
 
 @pytest.fixture(scope="session")
-def price_sheets(addy_registry_deploy):
-    return boa.load("contracts/core/PriceSheets.vy", addy_registry_deploy, name="price_sheets")
+def price_sheets(addy_registry_deploy, fork):
+    return boa.load(
+        "contracts/core/PriceSheets.vy",
+        PARAMS[fork]["PRICES_MIN_TRIAL_PERIOD"],
+        PARAMS[fork]["PRICES_MAX_TRIAL_PERIOD"],
+        PARAMS[fork]["PRICES_MIN_PAY_PERIOD"],
+        PARAMS[fork]["PRICES_MAX_PAY_PERIOD"],
+        PARAMS[fork]["PRICES_MIN_PRICE_CHANGE_BUFFER"],
+        addy_registry_deploy,
+        name="price_sheets",
+    )
 
 
 @pytest.fixture(scope="session")
-def oracle_registry(addy_registry_deploy):
-    return boa.load("contracts/core/OracleRegistry.vy", addy_registry_deploy, name="oracle_registry")
+def oracle_registry(addy_registry_deploy, fork):
+    ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" if fork == "local" else ADDYS[fork]["ETH"]
+    return boa.load(
+        "contracts/core/OracleRegistry.vy",
+        ETH,
+        PARAMS[fork]["ORACLE_REGISTRY_MIN_STALE_TIME"],
+        PARAMS[fork]["ORACLE_REGISTRY_MAX_STALE_TIME"],
+        addy_registry_deploy,
+        name="oracle_registry",
+    )
 
 
 # other
@@ -53,13 +71,13 @@ def wallet_funds_template():
 
 
 @pytest.fixture(scope="session")
-def wallet_config_template():
-    return boa.load("contracts/core/WalletConfig.vy", name="wallet_config_template")
+def wallet_config_template(fork):
+    return boa.load("contracts/core/WalletConfig.vy", PARAMS[fork]["USER_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["USER_MAX_OWNER_CHANGE_DELAY"], name="wallet_config_template")
 
 
 @pytest.fixture(scope="session")
-def agent_template():
-    return boa.load("contracts/core/AgentTemplate.vy", name="agent_template")
+def agent_template(fork):
+    return boa.load("contracts/core/AgentTemplate.vy", PARAMS[fork]["AGENT_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["AGENT_MAX_OWNER_CHANGE_DELAY"], name="agent_template")
 
 
 @pytest.fixture(scope="session")

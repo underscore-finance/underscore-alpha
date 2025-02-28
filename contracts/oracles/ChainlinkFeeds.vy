@@ -47,9 +47,9 @@ oraclePartnerId: public(uint256)
 ADDY_REGISTRY: public(immutable(address))
 
 # default assets
-WETH: immutable(address)
-ETH: immutable(address)
-BTC: immutable(address)
+WETH: public(immutable(address))
+ETH: public(immutable(address))
+BTC: public(immutable(address))
 
 NORMALIZED_DECIMALS: constant(uint256) = 18
 

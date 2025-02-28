@@ -49,16 +49,21 @@ staleTime: public(uint256)
 # config
 ADDY_REGISTRY: public(immutable(address))
 
-ETH: constant(address) = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+ETH: public(immutable(address))
+MIN_STALE_TIME: public(immutable(uint256))
+MAX_STALE_TIME: public(immutable(uint256))
+
 MAX_PRIORITY_PARTNERS: constant(uint256) = 10
-MIN_STALE_TIME: constant(uint256) = 60 * 5 # 5 minutes
-MAX_STALE_TIME: constant(uint256) = 60 * 60 * 24 * 3 # 3 days
 
 
 @deploy
-def __init__(_addyRegistry: address):
-    assert _addyRegistry != empty(address) # dev: invalid addy registry
+def __init__(_ethAddr: address, _minStaleTime: uint256, _maxStaleTime: uint256, _addyRegistry: address):
+    assert empty(address) not in [_ethAddr, _addyRegistry] # dev: invalid addy registry
     gov.__init__(_addyRegistry)
+
+    ETH = _ethAddr
+    MIN_STALE_TIME = _minStaleTime
+    MAX_STALE_TIME = _maxStaleTime
     ADDY_REGISTRY = _addyRegistry
 
     # start at 1 index

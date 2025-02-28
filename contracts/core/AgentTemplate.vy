@@ -87,15 +87,19 @@ TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,ui
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
 WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
 
-MIN_OWNER_CHANGE_DELAY: constant(uint256) = 21_600 # 12 hours on Base (2 seconds per block)
-MAX_OWNER_CHANGE_DELAY: constant(uint256) = 302_400 # 7 days on Base (2 seconds per block)
+MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
+MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
+
 MAX_INSTRUCTIONS: constant(uint256) = 20
 
 API_VERSION: constant(String[28]) = "0.0.1"
 
 
 @deploy
-def __init__():
+def __init__(_minOwnerChangeDelay: uint256, _maxOwnerChangeDelay: uint256):
+    MIN_OWNER_CHANGE_DELAY = _minOwnerChangeDelay
+    MAX_OWNER_CHANGE_DELAY = _maxOwnerChangeDelay
+
     # make sure original reference contract can't be initialized
     self.initialized = True
 

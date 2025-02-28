@@ -191,16 +191,19 @@ LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
-MIN_OWNER_CHANGE_DELAY: constant(uint256) = 21_600 # 12 hours on Base (2 seconds per block)
-MAX_OWNER_CHANGE_DELAY: constant(uint256) = 302_400 # 7 days on Base (2 seconds per block)
+MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
+MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
+
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
-
 API_VERSION: constant(String[28]) = "0.0.1"
 
 
 @deploy
-def __init__():
+def __init__(_minOwnerChangeDelay: uint256, _maxOwnerChangeDelay: uint256):
+    MIN_OWNER_CHANGE_DELAY = _minOwnerChangeDelay
+    MAX_OWNER_CHANGE_DELAY = _maxOwnerChangeDelay
+
     # make sure original reference contract can't be initialized
     self.initialized = True
 
