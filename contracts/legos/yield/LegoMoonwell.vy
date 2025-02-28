@@ -23,14 +23,29 @@ interface CompoundV2:
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
-interface CompoundV2Comptroller:
+interface MoonwellComptroller:
     def getAllMarkets() -> DynArray[address, MAX_MARKETS]: view
+    def claimReward(_holder: address): nonpayable
+    def rewardDistributor() -> address: view
+
+interface MoonwellRewardDistributor:
+    def getOutstandingRewardsForUser(_user: address) -> DynArray[RewardWithMToken, MAX_MARKETS]: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
 interface WethContract:
     def deposit(): payable
+
+struct RewardWithMToken:
+    mToken: address
+    rewards: DynArray[RewardInfo, MAX_ASSETS]
+
+struct RewardInfo:
+    emissionToken: address
+    totalAmount: uint256
+    supplySide: uint256
+    borrowSide: uint256
 
 event MoonwellDeposit:
     sender: indexed(address)
@@ -69,6 +84,7 @@ WETH: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
 MAX_MARKETS: constant(uint256) = 50
+MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -119,7 +135,7 @@ def _isVaultToken(_vaultToken: address) -> bool:
 @view
 @internal
 def _isValidCToken(_cToken: address) -> bool:
-    compMarkets: DynArray[address, MAX_MARKETS] = staticcall CompoundV2Comptroller(MOONWELL_COMPTROLLER).getAllMarkets()
+    compMarkets: DynArray[address, MAX_MARKETS] = staticcall MoonwellComptroller(MOONWELL_COMPTROLLER).getAllMarkets()
     return _cToken in compMarkets
 
 
@@ -327,6 +343,35 @@ def withdrawTokens(
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
     log MoonwellWithdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, usdValue, vaultTokenAmount, _recipient)
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
+
+
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+):
+    extcall MoonwellComptroller(MOONWELL_COMPTROLLER).claimReward(_user)
+
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    rewardDistributor: address = staticcall MoonwellComptroller(MOONWELL_COMPTROLLER).rewardDistributor()
+    rewardsWithMToken: DynArray[RewardWithMToken, MAX_MARKETS] = staticcall MoonwellRewardDistributor(rewardDistributor).getOutstandingRewardsForUser(_user)
+    for i: uint256 in range(len(rewardsWithMToken), bound=MAX_MARKETS):
+        rewardsInfo: DynArray[RewardInfo, MAX_ASSETS] = rewardsWithMToken[i].rewards
+        for j: uint256 in range(len(rewardsInfo), bound=MAX_ASSETS):
+            if rewardsInfo[j].totalAmount > 0:
+                return True
+    return False
 
 
 ##################

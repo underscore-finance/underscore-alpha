@@ -998,6 +998,34 @@ def convertWethToEth(
 
 
 #################
+# Claim Rewards #
+#################
+
+
+@nonreentrant
+@external
+def claimRewards(
+    _legoId: uint256,
+    _markets: DynArray[address, MAX_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+):
+    """
+    @notice Claims rewards from a lego integration
+    @param _legoId The lego ID to claim rewards from
+    @param _markets The markets to claim rewards from
+    @param _rewardTokens The reward tokens to claim
+    @param _rewardAmounts The reward amounts to claim
+    @param _proofs The proofs to claim rewards from
+    """
+    cd: CoreData = self._getCoreData()
+    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
+    assert legoAddr != empty(address) # dev: invalid lego
+    extcall LegoYield(legoAddr).claimRewards(self, _markets, _rewardTokens, _rewardAmounts, _proofs)
+
+
+#################
 # Batch Actions #
 #################
 

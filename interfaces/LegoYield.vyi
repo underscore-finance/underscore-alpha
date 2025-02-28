@@ -65,6 +65,16 @@ def totalAssets(_vaultToken: address) -> uint256:
 def totalBorrows(_vaultToken: address) -> uint256:
     ...
 
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, 25] = [],
+    _rewardTokens: DynArray[address, 25] = [],
+    _rewardAmounts: DynArray[uint256, 25] = [],
+    _proofs: DynArray[bytes32, 25] = [],
+):
+    ...
+
 # config
 
 @external

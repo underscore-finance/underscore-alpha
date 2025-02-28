@@ -25,6 +25,9 @@ interface AToken:
     def UNDERLYING_ASSET_ADDRESS() -> address: view
     def totalSupply() -> uint256: view
 
+interface AaveV3AddressProvider:
+    def getPoolDataProvider() -> address: view
+
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
@@ -68,17 +71,18 @@ event AaveV3Activated:
 legoId: public(uint256)
 isActivated: public(bool)
 AAVE_V3_POOL: public(immutable(address))
-AAVE_V3_DATA_PROVIDER: public(immutable(address))
+AAVE_V3_ADDRESS_PROVIDER: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
 
 MAX_ATOKENS: constant(uint256) = 40
+MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
-def __init__(_aaveV3: address, _aaveV3DataProvider: address, _addyRegistry: address):
-    assert empty(address) not in [_aaveV3, _aaveV3DataProvider, _addyRegistry] # dev: invalid addrs
+def __init__(_aaveV3: address, _addressProvider: address, _addyRegistry: address):
+    assert empty(address) not in [_aaveV3, _addressProvider, _addyRegistry] # dev: invalid addrs
     AAVE_V3_POOL = _aaveV3
-    AAVE_V3_DATA_PROVIDER = _aaveV3DataProvider
+    AAVE_V3_ADDRESS_PROVIDER = _addressProvider
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
     gov.__init__(_addyRegistry)
@@ -88,7 +92,13 @@ def __init__(_aaveV3: address, _aaveV3DataProvider: address, _addyRegistry: addr
 @view
 @external
 def getRegistries() -> DynArray[address, 10]:
-    return [AAVE_V3_POOL, AAVE_V3_DATA_PROVIDER]
+    return [AAVE_V3_POOL, AAVE_V3_ADDRESS_PROVIDER]
+
+
+@view
+@internal
+def _getPoolDataProvider() -> address:
+    return staticcall AaveV3AddressProvider(AAVE_V3_ADDRESS_PROVIDER).getPoolDataProvider()
 
 
 #############
@@ -110,7 +120,7 @@ def isVaultToken(_vaultToken: address) -> bool:
 def _isVaultToken(_vaultToken: address) -> bool:
     if yld.vaultToAsset[_vaultToken] != empty(address):
         return True
-    return self._isValidAToken(_vaultToken, AAVE_V3_DATA_PROVIDER)
+    return self._isValidAToken(_vaultToken, self._getPoolDataProvider())
 
 
 @view
@@ -126,7 +136,7 @@ def _isValidAToken(_aToken: address, _dataProvider: address) -> bool:
 @view
 @external
 def getUnderlyingAsset(_vaultToken: address) -> address:
-    return self._getUnderlyingAsset(_vaultToken, AAVE_V3_DATA_PROVIDER)
+    return self._getUnderlyingAsset(_vaultToken, self._getPoolDataProvider())
 
 
 @view
@@ -198,7 +208,7 @@ def getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleR
 def _getUnderlyingData(_vaultToken: address, _vaultTokenAmount: uint256, _oracleRegistry: address) -> (address, uint256, uint256):
     if _vaultTokenAmount == 0 or _vaultToken == empty(address):
         return empty(address), 0, 0 # bad inputs
-    asset: address = self._getUnderlyingAsset(_vaultToken, AAVE_V3_DATA_PROVIDER)
+    asset: address = self._getUnderlyingAsset(_vaultToken, self._getPoolDataProvider())
     if asset == empty(address):
         return empty(address), 0, 0 # invalid vault token
     underlyingAmount: uint256 = self._getUnderlyingAmount(_vaultToken, _vaultTokenAmount)
@@ -229,7 +239,7 @@ def totalAssets(_vaultToken: address) -> uint256:
 @view
 @external
 def totalBorrows(_vaultToken: address) -> uint256:
-    dataProvider: address = AAVE_V3_DATA_PROVIDER
+    dataProvider: address = self._getPoolDataProvider()
     asset: address = self._getUnderlyingAsset(_vaultToken, dataProvider)
     if asset == empty(address):
         return 0 # invalid vault token
@@ -339,6 +349,30 @@ def withdrawTokens(
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
 
 
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+):
+    # Aave has no rewards on Base
+    pass
+
+
+@view
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    # Aave has no rewards on Base
+    return False
+
+
 ##################
 # Asset Registry #
 ##################
@@ -352,7 +386,8 @@ def addAssetOpportunity(_asset: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     # specific to lego
-    vaultToken: address = (staticcall AaveProtocolDataProvider(AAVE_V3_DATA_PROVIDER).getReserveTokensAddresses(_asset))[0]
+    dataProvider: address = self._getPoolDataProvider()
+    vaultToken: address = (staticcall AaveProtocolDataProvider(dataProvider).getReserveTokensAddresses(_asset))[0]
     assert vaultToken != empty(address) # dev: invalid asset
     assert extcall IERC20(_asset).approve(AAVE_V3_POOL, max_value(uint256), default_return_value=True) # dev: max approval failed
 

@@ -19,6 +19,10 @@ interface CompoundV3:
     def totalBorrow() -> uint256: view
     def baseToken() -> address: view
 
+interface CompoundV3Rewards:
+    def getRewardOwed(_comet: address, _user: address) -> RewardOwed: nonpayable
+    def claim(_comet: address, _user: address, _shouldAccrue: bool): nonpayable
+
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
@@ -27,6 +31,10 @@ interface CompoundV3Configurator:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
+
+struct RewardOwed:
+    token: address
+    owed: uint256
 
 event CompoundV3Deposit:
     sender: indexed(address)
@@ -51,17 +59,25 @@ event FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
+event CompoundV3RewardsAddrSet:
+    addr: address
+
 event CompoundV3LegoIdSet:
     legoId: uint256
 
 event CompoundV3Activated:
     isActivated: bool
 
+compoundRewards: public(address)
+
+COMPOUND_V3_CONFIGURATOR: public(immutable(address))
+
 # config
 legoId: public(uint256)
 isActivated: public(bool)
-COMPOUND_V3_CONFIGURATOR: public(immutable(address))
 ADDY_REGISTRY: public(immutable(address))
+
+MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -310,6 +326,50 @@ def withdrawTokens(
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
 
 
+#################
+# Claim Rewards #
+#################
+
+
+@external
+def claimRewards(
+    _user: address,
+    _markets: DynArray[address, MAX_ASSETS] = [],
+    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
+    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
+    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+):
+    self._hasClaimableOrShouldClaim(_user, True)
+
+
+# sadly, this is not a view function
+@external
+def hasClaimableRewards(_user: address) -> bool:
+    return self._hasClaimableOrShouldClaim(_user, False)
+
+
+@internal
+def _hasClaimableOrShouldClaim(_user: address, _shouldClaim: bool) -> bool:
+    compRewards: address = self.compoundRewards
+    assert compRewards != empty(address) # dev: no comp rewards
+
+    hasClaimable: bool = False
+    numAssets: uint256 = yld.numAssets
+    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
+        asset: address = yld.assets[i]
+        comet: address = yld.assetOpportunities[asset][1] # only a single "vault token" (comet) per asset
+
+        rewardOwed: RewardOwed = extcall CompoundV3Rewards(compRewards).getRewardOwed(comet, _user)
+        if rewardOwed.owed != 0:
+            hasClaimable = True
+            if _shouldClaim:
+                extcall CompoundV3Rewards(compRewards).claim(comet, _user, True)
+            else:
+                break
+
+    return hasClaimable
+
+
 ##################
 # Asset Registry #
 ##################
@@ -336,6 +396,20 @@ def removeAssetOpportunity(_asset: address, _vault: address) -> bool:
 
     yld._removeAssetOpportunity(_asset, _vault)
     assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
+    return True
+
+
+################
+# Comp Rewards #
+################
+
+
+@external
+def setCompRewardsAddr(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert _addr != empty(address) # dev: invalid addr
+    self.compoundRewards = _addr
+    log CompoundV3RewardsAddrSet(_addr)
     return True
 
 
