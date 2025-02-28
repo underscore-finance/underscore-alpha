@@ -20,6 +20,9 @@ interface Erc4626Interface:
     def totalAssets() -> uint256: view
     def asset() -> address: view
 
+interface MorphoRewardsDistributor:
+    def claim(_user: address, _rewardToken: address, _claimable: uint256, _proof: bytes32) -> uint256: nonpayable
+
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
@@ -47,6 +50,9 @@ event MorphoWithdrawal:
     vaultTokenAmountBurned: uint256
     recipient: address
 
+event MorphoRewardsAddrSet:
+    addr: address
+
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -57,6 +63,8 @@ event MorphoLegoIdSet:
 
 event MorphoActivated:
     isActivated: bool
+
+morphoRewards: public(address)
 
 # config
 legoId: public(uint256)
@@ -317,15 +325,31 @@ def claimRewards(
     _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
     _proofs: DynArray[bytes32, MAX_ASSETS] = [],
 ):
-    # TODO: implement
-    pass
+    morphoRewards: address = self.morphoRewards
+    assert morphoRewards != empty(address) # dev: no morpho rewards addr set
+
+    # claim rewards
+    for i: uint256 in range(len(_markets), bound=MAX_ASSETS):
+        rewardToken: address = _rewardTokens[i]
+        claimable: uint256 = _rewardAmounts[i]
+        proof: bytes32 = _proofs[i]
+        extcall MorphoRewardsDistributor(morphoRewards).claim(_user, rewardToken, claimable, proof)
 
 
 @view
 @external
 def hasClaimableRewards(_user: address) -> bool:
-    # TODO: implement
+    # as far as we can tell, this must be done offchain
     return False
+
+
+@external
+def setMorphoRewardsAddr(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert _addr != empty(address) # dev: invalid addr
+    self.morphoRewards = _addr
+    log MorphoRewardsAddrSet(_addr)
+    return True
 
 
 ##################

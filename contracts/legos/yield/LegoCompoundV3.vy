@@ -339,7 +339,13 @@ def claimRewards(
     _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
     _proofs: DynArray[bytes32, MAX_ASSETS] = [],
 ):
-    self._hasClaimableOrShouldClaim(_user, True)
+    if len(_markets) != 0:
+        compRewards: address = self.compoundRewards
+        assert compRewards != empty(address) # dev: no comp rewards addr set
+        for i: uint256 in range(len(_markets), bound=MAX_ASSETS):
+            extcall CompoundV3Rewards(compRewards).claim(_markets[i], _user, True)
+    else:
+        self._hasClaimableOrShouldClaim(_user, True)
 
 
 # sadly, this is not a view function
@@ -370,6 +376,15 @@ def _hasClaimableOrShouldClaim(_user: address, _shouldClaim: bool) -> bool:
     return hasClaimable
 
 
+@external
+def setCompRewardsAddr(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert _addr != empty(address) # dev: invalid addr
+    self.compoundRewards = _addr
+    log CompoundV3RewardsAddrSet(_addr)
+    return True
+
+
 ##################
 # Asset Registry #
 ##################
@@ -396,20 +411,6 @@ def removeAssetOpportunity(_asset: address, _vault: address) -> bool:
 
     yld._removeAssetOpportunity(_asset, _vault)
     assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
-    return True
-
-
-################
-# Comp Rewards #
-################
-
-
-@external
-def setCompRewardsAddr(_addr: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
-    assert _addr != empty(address) # dev: invalid addr
-    self.compoundRewards = _addr
-    log CompoundV3RewardsAddrSet(_addr)
     return True
 
 
