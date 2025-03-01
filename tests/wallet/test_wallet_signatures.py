@@ -194,6 +194,7 @@ def test_convert_eth_to_weth_with_signature(special_ai_wallet, special_agent, br
     assert log.isSignerAgent
 
 
+@pytest.base
 def test_weth_to_eth_with_signature(special_ai_wallet, getTokenAndWhale, special_agent, broadcaster, signWethToEth):
     weth, weth_token_whale = getTokenAndWhale("weth")
     weth_amount = 1 * EIGHTEEN_DECIMALS
@@ -243,33 +244,6 @@ def test_remove_liquidity_with_signature(special_ai_wallet, special_agent, bravo
     log = filter_logs(special_agent, "UserWalletLiquidityRemoved")[0]
     assert log.signer == special_agent.address
     assert log.isSignerAgent
-
-
-# def test_batch_actions_with_signature(special_ai_wallet, special_agent, createActionInstruction, mock_lego_alpha, alpha_token, alpha_token_whale, broadcaster, alpha_token_erc4626_vault, signBatchAction):
-#     lego_id = mock_lego_alpha.legoId()
-#     amount = 1_000 * EIGHTEEN_DECIMALS
-#     alpha_token.transfer(special_ai_wallet, amount, sender=alpha_token_whale)
-
-#     # create instructions
-#     instructions = [
-#         createActionInstruction(DEPOSIT_UINT256, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, amount),
-#         createActionInstruction(WITHDRAWAL_UINT256, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, amount),
-#     ]
-
-#     # signature
-#     signature = signBatchAction(special_agent, special_ai_wallet, instructions)
-
-#     # batch actions
-#     special_agent.performBatchActions(special_ai_wallet, instructions, signature, sender=broadcaster)
-
-#     log1 = filter_logs(special_agent, "UserWalletDeposit")[0]
-#     log2 = filter_logs(special_agent, "UserWalletWithdrawal")[0]
-
-#     assert log1.signer == special_agent.address
-#     assert log1.isSignerAgent
-
-#     assert log2.signer == special_agent.address
-#     assert log2.isSignerAgent
 
 
 def test_signature_expiration_and_reuse(special_agent, special_ai_wallet, mock_lego_alpha, alpha_token, alpha_token_erc4626_vault, alpha_token_whale, broadcaster, signDeposit):
@@ -335,3 +309,30 @@ def test_signature_expiration_and_reuse(special_agent, special_ai_wallet, mock_l
             valid_signature, 
             sender=broadcaster
         )
+
+
+def test_batch_actions_with_signature(special_ai_wallet, special_agent, createActionInstruction, mock_lego_alpha, alpha_token, alpha_token_whale, broadcaster, alpha_token_erc4626_vault, signBatchAction):
+    lego_id = mock_lego_alpha.legoId()
+    amount = 1_000 * EIGHTEEN_DECIMALS
+    alpha_token.transfer(special_ai_wallet, amount, sender=alpha_token_whale)
+
+    # create instructions
+    instructions = [
+        createActionInstruction(DEPOSIT_UINT256, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, amount),
+        createActionInstruction(WITHDRAWAL_UINT256, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, amount),
+    ]
+
+    # signature
+    signature = signBatchAction(special_agent, special_ai_wallet, instructions)
+
+    # batch actions
+    special_agent.performBatchActions(special_ai_wallet, instructions, signature, sender=broadcaster)
+
+    log1 = filter_logs(special_agent, "UserWalletDeposit")[0]
+    log2 = filter_logs(special_agent, "UserWalletWithdrawal")[0]
+
+    assert log1.signer == special_agent.address
+    assert log1.isSignerAgent
+
+    assert log2.signer == special_agent.address
+    assert log2.isSignerAgent
