@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from constants import MAX_UINT256
-from utils.BluePrint import PARAMS, ADDYS
+from utils.BluePrint import PARAMS, ADDYS, CORE_TOKENS
 
 
 # core
@@ -97,10 +97,21 @@ def lego_helper(
     lego_aerodrome_slipstream,
     lego_curve,
     governor,
+    fork,
+    alpha_token,
+    mock_weth,
 ):
+    usdc = alpha_token
+    weth = mock_weth
+    if fork != "local":
+        usdc = CORE_TOKENS[fork]["USDC"]
+        weth = CORE_TOKENS[fork]["WETH"]
+
     h = boa.load(
         "contracts/core/LegoHelper.vy",
         addy_registry,
+        usdc,
+        weth,
         lego_aave_v3.legoId(),
         lego_compound_v3.legoId(),
         lego_euler.legoId(),
