@@ -155,8 +155,8 @@ def test_euler_operator_access(
     # no acccess
     assert not euler_rewards.operators(bob_ai_wallet.address, lego_euler.address)
 
-    # claim rewards, will only set access (no rewards tokens given)
-    bob_ai_wallet.claimRewards(lego_euler.legoId(), [], [], [], sender=bob)
+    # claim rewards, will only set access (no reward token given)
+    bob_ai_wallet.claimRewards(lego_euler.legoId(), sender=bob)
 
     # has access
     assert euler_rewards.operators(bob_ai_wallet.address, lego_euler.address)
