@@ -3,31 +3,32 @@ import boa
 
 from constants import ZERO_ADDRESS
 from conf_tokens import TEST_AMOUNTS, TOKENS
+from utils.BluePrint import YIELD_TOKENS
 
 
 VAULT_TOKENS = {
     "usdc": {
-        "base": "0xedc817a28e8b93b03976fbd4a3ddbc9f7d176c22",
+        "base": YIELD_TOKENS["base"]["MOONWELL_USDC"],
         "local": ZERO_ADDRESS,
     },
     "weth": {
-        "base": "0x628ff693426583D9a7FB391E54366292F509D457",
+        "base": YIELD_TOKENS["base"]["MOONWELL_WETH"],
         "local": ZERO_ADDRESS,
     },
     "cbbtc": {
-        "base": "0xF877ACaFA28c19b96727966690b2f44d35aD5976",
+        "base": YIELD_TOKENS["base"]["MOONWELL_CBBTC"],
         "local": ZERO_ADDRESS,
     },
     "wsteth": {
-        "base": "0x627fe393bc6edda28e99ae648fd6ff362514304b",
+        "base": YIELD_TOKENS["base"]["MOONWELL_WSTETH"],
         "local": ZERO_ADDRESS,
     },
     "cbeth": {
-        "base": "0x3bf93770f2d4a794c3d9EBEfBAeBAE2a8f09A5E5",
+        "base": YIELD_TOKENS["base"]["MOONWELL_CBETH"],
         "local": ZERO_ADDRESS,
     },
     "aero": {
-        "base": "0x73902f619CEB9B31FD8EFecf435CbDf89E369Ba6",
+        "base": YIELD_TOKENS["base"]["MOONWELL_AERO"],
         "local": ZERO_ADDRESS,
     },
 }

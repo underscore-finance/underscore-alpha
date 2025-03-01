@@ -3,27 +3,28 @@ import boa
 
 from constants import ZERO_ADDRESS
 from conf_tokens import TEST_AMOUNTS, TOKENS
+from utils.BluePrint import YIELD_TOKENS
 
 
 VAULT_TOKENS = {
     "usdc": {
-        "base": "0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB",
+        "base": YIELD_TOKENS["base"]["AAVEV3_USDC"],
         "local": ZERO_ADDRESS,
     },
     "weth": {
-        "base": "0xD4a0e0b9149BCee3C920d2E00b5dE09138fd8bb7",
+        "base": YIELD_TOKENS["base"]["AAVEV3_WETH"],
         "local": ZERO_ADDRESS,
     },
     "cbbtc": {
-        "base": "0xBdb9300b7CDE636d9cD4AFF00f6F009fFBBc8EE6",
+        "base": YIELD_TOKENS["base"]["AAVEV3_CBBTC"],
         "local": ZERO_ADDRESS,
     },
     "wsteth": {
-        "base": "0x99CBC45ea5bb7eF3a5BC08FB1B7E56bB2442Ef0D",
+        "base": YIELD_TOKENS["base"]["AAVEV3_WSTETH"],
         "local": ZERO_ADDRESS,
     },
     "cbeth": {
-        "base": "0xcf3D55c10DB69f28fD1A75Bd73f3D8A2d9c595ad",
+        "base": YIELD_TOKENS["base"]["AAVEV3_CBETH"],
         "local": ZERO_ADDRESS,
     },
 }
