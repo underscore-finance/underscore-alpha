@@ -23,7 +23,7 @@ interface Erc4626Interface:
     def asset() -> address: view
 
 interface EulerRewardsDistributor:
-    def claim(_users: DynArray[address, MAX_ASSETS], _rewardTokens: DynArray[address, MAX_ASSETS], _claimAmounts: DynArray[uint256, MAX_ASSETS], _proofs: DynArray[bytes32, MAX_ASSETS]): nonpayable
+    def claim(_users: DynArray[address, 10], _rewardTokens: DynArray[address, 10], _claimAmounts: DynArray[uint256, 10], _proofs: DynArray[bytes32, 10]): nonpayable
     def operators(_user: address, _operator: address) -> bool: view
 
 interface OracleRegistry:
@@ -83,7 +83,6 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-MAX_ASSETS: constant(uint256) = 25
 LEGO_ACCESS_ABI: constant(String[64]) = "toggleOperator(address,address)"
 
 
@@ -343,23 +342,16 @@ def withdrawTokens(
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
     eulerRewards: address = self.eulerRewards
     assert eulerRewards != empty(address) # dev: no euler rewards addr set
-    if len(_rewardTokens) == 0:
+    if _rewardToken == empty(address):
         return
-
-    # need to create array of users (must be same length as reward tokens)
-    assert len(_rewardTokens) == len(_rewardAmounts) # dev: arrays must be same length
-    users: DynArray[address, MAX_ASSETS] = []
-    for i: uint256 in range(len(_rewardTokens), bound=MAX_ASSETS):
-        users.append(_user)
-    
-    extcall EulerRewardsDistributor(eulerRewards).claim(users, _rewardTokens, _rewardAmounts, _proofs)
+    extcall EulerRewardsDistributor(eulerRewards).claim([_user], [_rewardToken], [_rewardAmount], [_proof])
 
 
 @view

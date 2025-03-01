@@ -79,7 +79,6 @@ isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
 MAX_ATOKENS: constant(uint256) = 40
-MAX_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -367,10 +366,10 @@ def withdrawTokens(
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
     # Aave has no rewards on Base
     pass

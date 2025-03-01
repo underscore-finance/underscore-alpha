@@ -363,10 +363,10 @@ def withdrawTokens(
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
     extcall MoonwellComptroller(MOONWELL_COMPTROLLER).claimReward(_user)
 

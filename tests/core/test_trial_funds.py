@@ -345,7 +345,6 @@ def test_trial_funds_vault_token_partial_transfer(lego_registry, new_ai_wallet, 
     assert underlying == alpha_token.address
 
     underlying_amount = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
-    print(f"underlying_amount: {underlying_amount}")
 
     # Should be able to transfer the extra vault tokens
     new_ai_wallet.transferFunds(owner, extra_vault_tokens, alpha_token_erc4626_vault, sender=owner)
@@ -378,65 +377,65 @@ def test_trial_funds_vault_token_transfer_different_vault(new_ai_wallet, alpha_t
         new_ai_wallet.transferFunds(owner, vault2_tokens, alpha_token_erc4626_vault_another, sender=owner)
 
 
-@pytest.base
-def test_batch_actions_deposit_usdc_in_many_legos_trial_funds(owner, agent, getTokenAndWhale, lego_morpho, lego_fluid, agent_factory, governor):
-    usdc, usdc_whale = getTokenAndWhale("usdc")
-    amount = 10_000_000
+# @pytest.base
+# def test_batch_actions_deposit_usdc_in_many_legos_trial_funds(owner, agent, getTokenAndWhale, lego_morpho, lego_fluid, agent_factory, governor):
+#     usdc, usdc_whale = getTokenAndWhale("usdc")
+#     amount = 10_000_000
 
-    # Setup trial funds
-    usdc.transfer(agent_factory, amount * 10, sender=usdc_whale)
+#     # Setup trial funds
+#     usdc.transfer(agent_factory, amount * 10, sender=usdc_whale)
 
-    assert agent_factory.setTrialFundsData(usdc, amount, sender=governor)
+#     assert agent_factory.setTrialFundsData(usdc, amount, sender=governor)
 
-    # create fresh wallet
-    fresh_wallet = WalletFunds.at(agent_factory.createUserWallet(owner, agent, sender=owner))
+#     # create fresh wallet
+#     fresh_wallet = WalletFunds.at(agent_factory.createUserWallet(owner, agent, sender=owner))
 
-    # check trial funds
-    assert usdc.balanceOf(fresh_wallet) == amount
+#     # check trial funds
+#     assert usdc.balanceOf(fresh_wallet) == amount
 
-    # Morpho
-    morpho_vault_token = boa.from_etherscan("0xc1256ae5ff1cf2719d4937adb3bbccab2e00a2ca", name="morpho_vault_token")
-    assert lego_morpho.addAssetOpportunity(usdc.address, morpho_vault_token, sender=governor)
-    assert morpho_vault_token.balanceOf(fresh_wallet) == 0
+#     # Morpho
+#     morpho_vault_token = boa.from_etherscan("0xc1256ae5ff1cf2719d4937adb3bbccab2e00a2ca", name="morpho_vault_token")
+#     assert lego_morpho.addAssetOpportunity(usdc.address, morpho_vault_token, sender=governor)
+#     assert morpho_vault_token.balanceOf(fresh_wallet) == 0
 
-    # Fluid
-    fluid_vault_token = boa.from_etherscan("0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169", name="fluid_vault_token")
-    assert lego_fluid.addAssetOpportunity(usdc.address, fluid_vault_token, sender=governor)
-    assert fluid_vault_token.balanceOf(fresh_wallet) == 0
+#     # Fluid
+#     fluid_vault_token = boa.from_etherscan("0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169", name="fluid_vault_token")
+#     assert lego_fluid.addAssetOpportunity(usdc.address, fluid_vault_token, sender=governor)
+#     assert fluid_vault_token.balanceOf(fresh_wallet) == 0
 
-    # Create batch instructions
-    instructions = [
-        (
-            DEPOSIT_UINT256,
-            lego_morpho.legoId(),
-            usdc.address,
-            morpho_vault_token.address,
-            2_000_000,
-            ZERO_ADDRESS,
-            0,
-            ZERO_ADDRESS,
-            ZERO_ADDRESS,
-            0,
-            ZERO_ADDRESS,
-        ),
-        (
-            DEPOSIT_UINT256,
-            lego_fluid.legoId(),
-            usdc.address,
-            fluid_vault_token.address,
-            2_000_000,
-            ZERO_ADDRESS,
-            0,
-            ZERO_ADDRESS,
-            ZERO_ADDRESS,
-            0,
-            ZERO_ADDRESS,
-        ),
-    ]
+#     # Create batch instructions
+#     instructions = [
+#         (
+#             DEPOSIT_UINT256,
+#             lego_morpho.legoId(),
+#             usdc.address,
+#             morpho_vault_token.address,
+#             2_000_000,
+#             ZERO_ADDRESS,
+#             0,
+#             ZERO_ADDRESS,
+#             ZERO_ADDRESS,
+#             0,
+#             ZERO_ADDRESS,
+#         ),
+#         (
+#             DEPOSIT_UINT256,
+#             lego_fluid.legoId(),
+#             usdc.address,
+#             fluid_vault_token.address,
+#             2_000_000,
+#             ZERO_ADDRESS,
+#             0,
+#             ZERO_ADDRESS,
+#             ZERO_ADDRESS,
+#             0,
+#             ZERO_ADDRESS,
+#         ),
+#     ]
 
-    # Test batch actions by owner
-    assert fresh_wallet.performManyActions(instructions, sender=agent)
-    assert usdc.balanceOf(fresh_wallet) != amount
+#     # Test batch actions by owner
+#     assert fresh_wallet.performManyActions(instructions, sender=agent)
+#     assert usdc.balanceOf(fresh_wallet) != amount
 
-    assert morpho_vault_token.balanceOf(fresh_wallet) != 0
-    assert fluid_vault_token.balanceOf(fresh_wallet) != 0
+#     assert morpho_vault_token.balanceOf(fresh_wallet) != 0
+#     assert fluid_vault_token.balanceOf(fresh_wallet) != 0

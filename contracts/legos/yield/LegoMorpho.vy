@@ -76,8 +76,6 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-MAX_ASSETS: constant(uint256) = 25
-
 
 @deploy
 def __init__(_morphoFactory: address, _morphoFactoryLegacy: address, _addyRegistry: address):
@@ -329,20 +327,14 @@ def withdrawTokens(
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
     morphoRewards: address = self.morphoRewards
     assert morphoRewards != empty(address) # dev: no morpho rewards addr set
-
-    # claim rewards
-    for i: uint256 in range(len(_markets), bound=MAX_ASSETS):
-        rewardToken: address = _rewardTokens[i]
-        claimable: uint256 = _rewardAmounts[i]
-        proof: bytes32 = _proofs[i]
-        extcall MorphoRewardsDistributor(morphoRewards).claim(_user, rewardToken, claimable, proof)
+    extcall MorphoRewardsDistributor(morphoRewards).claim(_user, _rewardToken, _rewardAmount, _proof)
 
 
 @view

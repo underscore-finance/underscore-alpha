@@ -216,7 +216,6 @@ TICK_UPPER: constant(int24) = 887272
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
-MAX_REWARDS_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -689,10 +688,10 @@ def removeLiquidity(
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_REWARDS_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_REWARDS_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_REWARDS_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_REWARDS_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
     pass
 

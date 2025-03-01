@@ -101,7 +101,6 @@ isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
 MAX_ASSETS: constant(uint256) = 5
-MAX_REWARDS_ASSETS: constant(uint256) = 25
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
@@ -439,10 +438,10 @@ def removeLiquidity(
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_REWARDS_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_REWARDS_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_REWARDS_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_REWARDS_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
     pass
 

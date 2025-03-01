@@ -82,8 +82,6 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-MAX_ASSETS: constant(uint256) = 25
-
 
 @deploy
 def __init__(_configurator: address, _addyRegistry: address):
@@ -345,42 +343,38 @@ def withdrawTokens(
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
-    if len(_markets) != 0:
-        compRewards: address = self.compoundRewards
-        assert compRewards != empty(address) # dev: no comp rewards addr set
-        for i: uint256 in range(len(_markets), bound=MAX_ASSETS):
-            extcall CompoundV3Rewards(compRewards).claim(_markets[i], _user, True)
+    compRewards: address = self.compoundRewards
+    assert compRewards != empty(address) # dev: no comp rewards addr set
+    if _market != empty(address):
+        extcall CompoundV3Rewards(compRewards).claim(_market, _user, True)
     else:
-        self._hasClaimableOrShouldClaim(_user, True)
+        self._hasClaimableOrShouldClaim(_user, True, compRewards)
 
 
 # sadly, this is not a view function because of `getRewardOwed()`
 @external
 def hasClaimableRewards(_user: address) -> bool:
-    return self._hasClaimableOrShouldClaim(_user, False)
+    return self._hasClaimableOrShouldClaim(_user, False, self.compoundRewards)
 
 
 @internal
-def _hasClaimableOrShouldClaim(_user: address, _shouldClaim: bool) -> bool:
-    compRewards: address = self.compoundRewards
-    assert compRewards != empty(address) # dev: no comp rewards
-
+def _hasClaimableOrShouldClaim(_user: address, _shouldClaim: bool, _compRewards: address) -> bool:
     hasClaimable: bool = False
     numAssets: uint256 = yld.numAssets
-    for i: uint256 in range(1, numAssets, bound=MAX_ASSETS):
+    for i: uint256 in range(1, numAssets, bound=max_value(uint256)):
         asset: address = yld.assets[i]
         comet: address = yld.assetOpportunities[asset][1] # only a single "vault token" (comet) per asset
 
-        rewardOwed: RewardOwed = extcall CompoundV3Rewards(compRewards).getRewardOwed(comet, _user)
+        rewardOwed: RewardOwed = extcall CompoundV3Rewards(_compRewards).getRewardOwed(comet, _user)
         if rewardOwed.owed != 0:
             hasClaimable = True
             if _shouldClaim:
-                extcall CompoundV3Rewards(compRewards).claim(comet, _user, True)
+                extcall CompoundV3Rewards(_compRewards).claim(comet, _user, True)
             else:
                 break
 

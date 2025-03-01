@@ -1,23 +1,20 @@
 # pragma optimize codesize
 
 implements: UserWalletInterface
-
-from ethereum.ercs import IERC20
-from ethereum.ercs import IERC721
 from interfaces import LegoDex
 from interfaces import LegoYield
 from interfaces import LegoCommon
 from interfaces import LegoCredit
 from interfaces import UserWalletInterface
 
+from ethereum.ercs import IERC20
+from ethereum.ercs import IERC721
+
 interface WalletConfig:
-    def aggregateBatchTxCostData(_aggProtocolCost: TxCostInfo, _aggAgentCost: TxCostInfo, _agent: address, _action: ActionType, _usdValue: uint256, _priceSheets: address, _oracleRegistry: address) -> (TxCostInfo, TxCostInfo): view
     def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo): nonpayable
-    def canAgentAccess(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool: view
     def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData = empty(CoreData)) -> uint256: view
     def getTransactionCosts(_agent: address, _action: ActionType, _usdValue: uint256, _cd: CoreData) -> (TxCostInfo, TxCostInfo): view
     def isRecipientAllowed(_recipient: address) -> bool: view
-    def isAgentActive(_agent: address) -> bool: view
     def owner() -> address: view
 
 interface LegoRegistry:
@@ -80,19 +77,6 @@ struct TxCostInfo:
 struct TrialFundsOpp:
     legoId: uint256
     vaultToken: address
-
-struct ActionInstruction:
-    action: ActionType
-    legoId: uint256
-    asset: address
-    vault: address
-    amount: uint256
-    recipient: address
-    altLegoId: uint256
-    altVault: address
-    altAsset: address
-    altAmount: uint256
-    pool: address
 
 event UserWalletDeposit:
     signer: indexed(address)
@@ -191,10 +175,10 @@ event UserWalletFundsTransferred:
 
 event UserWalletRewardsClaimed:
     signer: address
-    numMarkets: uint256
-    numRewardTokens: uint256
-    numRewardAmounts: uint256
-    numProofs: uint256
+    market: address
+    rewardToken: address
+    rewardAmount: uint256
+    proof: bytes32
     legoId: uint256
     legoAddr: address
     isSignerAgent: bool
@@ -257,6 +241,7 @@ PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 MAX_ASSETS: constant(uint256) = 25
+MAX_REWARDS_ASSETS: constant(uint256) = 10
 MAX_LEGOS: constant(uint256) = 20
 MAX_INSTRUCTIONS: constant(uint256) = 20
 
@@ -507,44 +492,22 @@ def rebalance(
     # check permissions / subscription data
     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.REBALANCE, [_fromAsset], [_fromLegoId, _toLegoId], cd)
 
-    # rebalance
-    assetAmountDeposited: uint256 = 0
-    newVaultToken: address = empty(address)
-    vaultTokenAmountReceived: uint256 = 0
-    usdValue: uint256 = 0
-    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = self._rebalance(msg.sender, _fromLegoId, _fromAsset, _fromVaultToken, _toLegoId, _toVault, _fromVaultTokenAmount, isSignerAgent, cd)
-
-    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REBALANCE, usdValue, cd)
-    return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue
-
-
-@internal
-def _rebalance(
-    _signer: address,
-    _fromLegoId: uint256,
-    _fromAsset: address,
-    _fromVaultToken: address,
-    _toLegoId: uint256,
-    _toVault: address,
-    _fromVaultTokenAmount: uint256,
-    _isSignerAgent: bool,
-    _cd: CoreData,
-) -> (uint256, address, uint256, uint256):
-
     # withdraw from the first lego
     assetAmountReceived: uint256 = 0
     na: uint256 = 0
     withdrawUsdValue: uint256 = 0
-    assetAmountReceived, na, withdrawUsdValue = self._withdrawTokens(_signer, _fromLegoId, _fromAsset, _fromVaultToken, _fromVaultTokenAmount, _isSignerAgent, _cd)
+    assetAmountReceived, na, withdrawUsdValue = self._withdrawTokens(msg.sender, _fromLegoId, _fromAsset, _fromVaultToken, _fromVaultTokenAmount, isSignerAgent, cd)
 
     # deposit the received assets into the second lego
     assetAmountDeposited: uint256 = 0
     newVaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
     depositUsdValue: uint256 = 0
-    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(_signer, _toLegoId, _fromAsset, _toVault, assetAmountReceived, _isSignerAgent, _cd)
+    assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, depositUsdValue = self._depositTokens(msg.sender, _toLegoId, _fromAsset, _toVault, assetAmountReceived, isSignerAgent, cd)
 
-    return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, max(withdrawUsdValue, depositUsdValue)
+    usdValue: uint256 = max(withdrawUsdValue, depositUsdValue)
+    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REBALANCE, usdValue, cd)
+    return assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue
 
 
 ########
@@ -580,49 +543,29 @@ def swapTokens(
     # check permissions / subscription data
     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId], cd)
 
-    # swap
-    actualSwapAmount: uint256 = 0
-    toAmount: uint256 = 0
-    usdValue: uint256 = 0
-    actualSwapAmount, toAmount, usdValue = self._swapTokens(msg.sender, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, isSignerAgent, cd)
-
-    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.SWAP, usdValue, cd)
-    return actualSwapAmount, toAmount, usdValue
-
-
-@internal
-def _swapTokens(
-    _signer: address,
-    _legoId: uint256,
-    _tokenIn: address,
-    _tokenOut: address,
-    _amountIn: uint256,
-    _minAmountOut: uint256,
-    _pool: address,
-    _isSignerAgent: bool,
-    _cd: CoreData,
-) -> (uint256, uint256, uint256):
-    legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
+    # get lego addr
+    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     # finalize amount
-    swapAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenIn, _amountIn, True, _cd)
+    swapAmount: uint256 = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenIn, _amountIn, True, cd)
     assert extcall IERC20(_tokenIn).approve(legoAddr, swapAmount, default_return_value=True) # dev: approval failed
 
     # check if swap token of trial funds asset
-    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_tokenIn, _cd.trialFundsAsset, _cd.legoRegistry)
+    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_tokenIn, cd.trialFundsAsset, cd.legoRegistry)
 
     # swap assets via lego partner
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, self, _cd.oracleRegistry)
+    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, self, cd.oracleRegistry)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # make sure they still have enough trial funds
-    self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
-    
-    log UserWalletSwap(_signer, _tokenIn, _tokenOut, swapAmount, toAmount, _pool, refundAssetAmount, usdValue, _legoId, legoAddr, _isSignerAgent)
+    self._checkTrialFundsPostTx(isTrialFundsVaultToken, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
+
+    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.SWAP, usdValue, cd)
+    log UserWalletSwap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, _pool, refundAssetAmount, usdValue, _legoId, legoAddr, isSignerAgent)
     return swapAmount, toAmount, usdValue
 
 
@@ -641,31 +584,22 @@ def borrow(
     _borrowAsset: address = empty(address),
     _amount: uint256 = max_value(uint256),
 ) -> (address, uint256, uint256):
+    """
+    @notice Borrows an asset from a lego integration
+    @param _legoId The ID of the lego to borrow from
+    @param _borrowAsset The address of the asset to borrow
+    @param _amount The amount of the asset to borrow
+    @return address The address of the asset borrowed
+    @return uint256 The amount of the asset borrowed
+    @return uint256 The usd value of the borrowing
+    """
     cd: CoreData = self._getCoreData()
 
     # check permissions / subscription data
     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.BORROW, [_borrowAsset], [_legoId], cd)
 
-    # borrow
-    borrowAsset: address = empty(address)
-    borrowAmount: uint256 = 0
-    usdValue: uint256 = 0
-    borrowAsset, borrowAmount, usdValue = self._borrow(msg.sender, _legoId, _borrowAsset, _amount, isSignerAgent, cd)
-
-    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.BORROW, usdValue, cd)
-    return borrowAsset, borrowAmount, usdValue
-
-
-@internal
-def _borrow(
-    _signer: address,
-    _legoId: uint256,
-    _borrowAsset: address,
-    _amount: uint256,
-    _isSignerAgent: bool,
-    _cd: CoreData,
-) -> (address, uint256, uint256):
-    legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
+    # get lego addr
+    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     # make sure lego can perform this action
@@ -675,9 +609,10 @@ def _borrow(
     borrowAsset: address = empty(address)
     borrowAmount: uint256 = 0
     usdValue: uint256 = 0
-    borrowAsset, borrowAmount, usdValue = extcall LegoCredit(legoAddr).borrow(_borrowAsset, _amount, self, _cd.oracleRegistry)
-    
-    log UserWalletBorrow(_signer, borrowAsset, borrowAmount, usdValue, _legoId, legoAddr, _isSignerAgent)
+    borrowAsset, borrowAmount, usdValue = extcall LegoCredit(legoAddr).borrow(_borrowAsset, _amount, self, cd.oracleRegistry)
+
+    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.BORROW, usdValue, cd)
+    log UserWalletBorrow(msg.sender, borrowAsset, borrowAmount, usdValue, _legoId, legoAddr, isSignerAgent)
     return borrowAsset, borrowAmount, usdValue
 
 
@@ -691,54 +626,47 @@ def repayDebt(
     _paymentAsset: address,
     _paymentAmount: uint256 = max_value(uint256),
 ) -> (address, uint256, uint256, uint256):
+    """
+    @notice Repays debt for a lego integration
+    @param _legoId The ID of the lego to repay debt for
+    @param _paymentAsset The address of the asset to use for repayment
+    @param _paymentAmount The amount of the asset to use for repayment
+    @return address The address of the asset used for repayment
+    @return uint256 The amount of the asset used for repayment
+    @return uint256 The usd value of the repayment
+    @return uint256 The remaining debt
+    """
     cd: CoreData = self._getCoreData()
 
     # check permissions / subscription data
     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.REPAY, [_paymentAsset], [_legoId], cd)
 
-    # repay debt
-    paymentAsset: address = empty(address)
-    paymentAmount: uint256 = 0
-    usdValue: uint256 = 0
-    remainingDebt: uint256 = 0
-    paymentAsset, paymentAmount, usdValue, remainingDebt = self._repayDebt(msg.sender, _legoId, _paymentAsset, _paymentAmount, isSignerAgent, cd)
-
-    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REPAY, usdValue, cd)
-    return paymentAsset, paymentAmount, usdValue, remainingDebt
-
-
-@internal
-def _repayDebt(
-    _signer: address,
-    _legoId: uint256,
-    _paymentAsset: address,
-    _paymentAmount: uint256,
-    _isSignerAgent: bool,
-    _cd: CoreData,
-) -> (address, uint256, uint256, uint256):
-    legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
+    # get lego addr
+    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     # make sure lego can perform this action
     self._checkLegoAccessForAction(legoAddr)
 
     # finalize amount
-    paymentAmount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_paymentAsset, _paymentAmount, True, _cd)
+    paymentAmount: uint256 = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_paymentAsset, _paymentAmount, True, cd)
     assert extcall IERC20(_paymentAsset).approve(legoAddr, paymentAmount, default_return_value=True) # dev: approval failed
 
     # check if payment asset is trial funds asset
-    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_paymentAsset, _cd.trialFundsAsset, _cd.legoRegistry)
+    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_paymentAsset, cd.trialFundsAsset, cd.legoRegistry)
 
     # repay debt via lego partner
     paymentAsset: address = empty(address)
     usdValue: uint256 = 0
     remainingDebt: uint256 = 0
-    paymentAsset, paymentAmount, usdValue, remainingDebt = extcall LegoCredit(legoAddr).repayDebt(_paymentAsset, paymentAmount, self, _cd.oracleRegistry)
+    paymentAsset, paymentAmount, usdValue, remainingDebt = extcall LegoCredit(legoAddr).repayDebt(_paymentAsset, paymentAmount, self, cd.oracleRegistry)
+    assert extcall IERC20(_paymentAsset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # make sure they still have enough trial funds
-    self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
-    
-    log UserWalletRepayDebt(_signer, paymentAsset, paymentAmount, usdValue, remainingDebt, _legoId, legoAddr, _isSignerAgent)
+    self._checkTrialFundsPostTx(isTrialFundsVaultToken, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
+
+    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REPAY, usdValue, cd)
+    log UserWalletRepayDebt(msg.sender, paymentAsset, paymentAmount, usdValue, remainingDebt, _legoId, legoAddr, isSignerAgent)
     return paymentAsset, paymentAmount, usdValue, remainingDebt
 
 
@@ -751,46 +679,34 @@ def _repayDebt(
 @external
 def claimRewards(
     _legoId: uint256,
-    _markets: DynArray[address, MAX_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_ASSETS] = [],
+    _market: address = empty(address),
+    _rewardToken: address = empty(address),
+    _rewardAmount: uint256 = max_value(uint256),
+    _proof: bytes32 = empty(bytes32),
 ):
     """
     @notice Claims rewards from a lego integration
     @param _legoId The lego ID to claim rewards from
-    @param _markets The markets to claim rewards from
-    @param _rewardTokens The reward tokens to claim
-    @param _rewardAmounts The reward amounts to claim
-    @param _proofs The proofs to verify the rewards
+    @param _market The market to claim rewards from
+    @param _rewardToken The reward token to claim
+    @param _rewardAmount The reward amount to claim
+    @param _proof The proof to verify the rewards
     """
     cd: CoreData = self._getCoreData()
 
     # pass in empty action, lego ids, and assets here
-    isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.CLAIM_REWARDS, [], [_legoId], cd)
-    self._claimRewards(msg.sender, _legoId, _markets, _rewardTokens, _rewardAmounts, _proofs, isSignerAgent, cd.legoRegistry)
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.CLAIM_REWARDS, [_rewardToken], [_legoId], cd)
 
-
-@internal
-def _claimRewards(
-    _signer: address,
-    _legoId: uint256,
-    _markets: DynArray[address, MAX_ASSETS],
-    _rewardTokens: DynArray[address, MAX_ASSETS],
-    _rewardAmounts: DynArray[uint256, MAX_ASSETS],
-    _proofs: DynArray[bytes32, MAX_ASSETS],
-    _isSignerAgent: bool,
-    _legoRegistry: address,
-):
-    legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(_legoId)
+    # get lego addr
+    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
-    # some legos require access to be granted to claim rewards
+    # make sure lego has access to claim rewards
     self._checkLegoAccessForAction(legoAddr)
 
     # claim rewards
-    extcall LegoCommon(legoAddr).claimRewards(self, _markets, _rewardTokens, _rewardAmounts, _proofs)
-    log UserWalletRewardsClaimed(_signer, len(_markets), len(_rewardTokens), len(_rewardAmounts), len(_proofs), _legoId, legoAddr, _isSignerAgent)
+    extcall LegoCommon(legoAddr).claimRewards(self, _market, _rewardToken, _rewardAmount, _proof)
+    log UserWalletRewardsClaimed(msg.sender, _market, _rewardToken, _rewardAmount, _proof, _legoId, legoAddr, isSignerAgent)
 
 
 #################
@@ -841,55 +757,25 @@ def addLiquidity(
     # check permissions / subscription data
     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.ADD_LIQ, [_tokenA, _tokenB], [_legoId], cd)
 
-    # add liquidity
-    liquidityAdded: uint256 = 0
-    liqAmountA: uint256 = 0
-    liqAmountB: uint256 = 0
-    usdValue: uint256 = 0
-    nftTokenId: uint256 = 0
-    liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = self._addLiquidity(msg.sender, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _minLpAmount, isSignerAgent, cd)
-
-    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.ADD_LIQ, usdValue, cd)
-    return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId
-
-
-@internal
-def _addLiquidity(
-    _signer: address,
-    _legoId: uint256,
-    _nftAddr: address,
-    _nftTokenId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _amountA: uint256,
-    _amountB: uint256,
-    _tickLower: int24,
-    _tickUpper: int24,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _minLpAmount: uint256,
-    _isSignerAgent: bool,
-    _cd: CoreData,
-) -> (uint256, uint256, uint256, uint256, uint256):
-    legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
+    # get lego addr
+    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     # token a
     amountA: uint256 = 0
     isTrialFundsVaultTokenA: bool = False
     if _amountA != 0:
-        amountA = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenA, _amountA, True, _cd)
+        amountA = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenA, _amountA, True, cd)
         assert extcall IERC20(_tokenA).approve(legoAddr, amountA, default_return_value=True) # dev: approval failed
-        isTrialFundsVaultTokenA = self._isTrialFundsVaultToken(_tokenA, _cd.trialFundsAsset, _cd.legoRegistry)
+        isTrialFundsVaultTokenA = self._isTrialFundsVaultToken(_tokenA, cd.trialFundsAsset, cd.legoRegistry)
 
     # token b
     amountB: uint256 = 0
     isTrialFundsVaultTokenB: bool = False
     if _amountB != 0:
-        amountB = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_tokenB, _amountB, True, _cd)
+        amountB = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenB, _amountB, True, cd)
         assert extcall IERC20(_tokenB).approve(legoAddr, amountB, default_return_value=True) # dev: approval failed
-        isTrialFundsVaultTokenB = self._isTrialFundsVaultToken(_tokenB, _cd.trialFundsAsset, _cd.legoRegistry)
+        isTrialFundsVaultTokenB = self._isTrialFundsVaultToken(_tokenB, cd.trialFundsAsset, cd.legoRegistry)
 
     # transfer nft to lego (if applicable)
     hasNftLiqPosition: bool = _nftAddr != empty(address) and _nftTokenId != 0
@@ -904,23 +790,24 @@ def _addLiquidity(
     refundAssetAmountA: uint256 = 0
     refundAssetAmountB: uint256 = 0
     nftTokenId: uint256 = 0
-    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = extcall LegoDex(legoAddr).addLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, amountA, amountB, _minAmountA, _minAmountB, _minLpAmount, self, _cd.oracleRegistry)
+    liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = extcall LegoDex(legoAddr).addLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, amountA, amountB, _minAmountA, _minAmountB, _minLpAmount, self, cd.oracleRegistry)
 
     # validate the nft came back
     if hasNftLiqPosition:
         assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
 
     # token a
-    self._checkTrialFundsPostTx(isTrialFundsVaultTokenA, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
+    self._checkTrialFundsPostTx(isTrialFundsVaultTokenA, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
     if amountA != 0:
         assert extcall IERC20(_tokenA).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # token b
-    self._checkTrialFundsPostTx(isTrialFundsVaultTokenB, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
+    self._checkTrialFundsPostTx(isTrialFundsVaultTokenB, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
     if amountB != 0:
         assert extcall IERC20(_tokenB).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log UserWalletLiquidityAdded(_signer, _tokenA, _tokenB, liqAmountA, liqAmountB, liquidityAdded, _pool, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId, _legoId, legoAddr, _isSignerAgent)
+    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.ADD_LIQ, usdValue, cd)
+    log UserWalletLiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, liquidityAdded, _pool, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId, _legoId, legoAddr, isSignerAgent)
     return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId
 
 
@@ -963,33 +850,8 @@ def removeLiquidity(
     # check permissions / subscription data
     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.REMOVE_LIQ, [_tokenA, _tokenB], [_legoId], cd)
 
-    # remove liquidity
-    amountA: uint256 = 0
-    amountB: uint256 = 0
-    usdValue: uint256 = 0
-    isDepleted: bool = False
-    amountA, amountB, usdValue, isDepleted = self._removeLiquidity(msg.sender, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB, isSignerAgent, cd)
-
-    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REMOVE_LIQ, usdValue, cd)
-    return amountA, amountB, usdValue, isDepleted
-
-
-@internal
-def _removeLiquidity(
-    _signer: address,
-    _legoId: uint256,
-    _nftAddr: address,
-    _nftTokenId: uint256,
-    _pool: address,
-    _tokenA: address,
-    _tokenB: address,
-    _liqToRemove: uint256,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _isSignerAgent: bool,
-    _cd: CoreData,
-) -> (uint256, uint256, uint256, bool):
-    legoAddr: address = staticcall LegoRegistry(_cd.legoRegistry).getLegoAddr(_legoId)
+    # get lego addr
+    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
     assert legoAddr != empty(address) # dev: invalid lego
 
     lpToken: address = empty(address)
@@ -1003,7 +865,7 @@ def _removeLiquidity(
     # handle lp token
     else:
         lpToken = staticcall LegoDex(legoAddr).getLpToken(_pool)
-        liqToRemove = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(lpToken, liqToRemove, False, _cd)
+        liqToRemove = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(lpToken, liqToRemove, False, cd)
         assert extcall IERC20(lpToken).approve(legoAddr, liqToRemove, default_return_value=True) # dev: approval failed
 
     # remove liquidity via lego partner
@@ -1013,7 +875,7 @@ def _removeLiquidity(
     liquidityRemoved: uint256 = 0
     refundedLpAmount: uint256 = 0
     isDepleted: bool = False
-    amountA, amountB, usdValue, liquidityRemoved, refundedLpAmount, isDepleted = extcall LegoDex(legoAddr).removeLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, lpToken, liqToRemove, _minAmountA, _minAmountB, self, _cd.oracleRegistry)
+    amountA, amountB, usdValue, liquidityRemoved, refundedLpAmount, isDepleted = extcall LegoDex(legoAddr).removeLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, lpToken, liqToRemove, _minAmountA, _minAmountB, self, cd.oracleRegistry)
 
     # validate the nft came back, reset lp token approvals
     if hasNftLiqPosition:
@@ -1022,7 +884,8 @@ def _removeLiquidity(
     else:
         assert extcall IERC20(lpToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log UserWalletLiquidityRemoved(_signer, _tokenA, _tokenB, amountA, amountB, usdValue, isDepleted, liquidityRemoved, lpToken, refundedLpAmount, _legoId, legoAddr, _isSignerAgent)
+    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REMOVE_LIQ, usdValue, cd)
+    log UserWalletLiquidityRemoved(msg.sender, _tokenA, _tokenB, amountA, amountB, usdValue, isDepleted, liquidityRemoved, lpToken, refundedLpAmount, _legoId, legoAddr, isSignerAgent)
     return amountA, amountB, usdValue, isDepleted
 
 
@@ -1195,84 +1058,6 @@ def convertWethToEth(
         self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.TRANSFER, usdValue, cd)
 
     return amount
-
-
-#################
-# Batch Actions #
-#################
-
-
-@nonreentrant
-@external
-def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool:
-    """
-    @notice Performs multiple actions in a single transaction
-    @dev Executes a batch of instructions with proper permission checks
-    @param _instructions Array of action instructions to execute
-    @return bool True if all actions were executed successfully
-    """
-    assert len(_instructions) != 0 # dev: no instructions
-    cd: CoreData = self._getCoreData()
-
-    # pass in empty action, lego ids, and assets here
-    isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, empty(ActionType), [], [], cd)
-
-    # init vars
-    aggProtocolCost: TxCostInfo = empty(TxCostInfo)
-    aggAgentCost: TxCostInfo = empty(TxCostInfo)
-    usdValue: uint256 = 0
-    naValueA: uint256 = 0
-    naAddyA: address = empty(address)
-    naValueB: uint256 = 0
-
-    # iterate through instructions
-    for i: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
-        instruction: ActionInstruction = _instructions[i]
-
-        # deposit
-        if instruction.action == ActionType.DEPOSIT:
-            if isSignerAgent:
-                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, naAddyA, naValueB, usdValue = self._depositTokens(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.amount, isSignerAgent, cd)
-            if isSignerAgent and usdValue != 0:
-                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.DEPOSIT, usdValue, cd.priceSheets, cd.oracleRegistry)
-
-        # withdraw
-        elif instruction.action == ActionType.WITHDRAWAL:
-            if isSignerAgent:
-                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.WITHDRAWAL, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, naValueB, usdValue = self._withdrawTokens(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.amount, isSignerAgent, cd)
-            if isSignerAgent and usdValue != 0:
-                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.WITHDRAWAL, usdValue, cd.priceSheets, cd.oracleRegistry)
-
-        # rebalance
-        elif instruction.action == ActionType.REBALANCE:
-            if isSignerAgent:
-                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.REBALANCE, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: agent not allowed
-            naValueA, naAddyA, naValueB, usdValue = self._rebalance(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.altLegoId, instruction.altVault, instruction.amount, isSignerAgent, cd)
-            if isSignerAgent and usdValue != 0:
-                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.REBALANCE, usdValue, cd.priceSheets, cd.oracleRegistry)
-
-        # swap
-        elif instruction.action == ActionType.SWAP:
-            if isSignerAgent:
-                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, naValueB, usdValue = self._swapTokens(msg.sender, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, instruction.pool, isSignerAgent, cd)
-            if isSignerAgent and usdValue != 0:
-                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.SWAP, usdValue, cd.priceSheets, cd.oracleRegistry)
-
-        # transfer
-        elif instruction.action == ActionType.TRANSFER:
-            if isSignerAgent:
-                assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-            naValueA, usdValue = self._transferFunds(msg.sender, instruction.recipient, instruction.amount, instruction.asset, isSignerAgent, cd)
-            if isSignerAgent and usdValue != 0:
-                aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.TRANSFER, usdValue, cd.priceSheets, cd.oracleRegistry)
-
-    # pay tx fees
-    self._payTransactionFees(aggProtocolCost, aggAgentCost, empty(ActionType))
-
-    return True
 
 
 #############

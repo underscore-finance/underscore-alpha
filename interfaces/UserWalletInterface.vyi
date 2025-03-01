@@ -1,5 +1,6 @@
 # @version 0.4.0
 
+
 @external
 def depositTokens(
     _legoId: uint256,
@@ -9,6 +10,7 @@ def depositTokens(
 ) -> (uint256, address, uint256, uint256):
     ...
 
+
 @external
 def withdrawTokens(
     _legoId: uint256,
@@ -17,6 +19,7 @@ def withdrawTokens(
     _vaultTokenAmount: uint256 = max_value(uint256),
 ) -> (uint256, uint256, uint256):
     ...
+
 
 @external
 def rebalance(
@@ -29,6 +32,7 @@ def rebalance(
 ) -> (uint256, address, uint256, uint256):
     ...
 
+
 @external
 def swapTokens(
     _legoId: uint256,
@@ -39,6 +43,7 @@ def swapTokens(
     _pool: address = empty(address),
 ) -> (uint256, uint256, uint256):
     ...
+
 
 @external
 def addLiquidity(
@@ -58,6 +63,7 @@ def addLiquidity(
 ) -> (uint256, uint256, uint256, uint256, uint256):
     ...
 
+
 @external
 def removeLiquidity(
     _legoId: uint256,
@@ -72,6 +78,7 @@ def removeLiquidity(
 ) -> (uint256, uint256, uint256, bool):
     ...
 
+
 @external
 def transferFunds(
     _recipient: address,
@@ -79,6 +86,7 @@ def transferFunds(
     _asset: address = empty(address),
 ) -> (uint256, uint256):
     ...
+
 
 @payable
 @external
@@ -97,4 +105,33 @@ def convertWethToEth(
     _withdrawLegoId: uint256 = 0,
     _withdrawVaultToken: address = empty(address),
 ) -> uint256:
+    ...
+
+
+@external
+def repayDebt(
+    _legoId: uint256,
+    _paymentAsset: address,
+    _paymentAmount: uint256 = max_value(uint256),
+) -> (address, uint256, uint256, uint256):
+    ...
+
+
+@external
+def borrow(
+    _legoId: uint256,
+    _borrowAsset: address = empty(address),
+    _amount: uint256 = max_value(uint256),
+) -> (address, uint256, uint256):
+    ...
+
+
+@external
+def claimRewards(
+    _legoId: uint256,
+    _market: address = empty(address),
+    _rewardToken: address = empty(address),
+    _rewardAmount: uint256 = max_value(uint256),
+    _proof: bytes32 = empty(bytes32),
+):
     ...

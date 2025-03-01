@@ -209,7 +209,6 @@ ADDY_REGISTRY: public(immutable(address))
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 MAX_POOLS: constant(uint256) = 50
 MAX_QUOTES: constant(uint256) = 100
-MAX_REWARDS_ASSETS: constant(uint256) = 25
 
 
 @deploy
@@ -905,10 +904,10 @@ def _getTokenAmounts(_isEmptyTokenA: bool, _amountOut: uint256) -> (uint256, uin
 @external
 def claimRewards(
     _user: address,
-    _markets: DynArray[address, MAX_REWARDS_ASSETS] = [],
-    _rewardTokens: DynArray[address, MAX_REWARDS_ASSETS] = [],
-    _rewardAmounts: DynArray[uint256, MAX_REWARDS_ASSETS] = [],
-    _proofs: DynArray[bytes32, MAX_REWARDS_ASSETS] = [],
+    _market: address,
+    _rewardToken: address,
+    _rewardAmount: uint256,
+    _proof: bytes32,
 ):
     pass
 

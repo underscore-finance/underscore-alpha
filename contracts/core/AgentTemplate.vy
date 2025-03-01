@@ -86,12 +86,13 @@ REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(uint256 leg
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
 WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
+CLAIM_REWARDS_TYPE_HASH: constant(bytes32) = keccak256('ClaimRewards(uint256 legoId,address market,address rewardToken,uint256 rewardAmount,bytes32 proof,uint256 expiration)')
+BORROW_TYPE_HASH: constant(bytes32) = keccak256('Borrow(uint256 legoId,address borrowAsset,uint256 amount,uint256 expiration)')
+REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(uint256 legoId,address paymentAsset,uint256 paymentAmount,uint256 expiration)')
 
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
-
 MAX_INSTRUCTIONS: constant(uint256) = 20
-
 API_VERSION: constant(String[28]) = "0.0.1"
 
 
@@ -204,6 +205,60 @@ def swapTokens(
     if msg.sender != self.owner:
         self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).swapTokens(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool)
+
+
+##################
+# Borrow + Repay #
+##################
+
+
+@nonreentrant
+@external
+def borrow(
+    _userWallet: address,
+    _legoId: uint256,
+    _borrowAsset: address = empty(address),
+    _amount: uint256 = max_value(uint256),
+    _sig: Signature = empty(Signature),
+) -> (address, uint256, uint256):
+    if msg.sender != self.owner:
+        self._isValidSignature(abi_encode(BORROW_TYPE_HASH, _legoId, _borrowAsset, _amount, _sig.expiration), _sig)
+    return extcall UserWalletInterface(_userWallet).borrow(_legoId, _borrowAsset, _amount)
+
+
+@nonreentrant
+@external
+def repayDebt(
+    _userWallet: address,
+    _legoId: uint256,
+    _paymentAsset: address,
+    _paymentAmount: uint256 = max_value(uint256),
+    _sig: Signature = empty(Signature),
+) -> (address, uint256, uint256, uint256):
+    if msg.sender != self.owner:
+        self._isValidSignature(abi_encode(REPAY_TYPE_HASH, _legoId, _paymentAsset, _paymentAmount, _sig.expiration), _sig)
+    return extcall UserWalletInterface(_userWallet).repayDebt(_legoId, _paymentAsset, _paymentAmount)
+
+
+#################
+# Claim Rewards #
+#################
+
+
+@nonreentrant
+@external
+def claimRewards(
+    _userWallet: address,
+    _legoId: uint256,
+    _market: address = empty(address),
+    _rewardToken: address = empty(address),
+    _rewardAmount: uint256 = max_value(uint256),
+    _proof: bytes32 = empty(bytes32),
+    _sig: Signature = empty(Signature),
+):
+    if msg.sender != self.owner:
+        self._isValidSignature(abi_encode(CLAIM_REWARDS_TYPE_HASH, _legoId, _market, _rewardToken, _rewardAmount, _proof, _sig.expiration), _sig)
+    extcall UserWalletInterface(_userWallet).claimRewards(_legoId, _market, _rewardToken, _rewardAmount, _proof)
 
 
 #################
@@ -330,6 +385,93 @@ def performManyActions(_userWallet: address, _instructions: DynArray[ActionInstr
     # TODO: add signature capabilities here
     assert msg.sender == self.owner # dev: no perms
     return extcall UserWalletInt(_userWallet).performManyActions(_instructions)
+
+
+# struct ActionInstruction:
+#     action: ActionType
+#     legoId: uint256
+#     asset: address
+#     vault: address
+#     amount: uint256
+#     recipient: address
+#     altLegoId: uint256
+#     altVault: address
+#     altAsset: address
+#     altAmount: uint256
+#     pool: address
+
+
+# @nonreentrant
+# @external
+# def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool:
+#     """
+#     @notice Performs multiple actions in a single transaction
+#     @dev Executes a batch of instructions with proper permission checks
+#     @param _instructions Array of action instructions to execute
+#     @return bool True if all actions were executed successfully
+#     """
+#     assert len(_instructions) != 0 # dev: no instructions
+#     cd: CoreData = self._getCoreData()
+
+#     # pass in empty action, lego ids, and assets here
+#     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, empty(ActionType), [], [], cd)
+
+#     # init vars
+#     aggProtocolCost: TxCostInfo = empty(TxCostInfo)
+#     aggAgentCost: TxCostInfo = empty(TxCostInfo)
+#     usdValue: uint256 = 0
+#     naValueA: uint256 = 0
+#     naAddyA: address = empty(address)
+#     naValueB: uint256 = 0
+
+#     # iterate through instructions
+#     for i: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
+#         instruction: ActionInstruction = _instructions[i]
+
+#         # deposit
+#         if instruction.action == ActionType.DEPOSIT:
+#             if isSignerAgent:
+#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
+#             naValueA, naAddyA, naValueB, usdValue = self._depositTokens(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.amount, isSignerAgent, cd)
+#             if isSignerAgent and usdValue != 0:
+#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.DEPOSIT, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+#         # withdraw
+#         elif instruction.action == ActionType.WITHDRAWAL:
+#             if isSignerAgent:
+#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.WITHDRAWAL, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
+#             naValueA, naValueB, usdValue = self._withdrawTokens(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.amount, isSignerAgent, cd)
+#             if isSignerAgent and usdValue != 0:
+#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.WITHDRAWAL, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+#         # rebalance
+#         elif instruction.action == ActionType.REBALANCE:
+#             if isSignerAgent:
+#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.REBALANCE, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: agent not allowed
+#             naValueA, naAddyA, naValueB, usdValue = self._rebalance(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.altLegoId, instruction.altVault, instruction.amount, isSignerAgent, cd)
+#             if isSignerAgent and usdValue != 0:
+#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.REBALANCE, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+#         # swap
+#         elif instruction.action == ActionType.SWAP:
+#             if isSignerAgent:
+#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
+#             naValueA, naValueB, usdValue = self._swapTokens(msg.sender, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, instruction.pool, isSignerAgent, cd)
+#             if isSignerAgent and usdValue != 0:
+#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.SWAP, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+#         # transfer
+#         elif instruction.action == ActionType.TRANSFER:
+#             if isSignerAgent:
+#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
+#             naValueA, usdValue = self._transferFunds(msg.sender, instruction.recipient, instruction.amount, instruction.asset, isSignerAgent, cd)
+#             if isSignerAgent and usdValue != 0:
+#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.TRANSFER, usdValue, cd.priceSheets, cd.oracleRegistry)
+
+#     # pay tx fees
+#     self._payTransactionFees(aggProtocolCost, aggAgentCost, empty(ActionType))
+
+#     return True
 
 
 ###########
