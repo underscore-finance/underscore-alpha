@@ -10680,7 +10680,7 @@
             "type": "bool"
           }
         ],
-        "name": "AgenticDeposit",
+        "name": "UserWalletDeposit",
         "type": "event"
       },
       {
@@ -10742,7 +10742,7 @@
             "type": "bool"
           }
         ],
-        "name": "AgenticWithdrawal",
+        "name": "UserWalletWithdrawal",
         "type": "event"
       },
       {
@@ -10804,7 +10804,7 @@
             "type": "bool"
           }
         ],
-        "name": "AgenticSwap",
+        "name": "UserWalletSwap",
         "type": "event"
       },
       {
@@ -10846,7 +10846,7 @@
             "type": "bool"
           }
         ],
-        "name": "WalletFundsTransferred",
+        "name": "UserWalletFundsTransferred",
         "type": "event"
       },
       {
@@ -10883,7 +10883,7 @@
             "type": "bool"
           }
         ],
-        "name": "EthConvertedToWeth",
+        "name": "UserWalletEthConvertedToWeth",
         "type": "event"
       },
       {
@@ -10915,7 +10915,7 @@
             "type": "bool"
           }
         ],
-        "name": "WethConvertedToEth",
+        "name": "UserWalletWethConvertedToEth",
         "type": "event"
       },
       {
@@ -10972,7 +10972,7 @@
             "type": "uint256"
           }
         ],
-        "name": "TransactionFeePaid",
+        "name": "UserWalletTransactionFeePaid",
         "type": "event"
       },
       {

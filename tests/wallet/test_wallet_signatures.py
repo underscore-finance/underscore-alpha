@@ -24,7 +24,7 @@ def test_deposit_with_signature(special_ai_wallet, special_agent, mock_lego_alph
         special_ai_wallet, lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, signature, sender=broadcaster)
 
     # deposit
-    log = filter_logs(special_agent, "AgenticDeposit")[0]
+    log = filter_logs(special_agent, "UserWalletDeposit")[0]
     assert log.signer == special_agent.address
     assert log.isSignerAgent
 
@@ -51,7 +51,7 @@ def test_withdraw_with_signature(special_ai_wallet, special_agent, mock_lego_alp
         special_ai_wallet, lego_id, alpha_token, alpha_token_erc4626_vault.address, MAX_UINT256, signature, sender=broadcaster)
 
     # withdrawal
-    log = filter_logs(special_agent, "AgenticWithdrawal")[0]
+    log = filter_logs(special_agent, "UserWalletWithdrawal")[0]
     assert log.signer == special_agent.address
     assert log.isSignerAgent
 
@@ -78,11 +78,11 @@ def test_rebalance_with_signature(special_ai_wallet, owner, broadcaster, special
         special_ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256, signature, sender=broadcaster)
     
     # rebalance
-    log = filter_logs(special_agent, "AgenticWithdrawal")[0]
+    log = filter_logs(special_agent, "UserWalletWithdrawal")[0]
     assert log.signer == special_agent.address
     assert log.isSignerAgent
 
-    log = filter_logs(special_agent, "AgenticDeposit")[0]
+    log = filter_logs(special_agent, "UserWalletDeposit")[0]
     assert log.signer == special_agent.address
     assert log.isSignerAgent
 
@@ -107,7 +107,7 @@ def test_swap_with_signature(special_ai_wallet, special_agent, mock_lego_alpha, 
         special_ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS, signature, sender=broadcaster)
     
     # swap
-    log = filter_logs(special_agent, "AgenticSwap")[0]
+    log = filter_logs(special_agent, "UserWalletSwap")[0]
     assert log.signer == special_agent.address
     assert log.isSignerAgent
 
@@ -133,7 +133,7 @@ def test_transfer_with_signature(special_ai_wallet, special_ai_wallet_config, sa
         special_ai_wallet, sally, MAX_UINT256, alpha_token.address, signature, sender=broadcaster)
     
     # transfer
-    log = filter_logs(special_agent, "WalletFundsTransferred")[0]
+    log = filter_logs(special_agent, "UserWalletFundsTransferred")[0]
     assert log.signer == special_agent.address
     assert log.isSignerAgent
 

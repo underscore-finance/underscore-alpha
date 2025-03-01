@@ -1,0 +1,21 @@
+# @version 0.4.0
+
+# yield opportunities
+
+@external
+def borrow(
+    _borrowAsset: address,
+    _amount: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (address, uint256, uint256):
+    ...
+
+@external
+def repayDebt(
+    _paymentAsset: address,
+    _paymentAmount: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (address, uint256, uint256, uint256):
+    ...

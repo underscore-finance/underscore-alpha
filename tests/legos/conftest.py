@@ -37,7 +37,7 @@ def testLegoDeposit(bob_ai_wallet, bob_agent, lego_registry, _test):
         deposit_amount, vault_token, vault_tokens_received, usd_value = bob_ai_wallet.depositTokens(_legoId, _asset.address, _vaultToken, _amount, sender=bob_agent)
 
         # event
-        log_wallet = filter_logs(bob_ai_wallet, "AgenticDeposit")[0]
+        log_wallet = filter_logs(bob_ai_wallet, "UserWalletDeposit")[0]
         assert log_wallet.signer == bob_agent
         assert log_wallet.asset == _asset.address
         assert log_wallet.vaultToken == vault_token
@@ -91,7 +91,7 @@ def testLegoWithdrawal(bob_ai_wallet, bob_agent, lego_registry, _test):
         amount_received, vault_token_burned, usd_value = bob_ai_wallet.withdrawTokens(_legoId, _asset.address, _vaultToken, _amount, sender=bob_agent)
 
         # event
-        log_wallet = filter_logs(bob_ai_wallet, "AgenticWithdrawal")[0]
+        log_wallet = filter_logs(bob_ai_wallet, "UserWalletWithdrawal")[0]
         assert log_wallet.signer == bob_agent
         assert log_wallet.asset == _asset.address
         assert log_wallet.vaultToken == _vaultToken.address
@@ -144,7 +144,7 @@ def testLegoSwap(bob_ai_wallet, bob_agent, lego_registry, _test):
         fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(_legoId, _tokenIn.address, _tokenOut.address, _amountIn, _minAmountOut, _pool, sender=bob_agent)
 
         # event
-        log_wallet = filter_logs(bob_ai_wallet, "AgenticSwap")[0]
+        log_wallet = filter_logs(bob_ai_wallet, "UserWalletSwap")[0]
         assert log_wallet.signer == bob_agent
         assert log_wallet.tokenIn == _tokenIn.address
         assert log_wallet.tokenOut == _tokenOut.address
@@ -220,7 +220,7 @@ def testLegoLiquidityAdded(bob_ai_wallet, bob_agent, _test):
         liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId = bob_ai_wallet.addLiquidity(_lego.legoId(), _nftAddr, _nftTokenId, _pool.address, _tokenA.address, _tokenB.address, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, sender=bob_agent)
 
         # event
-        log_wallet = filter_logs(bob_ai_wallet, "AgenticLiquidityAdded")[0]
+        log_wallet = filter_logs(bob_ai_wallet, "UserWalletLiquidityAdded")[0]
         assert log_wallet.signer == bob_agent
         assert log_wallet.tokenA == _tokenA.address
         assert log_wallet.tokenB == _tokenB.address
@@ -326,7 +326,7 @@ def testLegoLiquidityRemoved(bob_ai_wallet, bob_agent, _test):
         removedAmountA, removedAmountB, usdValue, isDepleted = bob_ai_wallet.removeLiquidity(_lego.legoId(), _nftAddr, _nftTokenId, _pool.address, _tokenA.address, tokenAddrB, _liqToRemove, _minAmountA, _minAmountB, sender=bob_agent)
 
         # event
-        log_wallet = filter_logs(bob_ai_wallet, "AgenticLiquidityRemoved")[0]
+        log_wallet = filter_logs(bob_ai_wallet, "UserWalletLiquidityRemoved")[0]
         assert log_wallet.signer == bob_agent
         assert log_wallet.tokenA == _tokenA.address
         assert log_wallet.tokenB == tokenAddrB
