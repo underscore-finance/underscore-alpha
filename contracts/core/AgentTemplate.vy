@@ -3,9 +3,6 @@
 from interfaces import UserWalletInterface
 from ethereum.ercs import IERC20
 
-interface UserWalletInt:
-    def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool: nonpayable
-
 flag ActionType:
     DEPOSIT
     WITHDRAWAL
@@ -25,17 +22,29 @@ struct Signature:
     expiration: uint256
 
 struct ActionInstruction:
+    usePrevAmountOut: bool
     action: ActionType
     legoId: uint256
     asset: address
     vault: address
     amount: uint256
-    recipient: address
     altLegoId: uint256
-    altVault: address
     altAsset: address
+    altVault: address
     altAmount: uint256
+    minAmountOut: uint256
     pool: address
+    proof: bytes32
+    nftAddr: address
+    nftTokenId: uint256
+    tickLower: int24
+    tickUpper: int24
+    minAmountA: uint256
+    minAmountB: uint256
+    minLpAmount: uint256
+    liqToRemove: uint256
+    recipient: address
+    isWethToEthConversion: bool
 
 struct PendingOwner:
     newOwner: address
@@ -77,18 +86,19 @@ ownershipChangeDelay: public(uint256) # num blocks to wait before owner can be c
 # eip-712
 ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
 DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
-DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
-WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
-REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
-SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
-ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 expiration)')
-REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
-TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address recipient,uint256 amount,address asset,uint256 expiration)')
-ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
-WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
-CLAIM_REWARDS_TYPE_HASH: constant(bytes32) = keccak256('ClaimRewards(uint256 legoId,address market,address rewardToken,uint256 rewardAmount,bytes32 proof,uint256 expiration)')
-BORROW_TYPE_HASH: constant(bytes32) = keccak256('Borrow(uint256 legoId,address borrowAsset,uint256 amount,uint256 expiration)')
-REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(uint256 legoId,address paymentAsset,uint256 paymentAmount,uint256 expiration)')
+DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(address userWallet,uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
+WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(address userWallet,uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
+REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(address userWallet,uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
+SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(address userWallet,uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
+ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 expiration)')
+REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
+TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address userWallet,address recipient,uint256 amount,address asset,uint256 expiration)')
+ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(address userWallet,uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
+WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(address userWallet,uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
+CLAIM_REWARDS_TYPE_HASH: constant(bytes32) = keccak256('ClaimRewards(address userWallet,uint256 legoId,address market,address rewardToken,uint256 rewardAmount,bytes32 proof,uint256 expiration)')
+BORROW_TYPE_HASH: constant(bytes32) = keccak256('Borrow(address userWallet,uint256 legoId,address borrowAsset,uint256 amount,uint256 expiration)')
+REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(address userWallet,uint256 legoId,address paymentAsset,uint256 paymentAmount,uint256 expiration)')
+BATCH_ACTIONS_TYPE_HASH: constant(bytes32) = keccak256('performBatchActions(address userWallet,ActionInstruction[] instructions,uint256 expiration)')
 
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
@@ -139,7 +149,7 @@ def depositTokens(
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(DEPOSIT_TYPE_HASH, _legoId, _asset, _vault, _amount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(DEPOSIT_TYPE_HASH, _userWallet, _legoId, _asset, _vault, _amount, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).depositTokens(_legoId, _asset, _vault, _amount)
 
 
@@ -159,7 +169,7 @@ def withdrawTokens(
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(WITHDRAWAL_TYPE_HASH, _legoId, _asset, _vaultToken, _vaultTokenAmount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(WITHDRAWAL_TYPE_HASH, _userWallet, _legoId, _asset, _vaultToken, _vaultTokenAmount, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).withdrawTokens(_legoId, _asset, _vaultToken, _vaultTokenAmount)
 
 
@@ -181,7 +191,7 @@ def rebalance(
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(REBALANCE_TYPE_HASH, _fromLegoId, _fromAsset, _fromVaultToken, _toLegoId, _toVault, _fromVaultTokenAmount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(REBALANCE_TYPE_HASH, _userWallet, _fromLegoId, _fromAsset, _fromVaultToken, _toLegoId, _toVault, _fromVaultTokenAmount, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).rebalance(_fromLegoId, _fromAsset, _fromVaultToken, _toLegoId, _toVault, _fromVaultTokenAmount)
 
 
@@ -203,7 +213,7 @@ def swapTokens(
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).swapTokens(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool)
 
 
@@ -222,7 +232,7 @@ def borrow(
     _sig: Signature = empty(Signature),
 ) -> (address, uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(BORROW_TYPE_HASH, _legoId, _borrowAsset, _amount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(BORROW_TYPE_HASH, _userWallet, _legoId, _borrowAsset, _amount, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).borrow(_legoId, _borrowAsset, _amount)
 
 
@@ -236,7 +246,7 @@ def repayDebt(
     _sig: Signature = empty(Signature),
 ) -> (address, uint256, uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(REPAY_TYPE_HASH, _legoId, _paymentAsset, _paymentAmount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(REPAY_TYPE_HASH, _userWallet, _legoId, _paymentAsset, _paymentAmount, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).repayDebt(_legoId, _paymentAsset, _paymentAmount)
 
 
@@ -257,7 +267,7 @@ def claimRewards(
     _sig: Signature = empty(Signature),
 ):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(CLAIM_REWARDS_TYPE_HASH, _legoId, _market, _rewardToken, _rewardAmount, _proof, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(CLAIM_REWARDS_TYPE_HASH, _userWallet, _legoId, _market, _rewardToken, _rewardAmount, _proof, _sig.expiration), _sig)
     extcall UserWalletInterface(_userWallet).claimRewards(_legoId, _market, _rewardToken, _rewardAmount, _proof)
 
 
@@ -286,7 +296,7 @@ def addLiquidity(
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256, uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _minLpAmount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _userWallet, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _minLpAmount, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).addLiquidity(_legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _minLpAmount)
 
 
@@ -311,7 +321,7 @@ def removeLiquidity(
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256, bool):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(REMOVE_LIQ_TYPE_HASH, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(REMOVE_LIQ_TYPE_HASH, _userWallet, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).removeLiquidity(_legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB)
 
 
@@ -330,7 +340,7 @@ def transferFunds(
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(TRANSFER_TYPE_HASH, _recipient, _amount, _asset, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(TRANSFER_TYPE_HASH, _userWallet, _recipient, _amount, _asset, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).transferFunds(_recipient, _amount, _asset)
 
 
@@ -352,7 +362,7 @@ def convertEthToWeth(
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256):
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(ETH_TO_WETH_TYPE_HASH, _amount, _depositLegoId, _depositVault, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(ETH_TO_WETH_TYPE_HASH, _userWallet, _amount, _depositLegoId, _depositVault, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).convertEthToWeth(_amount, _depositLegoId, _depositVault)
 
 
@@ -370,7 +380,7 @@ def convertWethToEth(
     _sig: Signature = empty(Signature),
 ) -> uint256:
     if msg.sender != self.owner:
-        self._isValidSignature(abi_encode(WETH_TO_ETH_TYPE_HASH, _amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(WETH_TO_ETH_TYPE_HASH, _userWallet, _amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig.expiration), _sig)
     return extcall UserWalletInterface(_userWallet).convertWethToEth(_amount, _recipient, _withdrawLegoId, _withdrawVaultToken)
 
 
@@ -381,97 +391,110 @@ def convertWethToEth(
 
 @nonreentrant
 @external
-def performManyActions(_userWallet: address, _instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool:
-    # TODO: add signature capabilities here
-    assert msg.sender == self.owner # dev: no perms
-    return extcall UserWalletInt(_userWallet).performManyActions(_instructions)
+def performBatchActions(
+    _userWallet: address,
+    _instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS],
+    _sig: Signature = empty(Signature),
+) -> bool:
+    if msg.sender != self.owner:
+        self._isValidBatchSignature(abi_encode(BATCH_ACTIONS_TYPE_HASH, _userWallet, _instructions, _sig.expiration), _sig)
 
+    assert len(_instructions) != 0 # dev: no instructions
+    prevAmountReceived: uint256 = 0
 
-# struct ActionInstruction:
-#     action: ActionType
-#     legoId: uint256
-#     asset: address
-#     vault: address
-#     amount: uint256
-#     recipient: address
-#     altLegoId: uint256
-#     altVault: address
-#     altAsset: address
-#     altAmount: uint256
-#     pool: address
+    # not using these vars
+    naAddyA: address = empty(address)
+    naValueA: uint256 = 0
+    naValueB: uint256 = 0
+    naValueC: uint256 = 0
+    naValueD: uint256 = 0
+    naBool: bool = False
 
+    # iterate through instructions
+    for j: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
+        i: ActionInstruction = _instructions[j]
 
-# @nonreentrant
-# @external
-# def performManyActions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> bool:
-#     """
-#     @notice Performs multiple actions in a single transaction
-#     @dev Executes a batch of instructions with proper permission checks
-#     @param _instructions Array of action instructions to execute
-#     @return bool True if all actions were executed successfully
-#     """
-#     assert len(_instructions) != 0 # dev: no instructions
-#     cd: CoreData = self._getCoreData()
+        # deposit
+        if i.action == ActionType.DEPOSIT:
+            amount: uint256 = i.amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            naValueA, naAddyA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).depositTokens(i.legoId, i.asset, i.vault, amount)
 
-#     # pass in empty action, lego ids, and assets here
-#     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, empty(ActionType), [], [], cd)
+        # withdraw
+        elif i.action == ActionType.WITHDRAWAL:
+            amount: uint256 = i.amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            prevAmountReceived, naValueA, naValueB = extcall UserWalletInterface(_userWallet).withdrawTokens(i.legoId, i.asset, i.vault, amount)
 
-#     # init vars
-#     aggProtocolCost: TxCostInfo = empty(TxCostInfo)
-#     aggAgentCost: TxCostInfo = empty(TxCostInfo)
-#     usdValue: uint256 = 0
-#     naValueA: uint256 = 0
-#     naAddyA: address = empty(address)
-#     naValueB: uint256 = 0
+        # rebalance
+        elif i.action == ActionType.REBALANCE:
+            amount: uint256 = i.amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            naValueA, naAddyA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).rebalance(i.legoId, i.asset, i.vault, i.altLegoId, i.altVault, amount)
 
-#     # iterate through instructions
-#     for i: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
-#         instruction: ActionInstruction = _instructions[i]
+        # swap
+        elif i.action == ActionType.SWAP:
+            amount: uint256 = i.amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            naValueA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).swapTokens(i.legoId, i.asset, i.altAsset, amount, i.minAmountOut, i.pool)
 
-#         # deposit
-#         if instruction.action == ActionType.DEPOSIT:
-#             if isSignerAgent:
-#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.DEPOSIT, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-#             naValueA, naAddyA, naValueB, usdValue = self._depositTokens(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.amount, isSignerAgent, cd)
-#             if isSignerAgent and usdValue != 0:
-#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.DEPOSIT, usdValue, cd.priceSheets, cd.oracleRegistry)
+        # borrow
+        elif i.action == ActionType.BORROW:
+            naAddyA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).borrow(i.legoId, i.asset, i.amount)
 
-#         # withdraw
-#         elif instruction.action == ActionType.WITHDRAWAL:
-#             if isSignerAgent:
-#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.WITHDRAWAL, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-#             naValueA, naValueB, usdValue = self._withdrawTokens(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.amount, isSignerAgent, cd)
-#             if isSignerAgent and usdValue != 0:
-#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.WITHDRAWAL, usdValue, cd.priceSheets, cd.oracleRegistry)
+        # repay debt
+        elif i.action == ActionType.REPAY:
+            amount: uint256 = i.amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            extcall UserWalletInterface(_userWallet).repayDebt(i.legoId, i.asset, amount)
+            prevAmountReceived = 0
 
-#         # rebalance
-#         elif instruction.action == ActionType.REBALANCE:
-#             if isSignerAgent:
-#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.REBALANCE, [instruction.asset], [instruction.legoId, instruction.altLegoId]) # dev: agent not allowed
-#             naValueA, naAddyA, naValueB, usdValue = self._rebalance(msg.sender, instruction.legoId, instruction.asset, instruction.vault, instruction.altLegoId, instruction.altVault, instruction.amount, isSignerAgent, cd)
-#             if isSignerAgent and usdValue != 0:
-#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.REBALANCE, usdValue, cd.priceSheets, cd.oracleRegistry)
+        # claim rewards
+        elif i.action == ActionType.CLAIM_REWARDS:
+            extcall UserWalletInterface(_userWallet).claimRewards(i.legoId, i.asset, i.altAsset, i.amount, i.proof)
+            prevAmountReceived = 0
 
-#         # swap
-#         elif instruction.action == ActionType.SWAP:
-#             if isSignerAgent:
-#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.SWAP, [instruction.asset, instruction.altAsset], [instruction.legoId]) # dev: agent not allowed
-#             naValueA, naValueB, usdValue = self._swapTokens(msg.sender, instruction.legoId, instruction.asset, instruction.altAsset, instruction.amount, instruction.altAmount, instruction.pool, isSignerAgent, cd)
-#             if isSignerAgent and usdValue != 0:
-#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.SWAP, usdValue, cd.priceSheets, cd.oracleRegistry)
+        # add liquidity
+        elif i.action == ActionType.ADD_LIQ:
+            amount: uint256 = i.amount # this only goes towards token A amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            prevAmountReceived, naValueA, naValueB, naValueC, naValueD = extcall UserWalletInterface(_userWallet).addLiquidity(i.legoId, i.nftAddr, i.nftTokenId, i.pool, i.asset, i.altAsset, amount, i.altAmount, i.tickLower, i.tickUpper, i.minAmountA, i.minAmountB, i.minLpAmount)
 
-#         # transfer
-#         elif instruction.action == ActionType.TRANSFER:
-#             if isSignerAgent:
-#                 assert staticcall WalletConfig(cd.walletConfig).canAgentAccess(msg.sender, ActionType.TRANSFER, [instruction.asset], [instruction.legoId]) # dev: agent not allowed
-#             naValueA, usdValue = self._transferFunds(msg.sender, instruction.recipient, instruction.amount, instruction.asset, isSignerAgent, cd)
-#             if isSignerAgent and usdValue != 0:
-#                 aggProtocolCost, aggAgentCost = staticcall WalletConfig(cd.walletConfig).aggregateBatchTxCostData(aggProtocolCost, aggAgentCost, msg.sender, ActionType.TRANSFER, usdValue, cd.priceSheets, cd.oracleRegistry)
+        # remove liquidity
+        elif i.action == ActionType.REMOVE_LIQ:
+            amount: uint256 = i.liqToRemove # this only goes to `_liqToRemove`
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            naValueA, naValueB, naValueC, naBool = extcall UserWalletInterface(_userWallet).removeLiquidity(i.legoId, i.nftAddr, i.nftTokenId, i.pool, i.asset, i.altAsset, amount, i.minAmountA, i.minAmountB)
+            prevAmountReceived = 0
 
-#     # pay tx fees
-#     self._payTransactionFees(aggProtocolCost, aggAgentCost, empty(ActionType))
+        # transfer
+        elif i.action == ActionType.TRANSFER:
+            amount: uint256 = i.amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            extcall UserWalletInterface(_userWallet).transferFunds(i.recipient, amount, i.asset)
+            prevAmountReceived = 0
 
-#     return True
+        # conversion
+        elif i.action == ActionType.CONVERSION:
+            amount: uint256 = i.amount
+            if i.usePrevAmountOut:
+                amount = prevAmountReceived
+            if i.isWethToEthConversion:
+                prevAmountReceived = extcall UserWalletInterface(_userWallet).convertWethToEth(amount, i.recipient, i.legoId, i.vault)
+            else:
+                prevAmountReceived, naAddyA, naValueB = extcall UserWalletInterface(_userWallet).convertEthToWeth(amount, i.legoId, i.vault)
+                if naValueB != 0:
+                    prevAmountReceived = naValueB
+
+    return True
 
 
 ###########
@@ -500,6 +523,30 @@ def _domainSeparator() -> bytes32:
 
 @internal
 def _isValidSignature(_encodedValue: Bytes[512], _sig: Signature):
+    assert not self.usedSignatures[_sig.signature] # dev: signature already used
+    assert _sig.expiration >= block.timestamp # dev: signature expired
+    
+    digest: bytes32 = keccak256(concat(b'\x19\x01', self._domainSeparator(), keccak256(_encodedValue)))
+
+    # NOTE: signature is packed as r, s, v
+    r: bytes32 = convert(slice(_sig.signature, 0, 32), bytes32)
+    s: bytes32 = convert(slice(_sig.signature, 32, 32), bytes32)
+    v: uint8 = convert(slice(_sig.signature, 64, 1), uint8)
+    
+    response: Bytes[32] = raw_call(
+        ECRECOVER_PRECOMPILE,
+        abi_encode(digest, v, r, s),
+        max_outsize=32,
+        is_static_call=True # This is a view function
+    )
+    
+    assert len(response) == 32 # dev: invalid ecrecover response length
+    assert abi_decode(response, address) == _sig.signer # dev: invalid signature
+    self.usedSignatures[_sig.signature] = True
+
+
+@internal
+def _isValidBatchSignature(_encodedValue: Bytes[14880], _sig: Signature):
     assert not self.usedSignatures[_sig.signature] # dev: signature already used
     assert _sig.expiration >= block.timestamp # dev: signature expired
     

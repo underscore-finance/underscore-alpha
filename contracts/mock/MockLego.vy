@@ -344,7 +344,7 @@ def removeLiquidity(_nftTokenId: uint256, _pool: address, _tokenA: address, _tok
 @view
 @external
 def getLpToken(_pool: address) -> address:
-    return empty(address)
+    return _pool
 
 @view
 @external
@@ -421,6 +421,36 @@ def claimRewards(
 @external
 def hasClaimableRewards(_user: address) -> bool:
     return False
+
+
+################
+# Borrow Stuff #
+################
+
+
+@external
+def borrow(
+    _borrowAsset: address,
+    _amount: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (address, uint256, uint256):
+    return _borrowAsset, _amount, _amount
+
+
+@external
+def repayDebt(
+    _paymentAsset: address,
+    _paymentAmount: uint256,
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (address, uint256, uint256, uint256):
+
+    transferAmount: uint256 = min(_paymentAmount, staticcall IERC20(_paymentAsset).balanceOf(msg.sender))
+    assert transferAmount != 0 # dev: nothing to transfer
+    assert extcall IERC20(_paymentAsset).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
+
+    return _paymentAsset, transferAmount, transferAmount, 0
 
 
 ##################

@@ -241,9 +241,7 @@ PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 MAX_ASSETS: constant(uint256) = 25
-MAX_REWARDS_ASSETS: constant(uint256) = 10
 MAX_LEGOS: constant(uint256) = 20
-MAX_INSTRUCTIONS: constant(uint256) = 20
 
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
 API_VERSION: constant(String[28]) = "0.0.1"
