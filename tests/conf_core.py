@@ -81,7 +81,23 @@ def agent_template(fork):
 
 
 @pytest.fixture(scope="session")
-def lego_helper(addy_registry, lego_registry, lego_aave_v3, lego_compound_v3, lego_euler, lego_fluid, lego_moonwell, lego_morpho, lego_sky, governor):
+def lego_helper(
+    addy_registry,
+    lego_registry,
+    lego_aave_v3,
+    lego_compound_v3,
+    lego_euler,
+    lego_fluid,
+    lego_moonwell,
+    lego_morpho,
+    lego_sky,
+    lego_uniswap_v2,
+    lego_uniswap_v3,
+    lego_aerodrome,
+    lego_aerodrome_slipstream,
+    lego_curve,
+    governor,
+):
     h = boa.load(
         "contracts/core/LegoHelper.vy",
         addy_registry,
@@ -92,6 +108,11 @@ def lego_helper(addy_registry, lego_registry, lego_aave_v3, lego_compound_v3, le
         lego_moonwell.legoId(),
         lego_morpho.legoId(),
         lego_sky.legoId(),
+        lego_uniswap_v2.legoId(),
+        lego_uniswap_v3.legoId(),
+        lego_aerodrome.legoId(),
+        lego_aerodrome_slipstream.legoId(),
+        lego_curve.legoId(),
         name="lego_helper",
     )
     assert lego_registry.setLegoHelper(h, sender=governor)

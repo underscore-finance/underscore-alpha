@@ -353,14 +353,14 @@ def test_aero_slipstream_get_best_pool(
     tokenA, _ = getTokenAndWhale("usdc")
     tokenB, _ = getTokenAndWhale("weth")
 
-    best_pool = lego_aero_slipstream.getBestPool(tokenA, tokenB)
+    best_pool = lego_aero_slipstream.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59"
     assert best_pool.fee == 4
     assert best_pool.liquidity != 0
     assert best_pool.numCoins == 2
 
     tokenA, _ = getTokenAndWhale("cbbtc")
-    best_pool = lego_aero_slipstream.getBestPool(tokenA, tokenB)
+    best_pool = lego_aero_slipstream.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0x70aCDF2Ad0bf2402C957154f944c19Ef4e1cbAE1"
     assert best_pool.fee == 5
     assert best_pool.liquidity != 0

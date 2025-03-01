@@ -426,7 +426,7 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     pool: address = staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenA, _tokenB)
     if pool == empty(address):
         return empty(BestPool)
@@ -448,6 +448,16 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
 
 @view
 @external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    pool: address = staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut)
+    if pool == empty(address):
+        return empty(address), 0
+    token0: address = staticcall IUniswapV2Pair(pool).token0()
+    return pool, self._getAmountOut(pool, _tokenIn, _tokenOut, _tokenIn == token0, _amountIn)
+
+
+@view
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,
@@ -456,6 +466,16 @@ def getSwapAmountOut(
 ) -> uint256:
     token0: address = staticcall IUniswapV2Pair(_pool).token0()
     return self._getAmountOut(_pool, _tokenIn, _tokenOut, _tokenIn == token0, _amountIn)
+
+
+@view
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    pool: address = staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut)
+    if pool == empty(address):
+        return empty(address), 0
+    token0: address = staticcall IUniswapV2Pair(pool).token0()
+    return pool, self._getAmountIn(pool, _tokenIn, _tokenOut, _tokenIn == token0, _amountOut)
 
 
 @view

@@ -251,14 +251,14 @@ def test_uniswapV2_get_best_pool(
     tokenA, _ = getTokenAndWhale("usdc")
     tokenB, _ = getTokenAndWhale("weth")
 
-    best_pool = lego_uniswap_v2.getBestPool(tokenA, tokenB)
+    best_pool = lego_uniswap_v2.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C"
     assert best_pool.fee == 30
     assert best_pool.liquidity != 0
     assert best_pool.numCoins == 2
 
     # virtual
-    best_pool = lego_uniswap_v2.getBestPool("0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b", tokenB)
+    best_pool = lego_uniswap_v2.getDeepestLiqPool("0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b", tokenB)
     assert best_pool.pool == "0xE31c372a7Af875b3B5E0F3713B17ef51556da667"
     assert best_pool.fee == 30
     assert best_pool.liquidity != 0

@@ -723,7 +723,7 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     bestPoolAddr: address = empty(address)
     bestFeeTier: uint24 = 0
     bestPoolAddr, bestFeeTier = self._getDeepestLiqPool(_tokenA, _tokenB)
@@ -746,6 +746,41 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
 
 # annoying that this cannot be view function, thanks uni v3
 @external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    bestPool: address = empty(address)
+    bestAmountOut: uint256 = 0
+
+    factory: address = UNIV3_FACTORY
+    quoter: address = UNIV3_QUOTER
+    for i: uint256 in range(4):
+        fee: uint24 = FEE_TIERS[i]
+        pool: address = staticcall UniV3Factory(factory).getPool(_tokenIn, _tokenOut, fee)
+        if pool == empty(address):
+            continue
+
+        amountOut: uint256 = 0
+        na1: uint160 = 0
+        na2: uint32 = 0
+        na3: uint256 = 0
+        amountOut, na1, na2, na3 = extcall UniV3Quoter(quoter).quoteExactInputSingle(
+            QuoteExactInputSingleParams(
+                tokenIn=_tokenIn,
+                tokenOut=_tokenOut,
+                amountIn=_amountIn,
+                fee=fee,
+                sqrtPriceLimitX96=0,
+            )
+        )
+
+        if amountOut > bestAmountOut:
+            bestPool = pool
+            bestAmountOut = amountOut
+
+    return bestPool, bestAmountOut
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,
@@ -753,10 +788,10 @@ def getSwapAmountOut(
     _amountIn: uint256,
 ) -> uint256:
     amountOut: uint256 = 0
-    sqrtPriceX96After: uint160 = 0
-    initializedTicksCrossed: uint32 = 0
-    gasEstimate: uint256 = 0
-    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactInputSingle(
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountOut, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactInputSingle(
         QuoteExactInputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -770,6 +805,41 @@ def getSwapAmountOut(
 
 # annoying that this cannot be view function, thanks uni v3
 @external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    bestPool: address = empty(address)
+    bestAmountIn: uint256 = max_value(uint256)
+
+    factory: address = UNIV3_FACTORY
+    quoter: address = UNIV3_QUOTER
+    for i: uint256 in range(4):
+        fee: uint24 = FEE_TIERS[i]
+        pool: address = staticcall UniV3Factory(factory).getPool(_tokenIn, _tokenOut, fee)
+        if pool == empty(address):
+            continue
+
+        amountIn: uint256 = 0
+        na1: uint160 = 0
+        na2: uint32 = 0
+        na3: uint256 = 0
+        amountIn, na1, na2, na3 = extcall UniV3Quoter(quoter).quoteExactOutputSingle(
+            QuoteExactOutputSingleParams(
+                tokenIn=_tokenIn,
+                tokenOut=_tokenOut,
+                amount=_amountOut,
+                fee=fee,
+                sqrtPriceLimitX96=0,
+            )
+        )
+
+        if amountIn != 0 and amountIn < bestAmountIn:
+            bestPool = pool
+            bestAmountIn = amountIn
+
+    return bestPool, bestAmountIn
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
 def getSwapAmountIn(
     _pool: address,
     _tokenIn: address,
@@ -777,10 +847,10 @@ def getSwapAmountIn(
     _amountOut: uint256,
 ) -> uint256:
     amountIn: uint256 = 0
-    sqrtPriceX96After: uint160 = 0
-    initializedTicksCrossed: uint32 = 0
-    gasEstimate: uint256 = 0
-    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactOutputSingle(
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountIn, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactOutputSingle(
         QuoteExactOutputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,

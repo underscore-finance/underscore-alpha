@@ -1,6 +1,7 @@
 # @version 0.4.0
 
 from interfaces import LegoYield
+from interfaces import LegoDex
 from ethereum.ercs import IERC20
 
 interface LegoRegistry:
@@ -8,6 +9,10 @@ interface LegoRegistry:
     def isValidLegoId(_legoId: uint256) -> bool: view
     def legoInfo(_legoId: uint256) -> LegoInfo: view
     def numLegos() -> uint256: view
+
+interface LegoDexNonStandard:
+    def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256): nonpayable
+    def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256): nonpayable
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -36,7 +41,7 @@ struct LegoInfo:
 
 ADDY_REGISTRY: public(immutable(address))
 
-# lego ids
+# yield lego ids
 AAVE_V3_ID: public(immutable(uint256))
 COMPOUND_V3_ID: public(immutable(uint256))
 EULER_ID: public(immutable(uint256))
@@ -45,12 +50,18 @@ MOONWELL_ID: public(immutable(uint256))
 MORPHO_ID: public(immutable(uint256))
 SKY_ID: public(immutable(uint256))
 
-MAX_VAULTS: constant(uint256) = 15
+# dex lego ids
+UNISWAP_V2_ID: public(immutable(uint256))
+UNISWAP_V3_ID: public(immutable(uint256))
+AERODROME_ID: public(immutable(uint256))
+AERODROME_SLIPSTREAM_ID: public(immutable(uint256))
+CURVE_ID: public(immutable(uint256))
 
 
 @deploy
 def __init__(
     _addyRegistry: address,
+    # yield lego ids
     _aaveV3Id: uint256,
     _compoundV3Id: uint256,
     _eulerId: uint256,
@@ -58,12 +69,18 @@ def __init__(
     _moonwellId: uint256,
     _morphoId: uint256,
     _skyId: uint256,
+    # dex lego ids
+    _uniswapV2Id: uint256,
+    _uniswapV3Id: uint256,
+    _aerodromeId: uint256,
+    _aerodromeSlipstreamId: uint256,
+    _curveId: uint256,
 ):
     assert empty(address) != _addyRegistry # dev: invalid address
     ADDY_REGISTRY = _addyRegistry
-
-    # lego ids
     legoRegistry: address = staticcall AddyRegistry(_addyRegistry).getAddy(2)
+
+    # yield lego ids
     assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_aaveV3Id) # dev: invalid id
     assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_compoundV3Id) # dev: invalid id
     assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_eulerId) # dev: invalid id
@@ -80,10 +97,23 @@ def __init__(
     MORPHO_ID = _morphoId
     SKY_ID = _skyId
 
+    # dex lego ids
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_uniswapV2Id) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_uniswapV3Id) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_aerodromeId) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_aerodromeSlipstreamId) # dev: invalid id
+    assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_curveId) # dev: invalid id
 
-#######################
-# Yield Opportunities #
-#######################
+    UNISWAP_V2_ID = _uniswapV2Id
+    UNISWAP_V3_ID = _uniswapV3Id
+    AERODROME_ID = _aerodromeId
+    AERODROME_SLIPSTREAM_ID = _aerodromeSlipstreamId
+    CURVE_ID = _curveId
+
+
+###############
+# Yield Legos #
+###############
 
 
 @view
@@ -177,7 +207,79 @@ def skyId() -> uint256:
     return SKY_ID
 
 
-# utility functions
+#############
+# DEX Legos #
+#############
+
+
+@view
+@external
+def uniswapV2() -> address:
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(UNISWAP_V2_ID)
+
+
+@view
+@external
+def uniswapV2Id() -> uint256:
+    return UNISWAP_V2_ID
+
+
+@view
+@external
+def uniswapV3() -> address:
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(UNISWAP_V3_ID)
+
+
+@view
+@external
+def uniswapV3Id() -> uint256:
+    return UNISWAP_V3_ID
+
+
+@view
+@external
+def aerodrome() -> address:
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(AERODROME_ID)
+
+
+@view
+@external
+def aerodromeId() -> uint256:
+    return AERODROME_ID
+
+
+@view
+@external
+def aerodromeSlipstream() -> address:
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(AERODROME_SLIPSTREAM_ID)
+
+
+@view
+@external
+def aerodromeSlipstreamId() -> uint256:
+    return AERODROME_SLIPSTREAM_ID
+
+
+@view
+@external
+def curve() -> address:
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    return staticcall LegoRegistry(legoRegistry).getLegoAddr(CURVE_ID)
+
+
+@view
+@external
+def curveId() -> uint256:
+    return CURVE_ID
+
+
+#################
+# Yield Helpers #
+#################
 
 
 @view
@@ -253,3 +355,75 @@ def getUnderlyingData(_asset: address, _amount: uint256) -> UnderlyingData:
         legoDesc="",
     )
 
+
+###############
+# Dex Helpers #
+###############
+
+
+# can't make this view function because of uni v3 + aerodrom slipstream
+@external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256, uint256):
+    bestPool: address = empty(address)
+    bestAmountOut: uint256 = 0
+    bestLegoId: uint256 = 0
+
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
+        if legoInfo.legoType != LegoType.DEX:
+            continue
+
+        pool: address = empty(address)
+        amountOut: uint256 = 0
+
+        # non-view function
+        if i == UNISWAP_V3_ID or i == AERODROME_SLIPSTREAM_ID:
+            pool, amountOut = extcall LegoDexNonStandard(legoInfo.addr).getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn)
+
+        # normal
+        else:
+            pool, amountOut = staticcall LegoDex(legoInfo.addr).getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn)
+        
+        # compare best
+        if pool != empty(address) and amountOut > bestAmountOut:
+            bestPool = pool
+            bestAmountOut = amountOut
+            bestLegoId = i
+
+    return bestPool, bestAmountOut, bestLegoId
+
+
+# can't make this view function because of uni v3 + aerodrom slipstream
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256, uint256):
+    bestPool: address = empty(address)
+    bestAmountIn: uint256 = max_value(uint256)
+    bestLegoId: uint256 = 0
+
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
+        if legoInfo.legoType != LegoType.DEX:
+            continue
+
+        pool: address = empty(address)
+        amountIn: uint256 = max_value(uint256)
+
+        # non-view function
+        if i == UNISWAP_V3_ID or i == AERODROME_SLIPSTREAM_ID:
+            pool, amountIn = extcall LegoDexNonStandard(legoInfo.addr).getBestSwapAmountIn(_tokenIn, _tokenOut, _amountOut)
+
+        # normal
+        else:
+            pool, amountIn = staticcall LegoDex(legoInfo.addr).getBestSwapAmountIn(_tokenIn, _tokenOut, _amountOut)
+        
+        # compare best
+        if pool != empty(address) and amountIn != 0 and amountIn < bestAmountIn:
+            bestPool = pool
+            bestAmountIn = amountIn
+            bestLegoId = i
+
+    return bestPool, bestAmountIn, bestLegoId

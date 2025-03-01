@@ -668,7 +668,7 @@ def test_curve_get_best_pool(
     tokenA, _ = getTokenAndWhale("cbeth")
     tokenB, _ = getTokenAndWhale("weth")
 
-    best_pool = lego_curve.getBestPool(tokenA, tokenB)
+    best_pool = lego_curve.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0x11C1fBd4b3De66bC0565779b35171a6CF3E71f59"
     assert best_pool.fee == 3
     assert best_pool.liquidity != 0
@@ -676,7 +676,7 @@ def test_curve_get_best_pool(
 
     # tricrypto
     tokenA, _ = getTokenAndWhale("crvusd")
-    best_pool = lego_curve.getBestPool(tokenA, tokenB)
+    best_pool = lego_curve.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0x6e53131F68a034873b6bFA15502aF094Ef0c5854"
     assert best_pool.fee == 163
     assert best_pool.liquidity != 0

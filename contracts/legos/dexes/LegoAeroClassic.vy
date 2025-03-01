@@ -473,7 +473,7 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     factory: address = AERODROME_FACTORY
     reserve0: uint256 = 0
     reserve1: uint256 = 0
@@ -519,6 +519,37 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
 
 @view
 @external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    factory: address = AERODROME_FACTORY
+    stablePool: address = staticcall AeroFactory(factory).getPool(_tokenIn, _tokenOut, True)
+    volatilePool: address = staticcall AeroFactory(factory).getPool(_tokenIn, _tokenOut, False)
+    if stablePool == empty(address) and volatilePool == empty(address):
+        return empty(address), 0
+
+    # stable pool
+    stableAmountOut: uint256 = 0
+    if stablePool != empty(address):
+        stableAmountOut = staticcall AeroClassicPool(stablePool).getAmountOut(_amountIn, _tokenIn)
+
+    # volatile pool
+    volatileAmountOut: uint256 = 0
+    if volatilePool != empty(address):
+        volatileAmountOut = staticcall AeroClassicPool(volatilePool).getAmountOut(_amountIn, _tokenIn)
+
+    if stableAmountOut == 0 and volatileAmountOut == 0:
+        return empty(address), 0
+
+    pool: address = stablePool
+    amountOut: uint256 = stableAmountOut
+    if volatileAmountOut > stableAmountOut:
+        pool = volatilePool
+        amountOut = volatileAmountOut
+
+    return pool, amountOut
+
+
+@view
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,
@@ -526,6 +557,16 @@ def getSwapAmountOut(
     _amountIn: uint256,
 ) -> uint256:
     return staticcall AeroClassicPool(_pool).getAmountOut(_amountIn, _tokenIn)
+
+
+@view
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    # TODO: implement stable pools
+    pool: address = staticcall AeroFactory(AERODROME_FACTORY).getPool(_tokenIn, _tokenOut, False)
+    if pool == empty(address):
+        return empty(address), 0
+    return pool, self._getAmountInForVolatilePools(pool, _tokenIn, _tokenOut, _amountOut)
 
 
 @view

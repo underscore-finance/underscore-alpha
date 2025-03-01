@@ -401,6 +401,18 @@ def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: addre
     return 0
 
 
+@view
+@external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    return empty(address), 0
+
+
+@view
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    return empty(address), 0
+
+
 #################
 # Claim Rewards #
 #################
