@@ -98,7 +98,8 @@ WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(address userWall
 CLAIM_REWARDS_TYPE_HASH: constant(bytes32) = keccak256('ClaimRewards(address userWallet,uint256 legoId,address market,address rewardToken,uint256 rewardAmount,bytes32 proof,uint256 expiration)')
 BORROW_TYPE_HASH: constant(bytes32) = keccak256('Borrow(address userWallet,uint256 legoId,address borrowAsset,uint256 amount,uint256 expiration)')
 REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(address userWallet,uint256 legoId,address paymentAsset,uint256 paymentAmount,uint256 expiration)')
-BATCH_ACTIONS_TYPE_HASH: constant(bytes32) = keccak256('BatchActions(address userWallet,ActionInstruction[] instructions,uint256 expiration)')
+BATCH_ACTIONS_TYPE_HASH: constant(bytes32) =  keccak256('BatchActions(address userWallet,ActionInstruction[] instructions,uint256 expiration)')
+ACTION_INSTRUCTION_TYPE_HASH: constant(bytes32) = keccak256('ActionInstruction(bool usePrevAmountOut,uint256 action,uint256 legoId,address asset,address vault,uint256 amount,uint256 altLegoId,address altAsset,address altVault,uint256 altAmount,uint256 minAmountOut,address pool,bytes32 proof,address nftAddr,uint256 nftTokenId,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 liqToRemove,address recipient,bool isWethToEthConversion)')
 
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
@@ -422,7 +423,7 @@ def performBatchActions(
 ) -> bool:
     owner: address = self.owner
     if msg.sender != owner:
-        self._isValidBatchSignature(abi_encode(BATCH_ACTIONS_TYPE_HASH, _userWallet, _instructions, _sig.expiration), _sig)
+        self._isValidBatchSignature(self._hashBatchActions(_userWallet, _instructions, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
 
     assert len(_instructions) != 0 # dev: no instructions
@@ -571,13 +572,75 @@ def _isValidSignature(_encodedValue: Bytes[512], _sig: Signature):
     self.usedSignatures[_sig.signature] = True
 
 
+@view
 @internal
-def _isValidBatchSignature(_encodedValue: Bytes[14880], _sig: Signature):
+def _encodeActionInstruction(instr: ActionInstruction) -> Bytes[768]:
+    # Just encode, no hash
+    return abi_encode(
+        ACTION_INSTRUCTION_TYPE_HASH,
+        instr.usePrevAmountOut,
+        instr.action,
+        instr.legoId,
+        instr.asset,
+        instr.vault,
+        instr.amount,
+        instr.altLegoId,
+        instr.altAsset,
+        instr.altVault,
+        instr.altAmount,
+        instr.minAmountOut,
+        instr.pool,
+        instr.proof,
+        instr.nftAddr,
+        instr.nftTokenId,
+        instr.tickLower,
+        instr.tickUpper,
+        instr.minAmountA,
+        instr.minAmountB,
+        instr.minLpAmount,
+        instr.liqToRemove,
+        instr.recipient,
+        instr.isWethToEthConversion
+    )
+
+
+@view
+@internal
+def _encodeInstructions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS]) -> Bytes[15360]:
+    concatenated: Bytes[15360] = empty(Bytes[15360]) # max size for 20 instructions - 20*768
+    for i: uint256 in range(len(_instructions), bound=MAX_INSTRUCTIONS):
+        concatenated = convert(
+            concat(
+                concatenated, 
+                self._encodeActionInstruction(_instructions[i])
+            ), 
+            Bytes[15360]
+        )
+    return slice(concatenated, 0, len(_instructions) * 768)
+
+
+@view
+@internal
+def _hashBatchActions(_userWallet: address, _instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS], _expiration: uint256) -> Bytes[15520]:
+    # Now we encode everything and hash only once at the end
+    return abi_encode(
+        BATCH_ACTIONS_TYPE_HASH,
+        _userWallet,
+        self._encodeInstructions(_instructions),
+        _expiration
+    )
+
+
+@internal
+def _isValidBatchSignature(_encodedValue: Bytes[15520], _sig: Signature):
+    encoded_hash: bytes32 = keccak256(_encodedValue)
+    domain_sep: bytes32 = self._domainSeparator()
+    
+    digest: bytes32 = keccak256(concat(b'\x19\x01', domain_sep, encoded_hash))
+    
     assert not self.usedSignatures[_sig.signature] # dev: signature already used
     assert _sig.expiration >= block.timestamp # dev: signature expired
     
-    digest: bytes32 = keccak256(concat(b'\x19\x01', self._domainSeparator(), keccak256(_encodedValue)))
-
     # NOTE: signature is packed as r, s, v
     r: bytes32 = convert(slice(_sig.signature, 0, 32), bytes32)
     s: bytes32 = convert(slice(_sig.signature, 32, 32), bytes32)
@@ -591,8 +654,17 @@ def _isValidBatchSignature(_encodedValue: Bytes[14880], _sig: Signature):
     )
     
     assert len(response) == 32 # dev: invalid ecrecover response length
+    signer: address = abi_decode(response, address)
     assert abi_decode(response, address) == _sig.signer # dev: invalid signature
     self.usedSignatures[_sig.signature] = True
+
+
+@view
+@external
+def getBatchActionHash(_userWallet: address, _instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS], _expiration: uint256) -> bytes32:
+    encodedValue: Bytes[15520] = self._hashBatchActions(_userWallet, _instructions, _expiration)
+    encoded_hash: bytes32 = keccak256(encodedValue)
+    return keccak256(concat(b'\x19\x01', self._domainSeparator(), encoded_hash))
 
 
 ####################
