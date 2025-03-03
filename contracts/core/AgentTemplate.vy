@@ -89,7 +89,7 @@ DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string
 DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(address userWallet,uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(address userWallet,uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(address userWallet,uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
-SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(address userWallet,uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,DynArray[address, 5] extraTokensIfHop,DynArray[address, 5] extraPoolsIfHop,uint256 expiration)')
+SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(address userWallet,uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,address[] extraTokensIfHop,address[] extraPoolsIfHop,uint256 expiration)')
 ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 expiration)')
 REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address userWallet,address recipient,uint256 amount,address asset,uint256 expiration)')
@@ -225,9 +225,57 @@ def swapTokens(
 ) -> (uint256, uint256, uint256):
     owner: address = self.owner
     if msg.sender != owner:
-        self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop, _sig.expiration), _sig)
+        self._isValidSignature(self._encodeSwapData(_userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
     return extcall UserWalletInterface(_userWallet).swapTokens(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop)
+
+
+@view
+@internal
+def _encodeSwapData(
+    _userWallet: address,
+    _legoId: uint256,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _pool: address,
+    _extraTokensIfHop: DynArray[address, MAX_ASSETS],
+    _extraPoolsIfHop: DynArray[address, MAX_ASSETS],
+    _expiration: uint256,
+) -> Bytes[736]:
+    return abi_encode(
+        SWAP_TYPE_HASH,
+        _userWallet,
+        _legoId,
+        _tokenIn,
+        _tokenOut,
+        _amountIn,
+        _minAmountOut,
+        _pool,
+        _extraTokensIfHop,
+        _extraPoolsIfHop,
+        _expiration,
+    )
+
+
+@view
+@external
+def getSwapDataHash(
+    _expiration: uint256,
+    _userWallet: address,
+    _legoId: uint256,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256 = max_value(uint256),
+    _minAmountOut: uint256 = 0,
+    _pool: address = empty(address),
+    _extraTokensIfHop: DynArray[address, MAX_ASSETS] = empty(DynArray[address, MAX_ASSETS]),
+    _extraPoolsIfHop: DynArray[address, MAX_ASSETS] = empty(DynArray[address, MAX_ASSETS]),
+) -> bytes32:
+    encodedValue: Bytes[736] = self._encodeSwapData(_userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop, _expiration)
+    encoded_hash: bytes32 = keccak256(encodedValue)
+    return keccak256(concat(b'\x19\x01', self._domainSeparator(), encoded_hash))
 
 
 ##################
@@ -617,7 +665,7 @@ def _encodeInstructions(_instructions: DynArray[ActionInstruction, MAX_INSTRUCTI
             concat(
                 concatenated, 
                 self._encodeActionInstruction(_instructions[i])
-            ), 
+            ),
             Bytes[15360]
         )
     return slice(concatenated, 0, len(_instructions) * 768)

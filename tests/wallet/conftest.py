@@ -252,42 +252,14 @@ def signSwap(special_agent_signer):
         _extraPoolsIfHop,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
-        # the data to be signed
-        message = {
-            "domain": {
-                "name": "UnderscoreAgent",
-                "version": _agent.apiVersion(),
-                "chainId": boa.env.evm.patch.chain_id,
-                "verifyingContract": _agent.address,
-            },
-            "types": {
-                "Swap": [
-                    {"name": "userWallet", "type": "address"},
-                    {"name": "legoId", "type": "uint256"},
-                    {"name": "tokenIn", "type": "address"},
-                    {"name": "tokenOut", "type": "address"},
-                    {"name": "amountIn", "type": "uint256"},
-                    {"name": "minAmountOut", "type": "uint256"},
-                    {"name": "pool", "type": "address"},
-                    {"name": "extraTokensIfHop", "type": "DynArray[address, 5]"},
-                    {"name": "extraPoolsIfHop", "type": "DynArray[address, 5]"},
-                    {"name": "expiration", "type": "uint256"},
-                ],
-            },
-            "message": {
-                "userWallet": _userWallet.address,
-                "legoId": _legoId,
-                "tokenIn": _tokenIn,
-                "tokenOut": _tokenOut,
-                "amountIn": _amountIn,
-                "minAmountOut": _minAmountOut,
-                "pool": _pool,
-                "extraTokensIfHop": _extraTokensIfHop,
-                "extraPoolsIfHop": _extraPoolsIfHop,
-                "expiration": _expiration,
-            }
-        }
-        return (Account.sign_typed_data(special_agent_signer.key, full_message=message).signature, special_agent_signer.address, _expiration)
+         # Get the contract's hash
+        message_hash = _agent.getSwapDataHash(_expiration, _userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop)
+
+        # Sign the hash directly without any prefix
+        signed = Account._sign_hash(message_hash, special_agent_signer.key)
+
+        return (signed.signature, special_agent_signer.address, _expiration)
+    
     yield signSwap
 
 
