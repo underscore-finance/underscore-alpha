@@ -64,6 +64,7 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: immutable(address)
 withdrawFails: public(bool)
+MAX_SWAP_HOPS: constant(uint256) = 5
 
 
 @deploy
@@ -318,8 +319,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
-    _extraTokenIfHop: address,
-    _extraPoolIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
     _recipient: address,
     _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     # THIS IS A TOTAL HACK
@@ -362,7 +363,7 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getWethUsdcRouterPool() -> address:
+def getCoreRouterPool() -> address:
     return empty(address)
 
 @view

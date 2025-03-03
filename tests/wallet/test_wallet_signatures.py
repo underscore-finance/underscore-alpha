@@ -100,10 +100,10 @@ def test_swap_with_signature(special_ai_wallet, special_agent, mock_lego_alpha, 
     bravo_token.transfer(mock_lego_alpha.address, deposit_amount, sender=bravo_token_whale)
 
     # signature
-    signature = signSwap(special_agent, special_ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS, ZERO_ADDRESS, ZERO_ADDRESS)
+    signature = signSwap(special_agent, special_ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS, [], [])
 
     # swap
-    actualSwapAmount, toAmount, usdValue = special_agent.swapTokens(special_ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS, ZERO_ADDRESS, ZERO_ADDRESS, signature, sender=broadcaster)
+    actualSwapAmount, toAmount, usdValue = special_agent.swapTokens(special_ai_wallet, lego_id, alpha_token.address, bravo_token.address, MAX_UINT256, 0, ZERO_ADDRESS, [], [], signature, sender=broadcaster)
     
     log = filter_logs(special_agent, "UserWalletSwap")[0]
     assert log.signer == special_agent.address

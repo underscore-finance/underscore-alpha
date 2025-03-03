@@ -192,8 +192,8 @@ event UniV3FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
-event UniV3WethUsdcRouterPoolSet:
-    wethUsdcRouterPool: indexed(address)
+event UniV3CoreRouterPoolSet:
+    pool: indexed(address)
 
 event UniV3NftRecovered:
     collection: indexed(address)
@@ -207,7 +207,7 @@ event UniswapV3Activated:
     isActivated: bool
 
 # transient
-wethUsdcRouterPool: public(address)
+coreRouterPool: public(address)
 poolSwapData: transient(PoolSwapData)
 
 # uni
@@ -229,7 +229,7 @@ TICK_UPPER: constant(int24) = 887272
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
-
+MAX_SWAP_HOPS: constant(uint256) = 5
 
 @deploy
 def __init__(
@@ -238,15 +238,15 @@ def __init__(
     _uniNftPositionManager: address,
     _uniV3Quoter: address,
     _addyRegistry: address,
-    _wethUsdcRouterPool: address,
+    _coreRouterPool: address,
 ):
-    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
+    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry, _coreRouterPool] # dev: invalid addrs
     UNIV3_FACTORY = _uniswapV3Factory
     UNIV3_SWAP_ROUTER = _uniswapV3SwapRouter
     UNIV3_NFT_MANAGER = _uniNftPositionManager
     UNIV3_QUOTER = _uniV3Quoter
     ADDY_REGISTRY = _addyRegistry
-    self.wethUsdcRouterPool = _wethUsdcRouterPool
+    self.coreRouterPool = _coreRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -283,8 +283,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
-    _extraTokenIfHop: address,
-    _extraPoolIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -304,8 +304,8 @@ def swapTokens(
 
     # perform swap
     toAmount: uint256 = 0
-    if _extraTokenIfHop != empty(address):
-        toAmount = self._swapTokensWithHop(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient, _extraTokenIfHop, _extraPoolIfHop)
+    if len(_extraTokensIfHop) != 0:
+        toAmount = self._swapTokensWithHop(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient, _extraTokensIfHop, _extraPoolsIfHop)
     elif _pool != empty(address):
         toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     else:
@@ -345,29 +345,34 @@ def _swapTokensWithHop(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _recipient: address,
-    _extraTokenIfHop: address,
-    _extraPoolIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
 ) -> uint256:
     router: address = UNIV3_SWAP_ROUTER
     assert extcall IERC20(_tokenIn).approve(router, _amountIn, default_return_value=True) # dev: approval failed
-    assert _pool != empty(address) and _extraPoolIfHop != empty(address) # dev: invalid pools
+    assert len(_extraTokensIfHop) == len(_extraPoolsIfHop) # dev: invalid extra tokens and pools
 
-    feeA: uint24 = staticcall UniV3Pool(_pool).fee()
-    feeB: uint24 = staticcall UniV3Pool(_extraPoolIfHop).fee()
-    path: Bytes[1024] = abi_encode(_tokenIn, feeA, _extraTokenIfHop, feeB, _tokenOut)
+    # TODO: figure out why this isn't working
 
-    toAmount: uint256 = extcall UniV3SwapRouter(router).exactInput(
-        ExactInputParams(
-            path=path,
-            recipient=_recipient,
-            deadline=block.timestamp,
-            amountIn=_amountIn,
-            amountOutMinimum=_minAmountOut,
-        )
-    )
+    # assert _pool != empty(address) and _extraPoolIfHop != empty(address) # dev: invalid pools
 
-    assert extcall IERC20(_tokenIn).approve(router, 0, default_return_value=True) # dev: approval failed
-    return toAmount
+    # feeA: uint24 = staticcall UniV3Pool(_pool).fee()
+    # feeB: uint24 = staticcall UniV3Pool(_extraPoolIfHop).fee()
+    # path: Bytes[1024] = abi_encode(_tokenIn, feeA, _extraTokenIfHop, feeB, _tokenOut)
+
+    # toAmount: uint256 = extcall UniV3SwapRouter(router).exactInput(
+    #     ExactInputParams(
+    #         path=path,
+    #         recipient=_recipient,
+    #         deadline=block.timestamp,
+    #         amountIn=_amountIn,
+    #         amountOutMinimum=_minAmountOut,
+    #     )
+    # )
+
+    # assert extcall IERC20(_tokenIn).approve(router, 0, default_return_value=True) # dev: approval failed
+    # return toAmount
+    return 0
 
 
 # swap in pool
@@ -786,8 +791,8 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getWethUsdcRouterPool() -> address:
-    return self.wethUsdcRouterPool
+def getCoreRouterPool() -> address:
+    return self.coreRouterPool
 
 
 @view
@@ -1074,15 +1079,15 @@ def _getSqrtPriceX96(_pool: address) -> uint256:
 
 
 ####################
-# WETH/USDC Router #
+# Core Router Pool #
 ####################
 
 
 @external
-def setWethUsdcRouterPool(_addr: address) -> bool:
+def setCoreRouterPool(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
-    self.wethUsdcRouterPool = _addr
-    log UniV3WethUsdcRouterPoolSet(_addr)
+    self.coreRouterPool = _addr
+    log UniV3CoreRouterPoolSet(_addr)
     return True
 
 

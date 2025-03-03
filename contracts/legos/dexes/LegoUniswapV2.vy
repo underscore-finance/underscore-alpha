@@ -19,8 +19,8 @@ interface IUniswapV2Pair:
 
 interface UniV2Router:
     def addLiquidity(_tokenA: address, _tokenB: address, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
+    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[address, MAX_SWAP_HOPS + 2], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_SWAP_HOPS + 2]: nonpayable
     def removeLiquidity(_tokenA: address, _tokenB: address, _lpAmount: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256): nonpayable
-    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[address, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -70,8 +70,8 @@ event UniswapV2Swap:
     usdValue: uint256
     recipient: address
 
-event UniV2WethUsdcRouterPoolSet:
-    wethUsdcRouterPool: indexed(address)
+event UniV2WethCoreRouterPoolSet:
+    pool: indexed(address)
 
 event UniV2FundsRecovered:
     asset: indexed(address)
@@ -85,7 +85,7 @@ event UniswapV2Activated:
     isActivated: bool
 
 # uniswap
-wethUsdcRouterPool: public(address)
+coreRouterPool: public(address)
 UNISWAP_V2_FACTORY: public(immutable(address))
 UNISWAP_V2_ROUTER: public(immutable(address))
 
@@ -94,7 +94,7 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-MAX_ASSETS: constant(uint256) = 5
+MAX_SWAP_HOPS: constant(uint256) = 5
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
@@ -103,13 +103,13 @@ def __init__(
     _uniswapV2Factory: address,
     _uniswapV2Router: address,
     _addyRegistry: address,
-    _wethUsdcRouterPool: address,
+    _coreRouterPool: address,
 ):
-    assert empty(address) not in [_uniswapV2Factory, _uniswapV2Router, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
+    assert empty(address) not in [_uniswapV2Factory, _uniswapV2Router, _addyRegistry, _coreRouterPool] # dev: invalid addrs
     UNISWAP_V2_FACTORY = _uniswapV2Factory
     UNISWAP_V2_ROUTER = _uniswapV2Router
     ADDY_REGISTRY = _addyRegistry
-    self.wethUsdcRouterPool = _wethUsdcRouterPool
+    self.coreRouterPool = _coreRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -138,8 +138,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
-    _extraTokenIfHop: address,
-    _extraPoolIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -159,8 +159,8 @@ def swapTokens(
 
     # perform swap
     toAmount: uint256 = 0
-    if _pool == empty(address) or _extraTokenIfHop != empty(address):
-        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient, _extraTokenIfHop)
+    if _pool == empty(address) or len(_extraTokensIfHop) != 0:
+        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient, _extraTokensIfHop)
     else:
         toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     assert toAmount != 0 # dev: no tokens swapped
@@ -229,18 +229,21 @@ def _swapTokensGeneric(
     _amountIn: uint256,
     _minAmountOut: uint256, 
     _recipient: address,
-    _extraTokenIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
 ) -> uint256:
-    path: DynArray[address, MAX_ASSETS] = []
-    if _extraTokenIfHop == empty(address):
+    path: DynArray[address, MAX_SWAP_HOPS + 2] = []
+    if len(_extraTokensIfHop) == 0:
         assert staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut) != empty(address) # dev: no pool found
         path = [_tokenIn, _tokenOut]
     else:
-        path = [_tokenIn, _extraTokenIfHop, _tokenOut]
+        path = [_tokenIn]
+        for i: uint256 in range(len(_extraTokensIfHop), bound=MAX_SWAP_HOPS):
+            path.append(_extraTokensIfHop[i])
+        path.append(_tokenOut)
 
     swapRouter: address = UNISWAP_V2_ROUTER
     assert extcall IERC20(_tokenIn).approve(swapRouter, _amountIn, default_return_value=True) # dev: approval failed
-    amounts: DynArray[uint256, MAX_ASSETS] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, path, _recipient, block.timestamp)
+    amounts: DynArray[uint256, MAX_SWAP_HOPS + 2] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, path, _recipient, block.timestamp)
     assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
     return amounts[1]
 
@@ -444,8 +447,8 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getWethUsdcRouterPool() -> address:
-    return self.wethUsdcRouterPool
+def getCoreRouterPool() -> address:
+    return self.coreRouterPool
 
 
 @view
@@ -699,15 +702,15 @@ def _getAmountIn(_pool: address, _tokenIn: address, _tokenOut: address, _zeroFor
 
 
 ####################
-# WETH/USDC Router #
+# Core Router Pool #
 ####################
 
 
 @external
-def setWethUsdcRouterPool(_addr: address) -> bool:
+def setCoreRouterPool(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
-    self.wethUsdcRouterPool = _addr
-    log UniV2WethUsdcRouterPoolSet(_addr)
+    self.coreRouterPool = _addr
+    log UniV2WethCoreRouterPoolSet(_addr)
     return True
 
 

@@ -41,8 +41,8 @@ def swapTokens(
     _amountIn: uint256 = max_value(uint256),
     _minAmountOut: uint256 = 0,
     _pool: address = empty(address),
-    _extraTokenIfHop: address = empty(address),
-    _extraPoolIfHop: address = empty(address),
+    _extraTokensIfHop: DynArray[address, 5] = empty(DynArray[address, 5]),
+    _extraPoolsIfHop: DynArray[address, 5] = empty(DynArray[address, 5]),
 ) -> (uint256, uint256, uint256):
     ...
 

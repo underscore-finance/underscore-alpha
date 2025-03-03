@@ -14,7 +14,7 @@ from interfaces import LegoCommon
 interface AeroRouter:
     def addLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _amountADesired: uint256, _amountBDesired: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256, uint256): nonpayable
     def removeLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _lpAmount: uint256, _amountAMin: uint256, _amountBMin: uint256, _recipient: address, _deadline: uint256) -> (uint256, uint256): nonpayable
-    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[Route, MAX_ASSETS], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_ASSETS]: nonpayable 
+    def swapExactTokensForTokens(_amountIn: uint256, _amountOutMin: uint256, _path: DynArray[Route, MAX_SWAP_HOPS + 2], _to: address, _deadline: uint256) -> DynArray[uint256, MAX_SWAP_HOPS + 2]: nonpayable 
     def quoteAddLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _factory: address, _amountADesired: uint256, _amountBDesired: uint256) -> (uint256, uint256, uint256): view
     def quoteRemoveLiquidity(_tokenA: address, _tokenB: address, _isStable: bool, _factory: address, _liquidity: uint256) -> (uint256, uint256): view
 
@@ -80,8 +80,8 @@ event AerodromeLiquidityRemoved:
     usdValue: uint256
     recipient: address
 
-event AeroClassicWethUsdcRouterPoolSet:
-    wethUsdcRouterPool: indexed(address)
+event AeroClassicCoreRouterPoolSet:
+    pool: indexed(address)
 
 event AeroClassicFundsRecovered:
     asset: indexed(address)
@@ -95,7 +95,7 @@ event AerodromeActivated:
     isActivated: bool
 
 # aero
-wethUsdcRouterPool: public(address)
+coreRouterPool: public(address)
 AERODROME_FACTORY: public(immutable(address))
 AERODROME_ROUTER: public(immutable(address))
 
@@ -104,7 +104,7 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 
-MAX_ASSETS: constant(uint256) = 5
+MAX_SWAP_HOPS: constant(uint256) = 5
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
@@ -113,13 +113,13 @@ def __init__(
     _aerodromeFactory: address,
     _aerodromeRouter: address,
     _addyRegistry: address,
-    _wethUsdcRouterPool: address,
+    _coreRouterPool: address,
 ):
-    assert empty(address) not in [_aerodromeFactory, _aerodromeRouter, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
+    assert empty(address) not in [_aerodromeFactory, _aerodromeRouter, _addyRegistry, _coreRouterPool] # dev: invalid addrs
     AERODROME_FACTORY = _aerodromeFactory
     AERODROME_ROUTER = _aerodromeRouter
     ADDY_REGISTRY = _addyRegistry
-    self.wethUsdcRouterPool = _wethUsdcRouterPool
+    self.coreRouterPool = _coreRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -148,8 +148,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
-    _extraTokenIfHop: address,
-    _extraPoolIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -256,7 +256,7 @@ def _swapTokensGeneric(
         stable=self._isStablePair(_tokenIn, _tokenOut, factory),
         factory=factory,
     )
-    amounts: DynArray[uint256, MAX_ASSETS] = extcall AeroRouter(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, [route], _recipient, block.timestamp)
+    amounts: DynArray[uint256, MAX_SWAP_HOPS + 2] = extcall AeroRouter(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, [route], _recipient, block.timestamp)
 
     assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
     return amounts[1]
@@ -485,8 +485,8 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getWethUsdcRouterPool() -> address:
-    return self.wethUsdcRouterPool
+def getCoreRouterPool() -> address:
+    return self.coreRouterPool
 
 
 @view
@@ -740,15 +740,15 @@ def _getAmountInForVolatilePools(_pool: address, _tokenIn: address, _tokenOut: a
 
 
 ####################
-# WETH/USDC Router #
+# Core Router Pool #
 ####################
 
 
 @external
-def setWethUsdcRouterPool(_addr: address) -> bool:
+def setCoreRouterPool(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
-    self.wethUsdcRouterPool = _addr
-    log AeroClassicWethUsdcRouterPoolSet(_addr)
+    self.coreRouterPool = _addr
+    log AeroClassicCoreRouterPoolSet(_addr)
     return True
 
 

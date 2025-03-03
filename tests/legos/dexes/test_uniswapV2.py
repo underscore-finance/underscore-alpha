@@ -116,7 +116,7 @@ def test_uniswapV2_swap_with_hop(
     virtual = CORE_TOKENS[fork]["VIRTUAL"]
     hop_token = CORE_TOKENS[fork]["WETH"]
 
-    fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_uniswap_v2.legoId(), usdc, virtual, usdc_amount, 0, ZERO_ADDRESS, hop_token, ZERO_ADDRESS, sender=bob_agent)
+    fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_uniswap_v2.legoId(), usdc, virtual, usdc_amount, 0, ZERO_ADDRESS, [hop_token], sender=bob_agent)
     assert toAmount != 0
 
 

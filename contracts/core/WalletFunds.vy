@@ -240,6 +240,7 @@ LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
+MAX_SWAP_HOPS: constant(uint256) = 5
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
 
@@ -522,8 +523,8 @@ def swapTokens(
     _amountIn: uint256 = max_value(uint256),
     _minAmountOut: uint256 = 0,
     _pool: address = empty(address),
-    _extraTokenIfHop: address = empty(address),
-    _extraPoolIfHop: address = empty(address),
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS] = empty(DynArray[address, MAX_SWAP_HOPS]),
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS] = empty(DynArray[address, MAX_SWAP_HOPS]),
 ) -> (uint256, uint256, uint256):
     """
     @notice Swaps tokens using a specified lego integration
@@ -534,8 +535,8 @@ def swapTokens(
     @param _amountIn The amount of input tokens to swap (defaults to max balance)
     @param _minAmountOut The minimum amount of output tokens to receive (defaults to 0)
     @param _pool The pool address to use for swapping (optional)
-    @param _extraTokenIfHop The token address to use for bridging (optional)
-    @param _extraPoolIfHop The extra pool address to use for bridging (optional)
+    @param _extraTokensIfHop The token addresses to use for multi-hops (optional)
+    @param _extraPoolsIfHop The pool addresses to use for multi-hops (optional)
     @return uint256 The actual amount of input tokens swapped
     @return uint256 The amount of output tokens received
     @return uint256 The usd value of the transaction
@@ -560,7 +561,7 @@ def swapTokens(
     toAmount: uint256 = 0
     refundAssetAmount: uint256 = 0
     usdValue: uint256 = 0
-    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, _extraTokenIfHop, _extraPoolIfHop, self, cd.oracleRegistry)
+    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop, self, cd.oracleRegistry)
     assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # make sure they still have enough trial funds

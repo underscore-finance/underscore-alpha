@@ -209,6 +209,7 @@ ADDY_REGISTRY: public(immutable(address))
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 MAX_POOLS: constant(uint256) = 50
 MAX_QUOTES: constant(uint256) = 100
+MAX_SWAP_HOPS: constant(uint256) = 5
 
 
 @deploy
@@ -253,8 +254,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
-    _extraTokenIfHop: address,
-    _extraPoolIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -939,7 +940,7 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getWethUsdcRouterPool() -> address:
+def getCoreRouterPool() -> address:
     return empty(address)
 
 

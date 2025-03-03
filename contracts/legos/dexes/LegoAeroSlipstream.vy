@@ -170,8 +170,8 @@ event AeroSlipStreamLiquidityRemoved:
     usdValue: uint256
     recipient: address
 
-event AeroSlipStreamWethUsdcRouterPoolSet:
-    wethUsdcRouterPool: indexed(address)
+event AeroSlipStreamCoreRouterPoolSet:
+    pool: indexed(address)
 
 event AeroSlipStreamFundsRecovered:
     asset: indexed(address)
@@ -190,7 +190,7 @@ event AeroSlipStreamActivated:
     isActivated: bool
 
 # aero
-wethUsdcRouterPool: public(address)
+coreRouterPool: public(address)
 AERO_SLIPSTREAM_FACTORY: public(immutable(address))
 AERO_SLIPSTREAM_ROUTER: public(immutable(address))
 AERO_SLIPSTREAM_NFT_MANAGER: public(immutable(address))
@@ -212,6 +212,7 @@ TICK_UPPER: constant(int24) = 887272
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
+MAX_SWAP_HOPS: constant(uint256) = 5
 
 
 @deploy
@@ -221,15 +222,15 @@ def __init__(
     _aeroNftPositionManager: address,
     _aeroQuoter: address,
     _addyRegistry: address,
-    _wethUsdcRouterPool: address,
+    _coreRouterPool: address,
 ):
-    assert empty(address) not in [_aeroFactory, _aeroRouter, _aeroNftPositionManager, _aeroQuoter, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
+    assert empty(address) not in [_aeroFactory, _aeroRouter, _aeroNftPositionManager, _aeroQuoter, _addyRegistry, _coreRouterPool] # dev: invalid addrs
     AERO_SLIPSTREAM_FACTORY = _aeroFactory
     AERO_SLIPSTREAM_ROUTER = _aeroRouter
     AERO_SLIPSTREAM_NFT_MANAGER = _aeroNftPositionManager
     AERO_SLIPSTREAM_QUOTER = _aeroQuoter
     ADDY_REGISTRY = _addyRegistry
-    self.wethUsdcRouterPool = _wethUsdcRouterPool
+    self.coreRouterPool = _coreRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -266,8 +267,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
-    _extraTokenIfHop: address,
-    _extraPoolIfHop: address,
+    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -729,8 +730,8 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getWethUsdcRouterPool() -> address:
-    return self.wethUsdcRouterPool
+def getCoreRouterPool() -> address:
+    return self.coreRouterPool
 
 
 @view
@@ -1016,15 +1017,15 @@ def _getSqrtPriceX96(_pool: address) -> uint256:
 
 
 ####################
-# WETH/USDC Router #
+# Core Router Pool #
 ####################
 
 
 @external
-def setWethUsdcRouterPool(_addr: address) -> bool:
+def setCoreRouterPool(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
-    self.wethUsdcRouterPool = _addr
-    log AeroSlipStreamWethUsdcRouterPoolSet(_addr)
+    self.coreRouterPool = _addr
+    log AeroSlipStreamCoreRouterPoolSet(_addr)
     return True
 
 
