@@ -937,6 +937,12 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
+def getWethUsdcRouterPool() -> address:
+    return empty(address)
+
+
+@view
+@external
 def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     metaRegistry: address = CURVE_META_REGISTRY
 

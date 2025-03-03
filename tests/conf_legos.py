@@ -75,20 +75,20 @@ def lego_sky(mock_registry, fork, lego_registry, addy_registry_deploy, governor)
 
 
 @pytest.fixture(scope="session")
-def lego_uniswap_v3(fork, lego_registry, addy_registry_deploy, governor):
+def lego_uniswap_v2(fork, lego_registry, addy_registry_deploy, governor):
     if fork == "local":
         pytest.skip("asset not relevant on this fork")
-    addr = boa.load("contracts/legos/dexes/LegoUniswapV3.vy", ADDYS[fork]["UNIV3_FACTORY"], ADDYS[fork]["UNIV3_SWAP_ROUTER"], ADDYS[fork]["UNIV3_NFT_MANAGER"], ADDYS[fork]["UNIV3_QUOTER"], addy_registry_deploy, name="lego_uniswap_v3")
-    assert lego_registry.registerNewLego(addr, "Uniswap V3", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
+    addr = boa.load("contracts/legos/dexes/LegoUniswapV2.vy", ADDYS[fork]["UNISWAP_V2_FACTORY"], ADDYS[fork]["UNISWAP_V2_ROUTER"], addy_registry_deploy, ADDYS[fork]["UNI_V2_WETH_USDC_POOL"], name="lego_uniswap_v2")
+    assert lego_registry.registerNewLego(addr, "Uniswap V2", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
 @pytest.fixture(scope="session")
-def lego_uniswap_v2(fork, lego_registry, addy_registry_deploy, governor):
+def lego_uniswap_v3(fork, lego_registry, addy_registry_deploy, governor):
     if fork == "local":
         pytest.skip("asset not relevant on this fork")
-    addr = boa.load("contracts/legos/dexes/LegoUniswapV2.vy", ADDYS[fork]["UNISWAP_V2_FACTORY"], ADDYS[fork]["UNISWAP_V2_ROUTER"], addy_registry_deploy, name="lego_uniswap_v2")
-    assert lego_registry.registerNewLego(addr, "Uniswap V2", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
+    addr = boa.load("contracts/legos/dexes/LegoUniswapV3.vy", ADDYS[fork]["UNIV3_FACTORY"], ADDYS[fork]["UNIV3_SWAP_ROUTER"], ADDYS[fork]["UNIV3_NFT_MANAGER"], ADDYS[fork]["UNIV3_QUOTER"], addy_registry_deploy, ADDYS[fork]["UNI_V3_WETH_USDC_POOL"], name="lego_uniswap_v3")
+    assert lego_registry.registerNewLego(addr, "Uniswap V3", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 
 
@@ -96,7 +96,7 @@ def lego_uniswap_v2(fork, lego_registry, addy_registry_deploy, governor):
 def lego_aero_classic(fork, lego_registry, addy_registry_deploy, governor):
     if fork == "local":
         pytest.skip("asset not relevant on this fork")
-    addr = boa.load("contracts/legos/dexes/LegoAeroClassic.vy", ADDYS[fork]["AERODROME_FACTORY"], ADDYS[fork]["AERODROME_ROUTER"], addy_registry_deploy, name="lego_aero_classic")
+    addr = boa.load("contracts/legos/dexes/LegoAeroClassic.vy", ADDYS[fork]["AERODROME_FACTORY"], ADDYS[fork]["AERODROME_ROUTER"], addy_registry_deploy, ADDYS[fork]["AERODROME_WETH_USDC_POOL"], name="lego_aero_classic")
     assert lego_registry.registerNewLego(addr, "aero_classic", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 
@@ -105,7 +105,7 @@ def lego_aero_classic(fork, lego_registry, addy_registry_deploy, governor):
 def lego_aero_slipstream(fork, lego_registry, addy_registry_deploy, governor):
     if fork == "local":
         pytest.skip("asset not relevant on this fork")
-    addr = boa.load("contracts/legos/dexes/LegoAeroSlipstream.vy", ADDYS[fork]["AERO_SLIPSTREAM_FACTORY"], ADDYS[fork]["AERO_SLIPSTREAM_ROUTER"], ADDYS[fork]["AERO_SLIPSTREAM_NFT_MANAGER"], ADDYS[fork]["AERO_SLIPSTREAM_QUOTER"], addy_registry_deploy, name="lego_aero_slipstream")
+    addr = boa.load("contracts/legos/dexes/LegoAeroSlipstream.vy", ADDYS[fork]["AERO_SLIPSTREAM_FACTORY"], ADDYS[fork]["AERO_SLIPSTREAM_ROUTER"], ADDYS[fork]["AERO_SLIPSTREAM_NFT_MANAGER"], ADDYS[fork]["AERO_SLIPSTREAM_QUOTER"], addy_registry_deploy, ADDYS[fork]["AERO_SLIPSTREAM_WETH_USDC_POOL"], name="lego_aero_slipstream")
     assert lego_registry.registerNewLego(addr, "aero_slipstream", DEX_UINT256, sender=governor) != 0 # dev: invalid lego id
     return addr
 

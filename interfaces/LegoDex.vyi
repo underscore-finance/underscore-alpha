@@ -86,6 +86,13 @@ def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint2
 def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
     ...
 
+
+@view
+@external
+def getWethUsdcRouterPool() -> address:
+    ...
+
+
 # @view
 # @external
 # def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:

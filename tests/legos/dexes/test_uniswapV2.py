@@ -3,6 +3,7 @@ import boa
 
 from constants import ZERO_ADDRESS, MAX_UINT256, EIGHTEEN_DECIMALS
 from conf_tokens import TEST_AMOUNTS
+from utils.BluePrint import CORE_TOKENS
 
 
 TEST_ASSETS = [
@@ -271,13 +272,27 @@ def test_uniswapV2_get_swap_amount_out(
     lego_uniswap_v2,
     _test,
 ):
+    pool = "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C"
     tokenA, _ = getTokenAndWhale("usdc")
+    tokenA_amount = 2_500 * (10 ** tokenA.decimals())
     tokenB, _ = getTokenAndWhale("weth")
-    amount_out = lego_uniswap_v2.getSwapAmountOut("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C", tokenA, tokenB, 2_500 * (10 ** tokenA.decimals()))
-    _test(1 * (10 ** tokenB.decimals()), amount_out, 100)
+    tokenB_amount = 1 * (10 ** tokenB.decimals())
 
-    amount_out = lego_uniswap_v2.getSwapAmountOut("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C", tokenB, tokenA, 1 * (10 ** tokenB.decimals()))
-    _test(2_500 * (10 ** tokenA.decimals()), amount_out, 100)
+    # usdc -> weth
+    amount_out = lego_uniswap_v2.getSwapAmountOut(pool, tokenA, tokenB, tokenA_amount)
+    _test(tokenB_amount, amount_out, 100)
+
+    best_pool, amount_out_b = lego_uniswap_v2.getBestSwapAmountOut(tokenA, tokenB, tokenA_amount)
+    assert best_pool == pool
+    assert amount_out == amount_out_b
+
+    # weth -> usdc
+    amount_out = lego_uniswap_v2.getSwapAmountOut(pool, tokenB, tokenA, tokenB_amount)
+    _test(tokenA_amount, amount_out, 100)
+
+    best_pool, amount_out_b = lego_uniswap_v2.getBestSwapAmountOut(tokenB, tokenA, tokenB_amount)
+    assert best_pool == pool
+    assert amount_out == amount_out_b
 
 
 @pytest.always

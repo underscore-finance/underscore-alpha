@@ -3,6 +3,7 @@ import boa
 
 from constants import ZERO_ADDRESS, MAX_UINT256, EIGHTEEN_DECIMALS
 from conf_tokens import TEST_AMOUNTS
+from utils.BluePrint import CORE_TOKENS
 
 
 TEST_ASSETS = [
@@ -380,6 +381,24 @@ def test_aero_slipstream_get_swap_amount_out(
 
     amount_out = lego_aero_slipstream.getSwapAmountOut("0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59", tokenB, tokenA, 1 * (10 ** tokenB.decimals()))
     _test(2_500 * (10 ** tokenA.decimals()), amount_out, 100)
+
+
+@pytest.always
+def test_aero_slipstream_get_best_swap_amount_out(
+    lego_aero_slipstream,
+    fork,
+):
+    weth = boa.from_etherscan(CORE_TOKENS[fork]["WETH"])
+    weth_amount = 5 * (10 ** weth.decimals())
+
+    virtual = boa.from_etherscan(CORE_TOKENS[fork]["VIRTUAL"])
+    virtual_amount = 100 * (10 ** virtual.decimals())
+
+    best_pool, _ = lego_aero_slipstream.getBestSwapAmountOut(weth, virtual, weth_amount)
+    assert best_pool != ZERO_ADDRESS
+
+    best_pool, _ = lego_aero_slipstream.getBestSwapAmountOut(virtual, weth, virtual_amount)
+    assert best_pool != ZERO_ADDRESS
 
 
 @pytest.always

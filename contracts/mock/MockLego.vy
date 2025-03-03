@@ -353,6 +353,11 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
+def getWethUsdcRouterPool() -> address:
+    return empty(address)
+
+@view
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,

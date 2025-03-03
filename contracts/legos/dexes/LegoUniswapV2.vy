@@ -70,6 +70,9 @@ event UniswapV2Swap:
     usdValue: uint256
     recipient: address
 
+event UniV2WethUsdcRouterPoolSet:
+    wethUsdcRouterPool: indexed(address)
+
 event UniV2FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -82,6 +85,7 @@ event UniswapV2Activated:
     isActivated: bool
 
 # uniswap
+wethUsdcRouterPool: public(address)
 UNISWAP_V2_FACTORY: public(immutable(address))
 UNISWAP_V2_ROUTER: public(immutable(address))
 
@@ -95,11 +99,17 @@ EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
 @deploy
-def __init__(_uniswapV2Factory: address, _uniswapV2Router: address, _addyRegistry: address):
-    assert empty(address) not in [_uniswapV2Factory, _uniswapV2Router, _addyRegistry] # dev: invalid addrs
+def __init__(
+    _uniswapV2Factory: address,
+    _uniswapV2Router: address,
+    _addyRegistry: address,
+    _wethUsdcRouterPool: address,
+):
+    assert empty(address) not in [_uniswapV2Factory, _uniswapV2Router, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
     UNISWAP_V2_FACTORY = _uniswapV2Factory
     UNISWAP_V2_ROUTER = _uniswapV2Router
     ADDY_REGISTRY = _addyRegistry
+    self.wethUsdcRouterPool = _wethUsdcRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -426,6 +436,12 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
+def getWethUsdcRouterPool() -> address:
+    return self.wethUsdcRouterPool
+
+
+@view
+@external
 def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     pool: address = staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenA, _tokenB)
     if pool == empty(address):
@@ -666,9 +682,25 @@ def _getAmountIn(_pool: address, _tokenIn: address, _tokenOut: address, _zeroFor
     reserveOut: uint256 = 0
     reserveIn, reserveOut = self._getReserves(_pool, _tokenIn, _tokenOut, _zeroForOne)
 
+    if _amountOut > reserveOut:
+        return max_value(uint256)
+
     numerator: uint256 = reserveIn * _amountOut * 1000
     denominator: uint256 = (reserveOut - _amountOut) * 997
     return (numerator // denominator) + 1
+
+
+####################
+# WETH/USDC Router #
+####################
+
+
+@external
+def setWethUsdcRouterPool(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.wethUsdcRouterPool = _addr
+    log UniV2WethUsdcRouterPoolSet(_addr)
+    return True
 
 
 #################

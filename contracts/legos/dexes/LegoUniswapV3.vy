@@ -183,6 +183,9 @@ event UniV3FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
+event UniV3WethUsdcRouterPoolSet:
+    wethUsdcRouterPool: indexed(address)
+
 event UniV3NftRecovered:
     collection: indexed(address)
     nftTokenId: uint256
@@ -195,6 +198,7 @@ event UniswapV3Activated:
     isActivated: bool
 
 # transient
+wethUsdcRouterPool: public(address)
 poolSwapData: transient(PoolSwapData)
 
 # uni
@@ -219,13 +223,21 @@ UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
 
 
 @deploy
-def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _uniNftPositionManager: address, _uniV3Quoter: address, _addyRegistry: address):
-    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry] # dev: invalid addrs
+def __init__(
+    _uniswapV3Factory: address,
+    _uniswapV3SwapRouter: address,
+    _uniNftPositionManager: address,
+    _uniV3Quoter: address,
+    _addyRegistry: address,
+    _wethUsdcRouterPool: address,
+):
+    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
     UNIV3_FACTORY = _uniswapV3Factory
     UNIV3_SWAP_ROUTER = _uniswapV3SwapRouter
     UNIV3_NFT_MANAGER = _uniNftPositionManager
     UNIV3_QUOTER = _uniV3Quoter
     ADDY_REGISTRY = _addyRegistry
+    self.wethUsdcRouterPool = _wethUsdcRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -723,6 +735,12 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
+def getWethUsdcRouterPool() -> address:
+    return self.wethUsdcRouterPool
+
+
+@view
+@external
 def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     bestPoolAddr: address = empty(address)
     bestFeeTier: uint24 = 0
@@ -747,36 +765,27 @@ def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
 # annoying that this cannot be view function, thanks uni v3
 @external
 def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
-    bestPool: address = empty(address)
-    bestAmountOut: uint256 = 0
+    bestPoolAddr: address = empty(address)
+    bestFeeTier: uint24 = 0
+    bestPoolAddr, bestFeeTier = self._getDeepestLiqPool(_tokenIn, _tokenOut)
 
-    factory: address = UNIV3_FACTORY
-    quoter: address = UNIV3_QUOTER
-    for i: uint256 in range(4):
-        fee: uint24 = FEE_TIERS[i]
-        pool: address = staticcall UniV3Factory(factory).getPool(_tokenIn, _tokenOut, fee)
-        if pool == empty(address):
-            continue
+    if bestPoolAddr == empty(address):
+        return empty(address), 0
 
-        amountOut: uint256 = 0
-        na1: uint160 = 0
-        na2: uint32 = 0
-        na3: uint256 = 0
-        amountOut, na1, na2, na3 = extcall UniV3Quoter(quoter).quoteExactInputSingle(
-            QuoteExactInputSingleParams(
-                tokenIn=_tokenIn,
-                tokenOut=_tokenOut,
-                amountIn=_amountIn,
-                fee=fee,
-                sqrtPriceLimitX96=0,
-            )
+    amountOut: uint256 = 0
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountOut, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactInputSingle(
+        QuoteExactInputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amountIn=_amountIn,
+            fee=bestFeeTier,
+            sqrtPriceLimitX96=0,
         )
-
-        if amountOut > bestAmountOut:
-            bestPool = pool
-            bestAmountOut = amountOut
-
-    return bestPool, bestAmountOut
+    )
+    return bestPoolAddr, amountOut
 
 
 # annoying that this cannot be view function, thanks uni v3
@@ -806,36 +815,27 @@ def getSwapAmountOut(
 # annoying that this cannot be view function, thanks uni v3
 @external
 def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
-    bestPool: address = empty(address)
-    bestAmountIn: uint256 = max_value(uint256)
+    bestPoolAddr: address = empty(address)
+    bestFeeTier: uint24 = 0
+    bestPoolAddr, bestFeeTier = self._getDeepestLiqPool(_tokenIn, _tokenOut)
 
-    factory: address = UNIV3_FACTORY
-    quoter: address = UNIV3_QUOTER
-    for i: uint256 in range(4):
-        fee: uint24 = FEE_TIERS[i]
-        pool: address = staticcall UniV3Factory(factory).getPool(_tokenIn, _tokenOut, fee)
-        if pool == empty(address):
-            continue
+    if bestPoolAddr == empty(address):
+        return empty(address), 0
 
-        amountIn: uint256 = 0
-        na1: uint160 = 0
-        na2: uint32 = 0
-        na3: uint256 = 0
-        amountIn, na1, na2, na3 = extcall UniV3Quoter(quoter).quoteExactOutputSingle(
-            QuoteExactOutputSingleParams(
-                tokenIn=_tokenIn,
-                tokenOut=_tokenOut,
-                amount=_amountOut,
-                fee=fee,
-                sqrtPriceLimitX96=0,
-            )
+    amountIn: uint256 = 0
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountIn, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactOutputSingle(
+        QuoteExactOutputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amount=_amountOut,
+            fee=bestFeeTier,
+            sqrtPriceLimitX96=0,
         )
-
-        if amountIn != 0 and amountIn < bestAmountIn:
-            bestPool = pool
-            bestAmountIn = amountIn
-
-    return bestPool, bestAmountIn
+    )
+    return bestPoolAddr, amountIn
 
 
 # annoying that this cannot be view function, thanks uni v3
@@ -1020,6 +1020,19 @@ def _getSqrtPriceX96(_pool: address) -> uint256:
     unlocked: bool = False
     sqrtPriceX96, tick, observationIndex, observationCardinality, observationCardinalityNext, feeProtocol, unlocked = staticcall UniV3Pool(_pool).slot0()
     return convert(sqrtPriceX96, uint256)
+
+
+####################
+# WETH/USDC Router #
+####################
+
+
+@external
+def setWethUsdcRouterPool(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.wethUsdcRouterPool = _addr
+    log UniV3WethUsdcRouterPoolSet(_addr)
+    return True
 
 
 #################
