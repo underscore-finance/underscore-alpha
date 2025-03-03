@@ -406,6 +406,8 @@ def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint2
     # required data
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
     numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    usdc: address = USDC
+    weth: address = WETH
 
     # check direct swap route
     directSwapRoute: SwapRoute = self._getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn, numLegos, legoRegistry)
@@ -413,7 +415,7 @@ def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint2
     # check hop routes
     withHopAmountOut: uint256 = 0
     hopSwapRoutes: DynArray[SwapRoute, 2] = []
-    withHopAmountOut, hopSwapRoutes = self._getBestSwapAmountOutWithHop(_tokenIn, _tokenOut, _amountIn, numLegos, legoRegistry)
+    withHopAmountOut, hopSwapRoutes = self._getBestSwapAmountOutWithHop(_tokenIn, _tokenOut, _amountIn, numLegos, legoRegistry, usdc, weth)
 
     # nothing to do
     if directSwapRoute.pool == empty(address) and withHopAmountOut == 0:
@@ -422,7 +424,9 @@ def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint2
     # compare with raw amount out
     if directSwapRoute.amountOut > withHopAmountOut:
         return [directSwapRoute]
-    return hopSwapRoutes
+
+    # for efficiency, use same lego if there is weth/usdc pool
+    return self._replaceWethUsdcRouteToSameLego(_tokenIn, _tokenOut, hopSwapRoutes, usdc, weth, legoRegistry)
 
 
 @internal
@@ -432,46 +436,46 @@ def _getBestSwapAmountOutWithHop(
     _amountIn: uint256,
     _numLegos: uint256,
     _legoRegistry: address,
+    _usdc: address,
+    _weth: address,
 ) -> (uint256, DynArray[SwapRoute, 2]):
-    usdc: address = USDC
-    weth: address = WETH
 
     # nothing to do, already have best `directSwapRoute`
-    if _tokenIn in [usdc, weth] and _tokenOut in [usdc, weth]:
+    if _tokenIn in [_usdc, _weth] and _tokenOut in [_usdc, _weth]:
         return 0, []
 
     firstRoute: SwapRoute = empty(SwapRoute)
     lastRoute: SwapRoute = empty(SwapRoute)
 
     # usdc -> weth -> tokenOut
-    if _tokenIn == usdc:
-        firstRoute = self._getSwapAmountOutWithBridgePool(usdc, weth, _amountIn, _numLegos, _legoRegistry)
-        lastRoute = self._getBestSwapAmountOut(weth, _tokenOut, firstRoute.amountOut, _numLegos, _legoRegistry)
+    if _tokenIn == _usdc:
+        firstRoute = self._getSwapAmountOutWithBridgePool(_usdc, _weth, _amountIn, _numLegos, _legoRegistry)
+        lastRoute = self._getBestSwapAmountOut(_weth, _tokenOut, firstRoute.amountOut, _numLegos, _legoRegistry)
 
     # tokenIn -> weth -> usdc
-    elif _tokenOut == usdc:
-        firstRoute = self._getBestSwapAmountOut(_tokenIn, weth, _amountIn, _numLegos, _legoRegistry)
-        lastRoute = self._getSwapAmountOutWithBridgePool(weth, usdc, firstRoute.amountOut, _numLegos, _legoRegistry)
+    elif _tokenOut == _usdc:
+        firstRoute = self._getBestSwapAmountOut(_tokenIn, _weth, _amountIn, _numLegos, _legoRegistry)
+        lastRoute = self._getSwapAmountOutWithBridgePool(_weth, _usdc, firstRoute.amountOut, _numLegos, _legoRegistry)
 
     # weth -> usdc -> tokenOut
-    elif _tokenIn == weth:
-        firstRoute = self._getSwapAmountOutWithBridgePool(weth, usdc, _amountIn, _numLegos, _legoRegistry)
-        lastRoute = self._getBestSwapAmountOut(usdc, _tokenOut, firstRoute.amountOut, _numLegos, _legoRegistry)
+    elif _tokenIn == _weth:
+        firstRoute = self._getSwapAmountOutWithBridgePool(_weth, _usdc, _amountIn, _numLegos, _legoRegistry)
+        lastRoute = self._getBestSwapAmountOut(_usdc, _tokenOut, firstRoute.amountOut, _numLegos, _legoRegistry)
 
     # tokenIn -> usdc -> weth
-    elif _tokenOut == weth:
-        firstRoute = self._getBestSwapAmountOut(_tokenIn, usdc, _amountIn, _numLegos, _legoRegistry)
-        lastRoute = self._getSwapAmountOutWithBridgePool(usdc, weth, firstRoute.amountOut, _numLegos, _legoRegistry)
+    elif _tokenOut == _weth:
+        firstRoute = self._getBestSwapAmountOut(_tokenIn, _usdc, _amountIn, _numLegos, _legoRegistry)
+        lastRoute = self._getSwapAmountOutWithBridgePool(_usdc, _weth, firstRoute.amountOut, _numLegos, _legoRegistry)
 
     # let's try thru both paths
     else:
         # tokenIn -> usdc -> tokenOut
-        usdcRouteA: SwapRoute = self._getBestSwapAmountOut(_tokenIn, usdc, _amountIn, _numLegos, _legoRegistry)
-        usdcRouteB: SwapRoute = self._getBestSwapAmountOut(usdc, _tokenOut, usdcRouteA.amountOut, _numLegos, _legoRegistry)
+        usdcRouteA: SwapRoute = self._getBestSwapAmountOut(_tokenIn, _usdc, _amountIn, _numLegos, _legoRegistry)
+        usdcRouteB: SwapRoute = self._getBestSwapAmountOut(_usdc, _tokenOut, usdcRouteA.amountOut, _numLegos, _legoRegistry)
 
         # tokenIn -> weth -> tokenOut
-        wethRouteA: SwapRoute = self._getBestSwapAmountOut(_tokenIn, weth, _amountIn, _numLegos, _legoRegistry)
-        wethRouteB: SwapRoute = self._getBestSwapAmountOut(weth, _tokenOut, wethRouteA.amountOut, _numLegos, _legoRegistry)
+        wethRouteA: SwapRoute = self._getBestSwapAmountOut(_tokenIn, _weth, _amountIn, _numLegos, _legoRegistry)
+        wethRouteB: SwapRoute = self._getBestSwapAmountOut(_weth, _tokenOut, wethRouteA.amountOut, _numLegos, _legoRegistry)
 
         # compare routes
         firstRoute = usdcRouteA
@@ -578,6 +582,8 @@ def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint2
     # required data
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
     numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    usdc: address = USDC
+    weth: address = WETH
 
     # check direct swap route
     directSwapRoute: SwapRoute = self._getBestSwapAmountIn(_tokenIn, _tokenOut, _amountOut, numLegos, legoRegistry)
@@ -585,13 +591,16 @@ def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint2
     # check hop routes
     withHopAmountIn: uint256 = 0
     hopSwapRoutes: DynArray[SwapRoute, 2] = []
-    withHopAmountIn, hopSwapRoutes = self._getBestSwapAmountInWithHop(_tokenIn, _tokenOut, _amountOut, numLegos, legoRegistry)
+    withHopAmountIn, hopSwapRoutes = self._getBestSwapAmountInWithHop(_tokenIn, _tokenOut, _amountOut, numLegos, legoRegistry, usdc, weth)
 
     # compare with raw amount in
     if directSwapRoute.amountIn < withHopAmountIn:
         return [directSwapRoute]
+
+    # for efficiency, use same lego if there is weth/usdc pool
     elif withHopAmountIn != max_value(uint256):
-        return hopSwapRoutes
+        return self._replaceWethUsdcRouteToSameLego(_tokenIn, _tokenOut, hopSwapRoutes, usdc, weth, legoRegistry)
+
     return []
 
 
@@ -602,46 +611,44 @@ def _getBestSwapAmountInWithHop(
     _amountOut: uint256,
     _numLegos: uint256,
     _legoRegistry: address,
+    _usdc: address,
+    _weth: address,
 ) -> (uint256, DynArray[SwapRoute, 2]):
-    usdc: address = USDC
-    weth: address = WETH
-
-    # nothing to do, already have best `directSwapRoute`
-    if _tokenIn in [usdc, weth] and _tokenOut in [usdc, weth]:
+    if _tokenIn in [_usdc, _weth] and _tokenOut in [_usdc, _weth]:
         return max_value(uint256), []
 
     firstRoute: SwapRoute = empty(SwapRoute)
     lastRoute: SwapRoute = empty(SwapRoute)
 
     # usdc -> weth -> tokenOut
-    if _tokenIn == usdc:
-        lastRoute = self._getBestSwapAmountIn(weth, _tokenOut, _amountOut, _numLegos, _legoRegistry)
-        firstRoute = self._getSwapAmountInWithBridgePool(usdc, weth, lastRoute.amountIn, _numLegos, _legoRegistry)
+    if _tokenIn == _usdc:
+        lastRoute = self._getBestSwapAmountIn(_weth, _tokenOut, _amountOut, _numLegos, _legoRegistry)
+        firstRoute = self._getSwapAmountInWithBridgePool(_usdc, _weth, lastRoute.amountIn, _numLegos, _legoRegistry)
 
     # tokenIn -> weth -> usdc
-    elif _tokenOut == usdc:
-        lastRoute = self._getSwapAmountInWithBridgePool(weth, usdc, _amountOut, _numLegos, _legoRegistry)
-        firstRoute = self._getBestSwapAmountIn(_tokenIn, weth, lastRoute.amountIn, _numLegos, _legoRegistry)
+    elif _tokenOut == _usdc:
+        lastRoute = self._getSwapAmountInWithBridgePool(_weth, _usdc, _amountOut, _numLegos, _legoRegistry)
+        firstRoute = self._getBestSwapAmountIn(_tokenIn, _weth, lastRoute.amountIn, _numLegos, _legoRegistry)
 
     # weth -> usdc -> tokenOut
-    elif _tokenIn == weth:
-        lastRoute = self._getBestSwapAmountIn(usdc, _tokenOut, _amountOut, _numLegos, _legoRegistry)
-        firstRoute = self._getSwapAmountInWithBridgePool(weth, usdc, lastRoute.amountIn, _numLegos, _legoRegistry)
+    elif _tokenIn == _weth:
+        lastRoute = self._getBestSwapAmountIn(_usdc, _tokenOut, _amountOut, _numLegos, _legoRegistry)
+        firstRoute = self._getSwapAmountInWithBridgePool(_weth, _usdc, lastRoute.amountIn, _numLegos, _legoRegistry)
 
     # tokenIn -> usdc -> weth
-    elif _tokenOut == weth:
-        lastRoute = self._getSwapAmountInWithBridgePool(usdc, weth, _amountOut, _numLegos, _legoRegistry)
-        firstRoute = self._getBestSwapAmountIn(_tokenIn, usdc, lastRoute.amountIn, _numLegos, _legoRegistry)
+    elif _tokenOut == _weth:
+        lastRoute = self._getSwapAmountInWithBridgePool(_usdc, _weth, _amountOut, _numLegos, _legoRegistry)
+        firstRoute = self._getBestSwapAmountIn(_tokenIn, _usdc, lastRoute.amountIn, _numLegos, _legoRegistry)
 
     # let's try thru both paths
     else:
         # tokenIn -> usdc -> tokenOut
-        usdcRouteB: SwapRoute = self._getBestSwapAmountIn(usdc, _tokenOut, _amountOut, _numLegos, _legoRegistry)
-        usdcRouteA: SwapRoute = self._getBestSwapAmountIn(_tokenIn, usdc, usdcRouteB.amountIn, _numLegos, _legoRegistry)
+        usdcRouteB: SwapRoute = self._getBestSwapAmountIn(_usdc, _tokenOut, _amountOut, _numLegos, _legoRegistry)
+        usdcRouteA: SwapRoute = self._getBestSwapAmountIn(_tokenIn, _usdc, usdcRouteB.amountIn, _numLegos, _legoRegistry)
 
         # tokenIn -> weth -> tokenOut
-        wethRouteB: SwapRoute = self._getBestSwapAmountIn(weth, _tokenOut, _amountOut, _numLegos, _legoRegistry)
-        wethRouteA: SwapRoute = self._getBestSwapAmountIn(_tokenIn, weth, wethRouteB.amountIn, _numLegos, _legoRegistry)
+        wethRouteB: SwapRoute = self._getBestSwapAmountIn(_weth, _tokenOut, _amountOut, _numLegos, _legoRegistry)
+        wethRouteA: SwapRoute = self._getBestSwapAmountIn(_tokenIn, _weth, wethRouteB.amountIn, _numLegos, _legoRegistry)
 
         # compare routes
         firstRoute = usdcRouteA
@@ -735,3 +742,51 @@ def _getSwapAmountInWithBridgePool(
     return swapRoute
 
 
+####################
+# Shared Utilities #
+####################
+
+
+@internal
+def _replaceWethUsdcRouteToSameLego(
+    _tokenIn: address,
+    _tokenOut: address,
+    _hopSwapRoutes: DynArray[SwapRoute, 2],
+    _usdc: address,
+    _weth: address,
+    _legoRegistry: address,
+) -> DynArray[SwapRoute, 2]:
+    if len(_hopSwapRoutes) != 2:
+        return _hopSwapRoutes
+    
+    firstRoute: SwapRoute = _hopSwapRoutes[0]
+    lastRoute: SwapRoute = _hopSwapRoutes[1]
+
+    # check first route
+    if firstRoute.tokenIn in [_usdc, _weth] and firstRoute.tokenOut in [_usdc, _weth]:
+        firstRoute.legoId, firstRoute.pool = self._replaceSingleRouteWethUsdc(firstRoute.legoId, firstRoute.pool, lastRoute.legoId, _legoRegistry)
+        if firstRoute.pool == empty(address):
+            return _hopSwapRoutes
+
+    # check last route
+    elif lastRoute.tokenIn in [_usdc, _weth] and lastRoute.tokenOut in [_usdc, _weth]:
+        lastRoute.legoId, lastRoute.pool = self._replaceSingleRouteWethUsdc(lastRoute.legoId, lastRoute.pool, firstRoute.legoId, _legoRegistry)
+        if lastRoute.pool == empty(address):
+            return _hopSwapRoutes
+
+    return [firstRoute, lastRoute]
+
+
+@internal
+def _replaceSingleRouteWethUsdc(
+    _targetRouteLegoId: uint256,
+    _targetPool: address,
+    _altRouteLegoId: uint256,
+    _legoRegistry: address,
+) -> (uint256, address):
+    if _targetRouteLegoId == _altRouteLegoId:
+        return _targetRouteLegoId, _targetPool
+
+    # get weth/usdc pool from same lego as last route
+    legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(_altRouteLegoId)
+    return _altRouteLegoId, staticcall LegoDex(legoAddr).getWethUsdcRouterPool()
