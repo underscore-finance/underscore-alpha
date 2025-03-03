@@ -654,7 +654,6 @@ def _isValidBatchSignature(_encodedValue: Bytes[15520], _sig: Signature):
     )
     
     assert len(response) == 32 # dev: invalid ecrecover response length
-    signer: address = abi_decode(response, address)
     assert abi_decode(response, address) == _sig.signer # dev: invalid signature
     self.usedSignatures[_sig.signature] = True
 
