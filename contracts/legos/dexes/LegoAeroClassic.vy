@@ -80,6 +80,9 @@ event AerodromeLiquidityRemoved:
     usdValue: uint256
     recipient: address
 
+event AeroClassicWethUsdcRouterPoolSet:
+    wethUsdcRouterPool: indexed(address)
+
 event AeroClassicFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -92,6 +95,7 @@ event AerodromeActivated:
     isActivated: bool
 
 # aero
+wethUsdcRouterPool: public(address)
 AERODROME_FACTORY: public(immutable(address))
 AERODROME_ROUTER: public(immutable(address))
 
@@ -105,11 +109,17 @@ EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 
 
 @deploy
-def __init__(_aerodromeFactory: address, _aerodromeRouter: address, _addyRegistry: address):
-    assert empty(address) not in [_aerodromeFactory, _aerodromeRouter, _addyRegistry] # dev: invalid addrs
+def __init__(
+    _aerodromeFactory: address,
+    _aerodromeRouter: address,
+    _addyRegistry: address,
+    _wethUsdcRouterPool: address,
+):
+    assert empty(address) not in [_aerodromeFactory, _aerodromeRouter, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
     AERODROME_FACTORY = _aerodromeFactory
     AERODROME_ROUTER = _aerodromeRouter
     ADDY_REGISTRY = _addyRegistry
+    self.wethUsdcRouterPool = _wethUsdcRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -138,6 +148,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
+    _extraTokenIfHop: address,
+    _extraPoolIfHop: address,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -473,7 +485,13 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+def getWethUsdcRouterPool() -> address:
+    return self.wethUsdcRouterPool
+
+
+@view
+@external
+def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     factory: address = AERODROME_FACTORY
     reserve0: uint256 = 0
     reserve1: uint256 = 0
@@ -519,6 +537,37 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
 
 @view
 @external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    factory: address = AERODROME_FACTORY
+    stablePool: address = staticcall AeroFactory(factory).getPool(_tokenIn, _tokenOut, True)
+    volatilePool: address = staticcall AeroFactory(factory).getPool(_tokenIn, _tokenOut, False)
+    if stablePool == empty(address) and volatilePool == empty(address):
+        return empty(address), 0
+
+    # stable pool
+    stableAmountOut: uint256 = 0
+    if stablePool != empty(address):
+        stableAmountOut = staticcall AeroClassicPool(stablePool).getAmountOut(_amountIn, _tokenIn)
+
+    # volatile pool
+    volatileAmountOut: uint256 = 0
+    if volatilePool != empty(address):
+        volatileAmountOut = staticcall AeroClassicPool(volatilePool).getAmountOut(_amountIn, _tokenIn)
+
+    if stableAmountOut == 0 and volatileAmountOut == 0:
+        return empty(address), 0
+
+    pool: address = stablePool
+    amountOut: uint256 = stableAmountOut
+    if volatileAmountOut > stableAmountOut:
+        pool = volatilePool
+        amountOut = volatileAmountOut
+
+    return pool, amountOut
+
+
+@view
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,
@@ -526,6 +575,16 @@ def getSwapAmountOut(
     _amountIn: uint256,
 ) -> uint256:
     return staticcall AeroClassicPool(_pool).getAmountOut(_amountIn, _tokenIn)
+
+
+@view
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    # TODO: implement stable pools
+    pool: address = staticcall AeroFactory(AERODROME_FACTORY).getPool(_tokenIn, _tokenOut, False)
+    if pool == empty(address):
+        return empty(address), 0
+    return pool, self._getAmountInForVolatilePools(pool, _tokenIn, _tokenOut, _amountOut)
 
 
 @view
@@ -671,10 +730,26 @@ def _getAmountInForVolatilePools(_pool: address, _tokenIn: address, _tokenOut: a
         reserveIn = reserve1
         reserveOut = reserve0
 
+    if _amountOut > reserveOut:
+        return max_value(uint256)
+
     fee: uint256 = staticcall AeroFactory(AERODROME_FACTORY).getFee(_pool, False)
     numerator: uint256 = reserveIn * _amountOut * 100_00
     denominator: uint256 = (reserveOut - _amountOut) * (100_00 - fee)
     return (numerator // denominator) + 1
+
+
+####################
+# WETH/USDC Router #
+####################
+
+
+@external
+def setWethUsdcRouterPool(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.wethUsdcRouterPool = _addr
+    log AeroClassicWethUsdcRouterPoolSet(_addr)
+    return True
 
 
 #################

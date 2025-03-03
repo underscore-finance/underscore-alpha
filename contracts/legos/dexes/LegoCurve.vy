@@ -253,6 +253,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
+    _extraTokenIfHop: address,
+    _extraPoolIfHop: address,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -937,7 +939,13 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+def getWethUsdcRouterPool() -> address:
+    return empty(address)
+
+
+@view
+@external
+def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     metaRegistry: address = CURVE_META_REGISTRY
 
     # all pools with tokens
@@ -966,6 +974,27 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
 
 @view
 @external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    return self._getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn)
+
+
+@view
+@internal
+def _getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    bestPool: address = empty(address)
+    bestAmountOut: uint256 = 0
+
+    quotes: DynArray[Quote, MAX_QUOTES] = staticcall CurveRateProvider(CURVE_REGISTRIES.RateProvider).get_quotes(_tokenIn, _tokenOut, _amountIn)
+    for quote: Quote in quotes:
+        if quote.amount_out > bestAmountOut:
+            bestAmountOut = quote.amount_out
+            bestPool = quote.pool
+
+    return bestPool, bestAmountOut
+
+
+@view
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,
@@ -975,14 +1004,40 @@ def getSwapAmountOut(
     quotes: DynArray[Quote, MAX_QUOTES] = staticcall CurveRateProvider(CURVE_REGISTRIES.RateProvider).get_quotes(_tokenIn, _tokenOut, _amountIn)
     bestAmountOut: uint256 = 0
     for quote: Quote in quotes:
-        if quote.amount_out > bestAmountOut:
-            bestAmountOut = quote.amount_out
-    return bestAmountOut
+        if _pool == quote.pool:
+            return quote.amount_out
+    return 0
+
+
+@view
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    expAmountIn: uint256 = self._getSwapAmountIn(empty(address), _tokenIn, _tokenOut, _amountOut)
+    if expAmountIn == 0:
+        return empty(address), 0
+
+    # NOTE: this isn't perfect, but it's good enough
+
+    bestPool: address = empty(address)
+    na: uint256 = 0
+    bestPool, na = self._getBestSwapAmountOut(_tokenIn, _tokenOut, expAmountIn)
+    return bestPool, expAmountIn
 
 
 @view
 @external
 def getSwapAmountIn(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountOut: uint256,
+) -> uint256:
+    return self._getSwapAmountIn(_pool, _tokenIn, _tokenOut, _amountOut)
+
+
+@view
+@internal
+def _getSwapAmountIn(
     _pool: address,
     _tokenIn: address,
     _tokenOut: address,

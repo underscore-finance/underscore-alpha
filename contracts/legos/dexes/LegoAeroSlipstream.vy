@@ -170,6 +170,9 @@ event AeroSlipStreamLiquidityRemoved:
     usdValue: uint256
     recipient: address
 
+event AeroSlipStreamWethUsdcRouterPoolSet:
+    wethUsdcRouterPool: indexed(address)
+
 event AeroSlipStreamFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -187,6 +190,7 @@ event AeroSlipStreamActivated:
     isActivated: bool
 
 # aero
+wethUsdcRouterPool: public(address)
 AERO_SLIPSTREAM_FACTORY: public(immutable(address))
 AERO_SLIPSTREAM_ROUTER: public(immutable(address))
 AERO_SLIPSTREAM_NFT_MANAGER: public(immutable(address))
@@ -211,13 +215,21 @@ UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
 
 
 @deploy
-def __init__(_aeroFactory: address, _aeroRouter: address, _aeroNftPositionManager: address, _aeroQuoter: address, _addyRegistry: address):
-    assert empty(address) not in [_aeroFactory, _aeroRouter, _aeroNftPositionManager, _aeroQuoter, _addyRegistry] # dev: invalid addrs
+def __init__(
+    _aeroFactory: address,
+    _aeroRouter: address,
+    _aeroNftPositionManager: address,
+    _aeroQuoter: address,
+    _addyRegistry: address,
+    _wethUsdcRouterPool: address,
+):
+    assert empty(address) not in [_aeroFactory, _aeroRouter, _aeroNftPositionManager, _aeroQuoter, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
     AERO_SLIPSTREAM_FACTORY = _aeroFactory
     AERO_SLIPSTREAM_ROUTER = _aeroRouter
     AERO_SLIPSTREAM_NFT_MANAGER = _aeroNftPositionManager
     AERO_SLIPSTREAM_QUOTER = _aeroQuoter
     ADDY_REGISTRY = _addyRegistry
+    self.wethUsdcRouterPool = _wethUsdcRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -254,6 +266,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
+    _extraTokenIfHop: address,
+    _extraPoolIfHop: address,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -715,7 +729,13 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+def getWethUsdcRouterPool() -> address:
+    return self.wethUsdcRouterPool
+
+
+@view
+@external
+def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     bestPoolAddr: address = empty(address)
     na: int24 = 0
     bestPoolAddr, na = self._getDeepestLiqPool(_tokenA, _tokenB)
@@ -738,6 +758,32 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
 
 # annoying that this cannot be view function, thanks uni v3
 @external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    bestPoolAddr: address = empty(address)
+    bestTickSpacing: int24 = 0
+    bestPoolAddr, bestTickSpacing = self._getDeepestLiqPool(_tokenIn, _tokenOut)
+
+    if bestPoolAddr == empty(address):
+        return empty(address), 0
+
+    amountOut: uint256 = 0
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountOut, na1, na2, na3 = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactInputSingle(
+        QuoteExactInputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amountIn=_amountIn,
+            tickSpacing=bestTickSpacing,
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return bestPoolAddr, amountOut
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,
@@ -745,10 +791,10 @@ def getSwapAmountOut(
     _amountIn: uint256,
 ) -> uint256:
     amountOut: uint256 = 0
-    sqrtPriceX96After: uint160 = 0
-    initializedTicksCrossed: uint32 = 0
-    gasEstimate: uint256 = 0
-    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactInputSingle(
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountOut, na1, na2, na3 = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactInputSingle(
         QuoteExactInputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -762,6 +808,32 @@ def getSwapAmountOut(
 
 # annoying that this cannot be view function, thanks uni v3
 @external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    bestPoolAddr: address = empty(address)
+    bestTickSpacing: int24 = 0
+    bestPoolAddr, bestTickSpacing = self._getDeepestLiqPool(_tokenIn, _tokenOut)
+
+    if bestPoolAddr == empty(address):
+        return empty(address), 0
+
+    amountIn: uint256 = 0
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountIn, na1, na2, na3 = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactOutputSingle(
+        QuoteExactOutputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amount=_amountOut,
+            tickSpacing=bestTickSpacing,
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return bestPoolAddr, amountIn
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
 def getSwapAmountIn(
     _pool: address,
     _tokenIn: address,
@@ -769,10 +841,10 @@ def getSwapAmountIn(
     _amountOut: uint256,
 ) -> uint256:
     amountIn: uint256 = 0
-    sqrtPriceX96After: uint160 = 0
-    initializedTicksCrossed: uint32 = 0
-    gasEstimate: uint256 = 0
-    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactOutputSingle(
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountIn, na1, na2, na3 = extcall AeroQuoter(AERO_SLIPSTREAM_QUOTER).quoteExactOutputSingle(
         QuoteExactOutputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -941,6 +1013,19 @@ def _getSqrtPriceX96(_pool: address) -> uint256:
     unlocked: bool = False
     sqrtPriceX96, tick, observationIndex, observationCardinality, observationCardinalityNext, unlocked = staticcall AeroSlipStreamPool(_pool).slot0()
     return convert(sqrtPriceX96, uint256)
+
+
+####################
+# WETH/USDC Router #
+####################
+
+
+@external
+def setWethUsdcRouterPool(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.wethUsdcRouterPool = _addr
+    log AeroSlipStreamWethUsdcRouterPoolSet(_addr)
+    return True
 
 
 #################

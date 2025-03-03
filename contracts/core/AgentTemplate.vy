@@ -89,7 +89,7 @@ DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string
 DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(address userWallet,uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
 WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(address userWallet,uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
 REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(address userWallet,uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
-SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(address userWallet,uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,uint256 expiration)')
+SWAP_TYPE_HASH: constant(bytes32) = keccak256('Swap(address userWallet,uint256 legoId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minAmountOut,address pool,address extraTokenIfHop,address extraPoolIfHop,uint256 expiration)')
 ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 expiration)')
 REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address userWallet,address recipient,uint256 amount,address asset,uint256 expiration)')
@@ -217,13 +217,15 @@ def swapTokens(
     _amountIn: uint256 = max_value(uint256),
     _minAmountOut: uint256 = 0,
     _pool: address = empty(address),
+    _extraTokenIfHop: address = empty(address),
+    _extraPoolIfHop: address = empty(address),
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256):
     owner: address = self.owner
     if msg.sender != owner:
-        self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(SWAP_TYPE_HASH, _userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokenIfHop, _extraPoolIfHop, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
-    return extcall UserWalletInterface(_userWallet).swapTokens(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool)
+    return extcall UserWalletInterface(_userWallet).swapTokens(_legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokenIfHop, _extraPoolIfHop)
 
 
 ##################

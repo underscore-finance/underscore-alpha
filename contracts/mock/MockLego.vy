@@ -312,7 +312,16 @@ def withdrawTokens(
 
 
 @external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _pool: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
+def swapTokens(
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _pool: address,
+    _extraTokenIfHop: address,
+    _extraPoolIfHop: address,
+    _recipient: address,
+    _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     # THIS IS A TOTAL HACK
 
     # transfer tokens to this contract
@@ -349,6 +358,11 @@ def getLpToken(_pool: address) -> address:
 @view
 @external
 def getPoolForLpToken(_lpToken: address) -> address:
+    return empty(address)
+
+@view
+@external
+def getWethUsdcRouterPool() -> address:
     return empty(address)
 
 @view
@@ -399,6 +413,18 @@ def getRemoveLiqAmountsOut(
 @external
 def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
     return 0
+
+
+@view
+@external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    return empty(address), 0
+
+
+@view
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    return empty(address), 0
 
 
 #################

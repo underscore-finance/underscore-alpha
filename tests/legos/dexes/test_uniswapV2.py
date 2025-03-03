@@ -3,6 +3,7 @@ import boa
 
 from constants import ZERO_ADDRESS, MAX_UINT256, EIGHTEEN_DECIMALS
 from conf_tokens import TEST_AMOUNTS
+from utils.BluePrint import CORE_TOKENS
 
 
 TEST_ASSETS = [
@@ -97,6 +98,26 @@ def test_uniswapV2_swap_partial(
     toToken = getToToken(token_str)
 
     testLegoSwap(lego_uniswap_v2.legoId(), fromAsset, toToken, testAmount // 2)
+
+
+@pytest.always
+def test_uniswapV2_swap_with_hop(
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_uniswap_v2,
+    bob_agent,
+    fork,
+):
+    # setup
+    usdc, usdc_whale = getTokenAndWhale("usdc")
+    usdc_amount = 10_000 * (10 ** usdc.decimals())
+    usdc.transfer(bob_ai_wallet.address, usdc_amount, sender=usdc_whale)
+
+    virtual = CORE_TOKENS[fork]["VIRTUAL"]
+    hop_token = CORE_TOKENS[fork]["WETH"]
+
+    fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_uniswap_v2.legoId(), usdc, virtual, usdc_amount, 0, ZERO_ADDRESS, hop_token, ZERO_ADDRESS, sender=bob_agent)
+    assert toAmount != 0
 
 
 @pytest.mark.parametrize("token_str", TEST_ASSETS)
@@ -251,14 +272,14 @@ def test_uniswapV2_get_best_pool(
     tokenA, _ = getTokenAndWhale("usdc")
     tokenB, _ = getTokenAndWhale("weth")
 
-    best_pool = lego_uniswap_v2.getBestPool(tokenA, tokenB)
+    best_pool = lego_uniswap_v2.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C"
     assert best_pool.fee == 30
     assert best_pool.liquidity != 0
     assert best_pool.numCoins == 2
 
     # virtual
-    best_pool = lego_uniswap_v2.getBestPool("0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b", tokenB)
+    best_pool = lego_uniswap_v2.getDeepestLiqPool("0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b", tokenB)
     assert best_pool.pool == "0xE31c372a7Af875b3B5E0F3713B17ef51556da667"
     assert best_pool.fee == 30
     assert best_pool.liquidity != 0
@@ -271,13 +292,27 @@ def test_uniswapV2_get_swap_amount_out(
     lego_uniswap_v2,
     _test,
 ):
+    pool = "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C"
     tokenA, _ = getTokenAndWhale("usdc")
+    tokenA_amount = 2_500 * (10 ** tokenA.decimals())
     tokenB, _ = getTokenAndWhale("weth")
-    amount_out = lego_uniswap_v2.getSwapAmountOut("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C", tokenA, tokenB, 2_500 * (10 ** tokenA.decimals()))
-    _test(1 * (10 ** tokenB.decimals()), amount_out, 100)
+    tokenB_amount = 1 * (10 ** tokenB.decimals())
 
-    amount_out = lego_uniswap_v2.getSwapAmountOut("0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C", tokenB, tokenA, 1 * (10 ** tokenB.decimals()))
-    _test(2_500 * (10 ** tokenA.decimals()), amount_out, 100)
+    # usdc -> weth
+    amount_out = lego_uniswap_v2.getSwapAmountOut(pool, tokenA, tokenB, tokenA_amount)
+    _test(tokenB_amount, amount_out, 100)
+
+    best_pool, amount_out_b = lego_uniswap_v2.getBestSwapAmountOut(tokenA, tokenB, tokenA_amount)
+    assert best_pool == pool
+    assert amount_out == amount_out_b
+
+    # weth -> usdc
+    amount_out = lego_uniswap_v2.getSwapAmountOut(pool, tokenB, tokenA, tokenB_amount)
+    _test(tokenA_amount, amount_out, 100)
+
+    best_pool, amount_out_b = lego_uniswap_v2.getBestSwapAmountOut(tokenB, tokenA, tokenB_amount)
+    assert best_pool == pool
+    assert amount_out == amount_out_b
 
 
 @pytest.always

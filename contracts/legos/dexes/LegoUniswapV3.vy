@@ -36,19 +36,21 @@ interface UniV3NftPositionManager:
 interface UniV3Quoter:
     def quoteExactOutputSingle(_params: QuoteExactOutputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
     def quoteExactInputSingle(_params: QuoteExactInputSingleParams) -> (uint256, uint160, uint32, uint256): nonpayable
-
-interface IUniswapV3Callback:
-    def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
-
+    def quoteExactInput(_path: Bytes[1024], _amountIn: uint256) -> uint256: nonpayable
+  
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
     def getPrice(_asset: address, _shouldRaise: bool = False) -> uint256: view
 
-interface UniV3Factory:
-    def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view
-
 interface UniV3SwapRouter:
     def exactInputSingle(_params: ExactInputSingleParams) -> uint256: payable
+    def exactInput(_params: ExactInputParams) -> uint256: payable
+
+interface IUniswapV3Callback:
+    def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]): nonpayable
+
+interface UniV3Factory:
+    def getPool(_tokenA: address, _tokenB: address, _fee: uint24) -> address: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -61,6 +63,13 @@ struct ExactInputSingleParams:
     amountIn: uint256
     amountOutMinimum: uint256
     sqrtPriceLimitX96: uint160
+
+struct ExactInputParams:
+    path: Bytes[1024]
+    recipient: address
+    deadline: uint256
+    amountIn: uint256
+    amountOutMinimum: uint256
 
 struct QuoteExactInputSingleParams:
     tokenIn: address
@@ -183,6 +192,9 @@ event UniV3FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
+event UniV3WethUsdcRouterPoolSet:
+    wethUsdcRouterPool: indexed(address)
+
 event UniV3NftRecovered:
     collection: indexed(address)
     nftTokenId: uint256
@@ -195,6 +207,7 @@ event UniswapV3Activated:
     isActivated: bool
 
 # transient
+wethUsdcRouterPool: public(address)
 poolSwapData: transient(PoolSwapData)
 
 # uni
@@ -219,13 +232,21 @@ UNISWAP_Q96: constant(uint256) = 2 ** 96  # uniswap's fixed point scaling factor
 
 
 @deploy
-def __init__(_uniswapV3Factory: address, _uniswapV3SwapRouter: address, _uniNftPositionManager: address, _uniV3Quoter: address, _addyRegistry: address):
-    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry] # dev: invalid addrs
+def __init__(
+    _uniswapV3Factory: address,
+    _uniswapV3SwapRouter: address,
+    _uniNftPositionManager: address,
+    _uniV3Quoter: address,
+    _addyRegistry: address,
+    _wethUsdcRouterPool: address,
+):
+    assert empty(address) not in [_uniswapV3Factory, _uniswapV3SwapRouter, _uniNftPositionManager, _uniV3Quoter, _addyRegistry, _wethUsdcRouterPool] # dev: invalid addrs
     UNIV3_FACTORY = _uniswapV3Factory
     UNIV3_SWAP_ROUTER = _uniswapV3SwapRouter
     UNIV3_NFT_MANAGER = _uniNftPositionManager
     UNIV3_QUOTER = _uniV3Quoter
     ADDY_REGISTRY = _addyRegistry
+    self.wethUsdcRouterPool = _wethUsdcRouterPool
     self.isActivated = True
     gov.__init__(_addyRegistry)
 
@@ -262,6 +283,8 @@ def swapTokens(
     _amountIn: uint256,
     _minAmountOut: uint256,
     _pool: address,
+    _extraTokenIfHop: address,
+    _extraPoolIfHop: address,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -281,7 +304,9 @@ def swapTokens(
 
     # perform swap
     toAmount: uint256 = 0
-    if _pool != empty(address):
+    if _extraTokenIfHop != empty(address):
+        toAmount = self._swapTokensWithHop(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient, _extraTokenIfHop, _extraPoolIfHop)
+    elif _pool != empty(address):
         toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     else:
         toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
@@ -298,6 +323,51 @@ def swapTokens(
     usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, True, _oracleRegistry)
     log UniswapV3SwapInPool(msg.sender, _pool, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
     return swapAmount, toAmount, refundAssetAmount, usdValue
+
+
+@external
+def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]):
+    poolSwapData: PoolSwapData = self.poolSwapData
+    assert msg.sender == poolSwapData.pool # dev: no perms
+
+    # transfer tokens to pool
+    assert extcall IERC20(poolSwapData.tokenIn).transfer(poolSwapData.pool, poolSwapData.amountIn, default_return_value=True) # dev: transfer failed
+
+
+# multi hop swap
+
+
+@internal
+def _swapTokensWithHop(
+    _pool: address,
+    _tokenIn: address,
+    _tokenOut: address,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _recipient: address,
+    _extraTokenIfHop: address,
+    _extraPoolIfHop: address,
+) -> uint256:
+    router: address = UNIV3_SWAP_ROUTER
+    assert extcall IERC20(_tokenIn).approve(router, _amountIn, default_return_value=True) # dev: approval failed
+    assert _pool != empty(address) and _extraPoolIfHop != empty(address) # dev: invalid pools
+
+    feeA: uint24 = staticcall UniV3Pool(_pool).fee()
+    feeB: uint24 = staticcall UniV3Pool(_extraPoolIfHop).fee()
+    path: Bytes[1024] = abi_encode(_tokenIn, feeA, _extraTokenIfHop, feeB, _tokenOut)
+
+    toAmount: uint256 = extcall UniV3SwapRouter(router).exactInput(
+        ExactInputParams(
+            path=path,
+            recipient=_recipient,
+            deadline=block.timestamp,
+            amountIn=_amountIn,
+            amountOutMinimum=_minAmountOut,
+        )
+    )
+
+    assert extcall IERC20(_tokenIn).approve(router, 0, default_return_value=True) # dev: approval failed
+    return toAmount
 
 
 # swap in pool
@@ -346,13 +416,6 @@ def _swapTokensInPool(
     return toAmount
 
 
-@external
-def uniswapV3SwapCallback(_amount0Delta: int256, _amount1Delta: int256, _data: Bytes[256]):
-    poolSwapData: PoolSwapData = self.poolSwapData
-    assert msg.sender == poolSwapData.pool # dev: no perms
-
-    # transfer tokens to pool
-    assert extcall IERC20(poolSwapData.tokenIn).transfer(poolSwapData.pool, poolSwapData.amountIn, default_return_value=True) # dev: transfer failed
 
 
 # generic swap
@@ -723,7 +786,13 @@ def getPoolForLpToken(_lpToken: address) -> address:
 
 @view
 @external
-def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+def getWethUsdcRouterPool() -> address:
+    return self.wethUsdcRouterPool
+
+
+@view
+@external
+def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
     bestPoolAddr: address = empty(address)
     bestFeeTier: uint24 = 0
     bestPoolAddr, bestFeeTier = self._getDeepestLiqPool(_tokenA, _tokenB)
@@ -746,6 +815,32 @@ def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
 
 # annoying that this cannot be view function, thanks uni v3
 @external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    bestPoolAddr: address = empty(address)
+    bestFeeTier: uint24 = 0
+    bestPoolAddr, bestFeeTier = self._getDeepestLiqPool(_tokenIn, _tokenOut)
+
+    if bestPoolAddr == empty(address):
+        return empty(address), 0
+
+    amountOut: uint256 = 0
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountOut, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactInputSingle(
+        QuoteExactInputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amountIn=_amountIn,
+            fee=bestFeeTier,
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return bestPoolAddr, amountOut
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
 def getSwapAmountOut(
     _pool: address,
     _tokenIn: address,
@@ -753,10 +848,10 @@ def getSwapAmountOut(
     _amountIn: uint256,
 ) -> uint256:
     amountOut: uint256 = 0
-    sqrtPriceX96After: uint160 = 0
-    initializedTicksCrossed: uint32 = 0
-    gasEstimate: uint256 = 0
-    amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactInputSingle(
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountOut, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactInputSingle(
         QuoteExactInputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -770,6 +865,32 @@ def getSwapAmountOut(
 
 # annoying that this cannot be view function, thanks uni v3
 @external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    bestPoolAddr: address = empty(address)
+    bestFeeTier: uint24 = 0
+    bestPoolAddr, bestFeeTier = self._getDeepestLiqPool(_tokenIn, _tokenOut)
+
+    if bestPoolAddr == empty(address):
+        return empty(address), 0
+
+    amountIn: uint256 = 0
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountIn, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactOutputSingle(
+        QuoteExactOutputSingleParams(
+            tokenIn=_tokenIn,
+            tokenOut=_tokenOut,
+            amount=_amountOut,
+            fee=bestFeeTier,
+            sqrtPriceLimitX96=0,
+        )
+    )
+    return bestPoolAddr, amountIn
+
+
+# annoying that this cannot be view function, thanks uni v3
+@external
 def getSwapAmountIn(
     _pool: address,
     _tokenIn: address,
@@ -777,10 +898,10 @@ def getSwapAmountIn(
     _amountOut: uint256,
 ) -> uint256:
     amountIn: uint256 = 0
-    sqrtPriceX96After: uint160 = 0
-    initializedTicksCrossed: uint32 = 0
-    gasEstimate: uint256 = 0
-    amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactOutputSingle(
+    na1: uint160 = 0
+    na2: uint32 = 0
+    na3: uint256 = 0
+    amountIn, na1, na2, na3 = extcall UniV3Quoter(UNIV3_QUOTER).quoteExactOutputSingle(
         QuoteExactOutputSingleParams(
             tokenIn=_tokenIn,
             tokenOut=_tokenOut,
@@ -950,6 +1071,19 @@ def _getSqrtPriceX96(_pool: address) -> uint256:
     unlocked: bool = False
     sqrtPriceX96, tick, observationIndex, observationCardinality, observationCardinalityNext, feeProtocol, unlocked = staticcall UniV3Pool(_pool).slot0()
     return convert(sqrtPriceX96, uint256)
+
+
+####################
+# WETH/USDC Router #
+####################
+
+
+@external
+def setWethUsdcRouterPool(_addr: address) -> bool:
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    self.wethUsdcRouterPool = _addr
+    log UniV3WethUsdcRouterPoolSet(_addr)
+    return True
 
 
 #################

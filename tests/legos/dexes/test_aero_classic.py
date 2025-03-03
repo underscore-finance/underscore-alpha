@@ -365,7 +365,7 @@ def test_aerodrome_classic_get_best_pool(
     tokenA, _ = getTokenAndWhale("usdc")
     tokenB, _ = getTokenAndWhale("weth")
 
-    best_pool = lego_aero_classic.getBestPool(tokenA, tokenB)
+    best_pool = lego_aero_classic.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0xcDAC0d6c6C59727a65F871236188350531885C43"
     assert best_pool.fee == 30
     assert best_pool.liquidity != 0
@@ -373,7 +373,7 @@ def test_aerodrome_classic_get_best_pool(
 
     # aero
     tokenB, _ = getTokenAndWhale("aero")
-    best_pool = lego_aero_classic.getBestPool(tokenA, tokenB)
+    best_pool = lego_aero_classic.getDeepestLiqPool(tokenA, tokenB)
     assert best_pool.pool == "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d"
     assert best_pool.fee == 30
     assert best_pool.liquidity != 0

@@ -3,7 +3,7 @@
 # core dex
 
 @external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _pool: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
+def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _pool: address, _extraTokenIfHop: address, _extraPoolIfHop: address, _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
     ...
 
 @external
@@ -76,7 +76,24 @@ def getRemoveLiqAmountsOut(
 def getPriceUnsafe(_pool: address, _targetToken: address, _oracleRegistry: address = empty(address)) -> uint256:
     ...
 
+@view
+@external
+def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256):
+    ...
+
+@view
+@external
+def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    ...
+
+
+@view
+@external
+def getWethUsdcRouterPool() -> address:
+    ...
+
+
 # @view
 # @external
-# def getBestPool(_tokenA: address, _tokenB: address) -> BestPool:
+# def getDeepestLiqPool(_tokenA: address, _tokenB: address) -> BestPool:
 #     ...

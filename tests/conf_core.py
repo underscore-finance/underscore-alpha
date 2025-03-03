@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from constants import MAX_UINT256
-from utils.BluePrint import PARAMS, ADDYS
+from utils.BluePrint import PARAMS, ADDYS, CORE_TOKENS
 
 
 # core
@@ -81,10 +81,37 @@ def agent_template(fork):
 
 
 @pytest.fixture(scope="session")
-def lego_helper(addy_registry, lego_registry, lego_aave_v3, lego_compound_v3, lego_euler, lego_fluid, lego_moonwell, lego_morpho, lego_sky, governor):
+def lego_helper(
+    addy_registry,
+    lego_registry,
+    lego_aave_v3,
+    lego_compound_v3,
+    lego_euler,
+    lego_fluid,
+    lego_moonwell,
+    lego_morpho,
+    lego_sky,
+    lego_uniswap_v2,
+    lego_uniswap_v3,
+    lego_aero_classic,
+    lego_aero_slipstream,
+    lego_curve,
+    governor,
+    fork,
+    alpha_token,
+    mock_weth,
+):
+    usdc = alpha_token
+    weth = mock_weth
+    if fork != "local":
+        usdc = CORE_TOKENS[fork]["USDC"]
+        weth = CORE_TOKENS[fork]["WETH"]
+
     h = boa.load(
         "contracts/core/LegoHelper.vy",
         addy_registry,
+        usdc,
+        weth,
         lego_aave_v3.legoId(),
         lego_compound_v3.legoId(),
         lego_euler.legoId(),
@@ -92,6 +119,11 @@ def lego_helper(addy_registry, lego_registry, lego_aave_v3, lego_compound_v3, le
         lego_moonwell.legoId(),
         lego_morpho.legoId(),
         lego_sky.legoId(),
+        lego_uniswap_v2.legoId(),
+        lego_uniswap_v3.legoId(),
+        lego_aero_classic.legoId(),
+        lego_aero_slipstream.legoId(),
+        lego_curve.legoId(),
         name="lego_helper",
     )
     assert lego_registry.setLegoHelper(h, sender=governor)
