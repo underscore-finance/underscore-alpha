@@ -159,10 +159,10 @@ def swapTokens(
 
     # perform swap
     toAmount: uint256 = 0
-    if _pool != empty(address):
-        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+    if _pool == empty(address) or _extraTokenIfHop != empty(address):
+        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient, _extraTokenIfHop)
     else:
-        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
     assert toAmount != 0 # dev: no tokens swapped
 
     # refund if full swap didn't get through
@@ -229,12 +229,18 @@ def _swapTokensGeneric(
     _amountIn: uint256,
     _minAmountOut: uint256, 
     _recipient: address,
+    _extraTokenIfHop: address,
 ) -> uint256:
-    assert staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut) != empty(address) # dev: no pool found
+    path: DynArray[address, MAX_ASSETS] = []
+    if _extraTokenIfHop == empty(address):
+        assert staticcall UniV2Factory(UNISWAP_V2_FACTORY).getPair(_tokenIn, _tokenOut) != empty(address) # dev: no pool found
+        path = [_tokenIn, _tokenOut]
+    else:
+        path = [_tokenIn, _extraTokenIfHop, _tokenOut]
 
     swapRouter: address = UNISWAP_V2_ROUTER
     assert extcall IERC20(_tokenIn).approve(swapRouter, _amountIn, default_return_value=True) # dev: approval failed
-    amounts: DynArray[uint256, MAX_ASSETS] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, [_tokenIn, _tokenOut], _recipient, block.timestamp)
+    amounts: DynArray[uint256, MAX_ASSETS] = extcall UniV2Router(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, path, _recipient, block.timestamp)
     assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
     return amounts[1]
 

@@ -100,6 +100,26 @@ def test_uniswapV2_swap_partial(
     testLegoSwap(lego_uniswap_v2.legoId(), fromAsset, toToken, testAmount // 2)
 
 
+@pytest.always
+def test_uniswapV2_swap_with_hop(
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_uniswap_v2,
+    bob_agent,
+    fork,
+):
+    # setup
+    usdc, usdc_whale = getTokenAndWhale("usdc")
+    usdc_amount = 10_000 * (10 ** usdc.decimals())
+    usdc.transfer(bob_ai_wallet.address, usdc_amount, sender=usdc_whale)
+
+    virtual = CORE_TOKENS[fork]["VIRTUAL"]
+    hop_token = CORE_TOKENS[fork]["WETH"]
+
+    fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_uniswap_v2.legoId(), usdc, virtual, usdc_amount, 0, ZERO_ADDRESS, hop_token, ZERO_ADDRESS, sender=bob_agent)
+    assert toAmount != 0
+
+
 @pytest.mark.parametrize("token_str", TEST_ASSETS)
 @pytest.always
 def test_uniswapV2_swap_max_with_pool(
