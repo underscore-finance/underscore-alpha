@@ -4,6 +4,7 @@ import boa
 from eth_account import Account
 from contracts.core import WalletFunds, WalletConfig, AgentTemplate
 from constants import ZERO_ADDRESS, MAX_UINT256
+from eth_account.messages import encode_defunct
 
 
 @pytest.fixture(scope="package")
@@ -27,24 +28,24 @@ def createActionInstruction():
         _asset,
         _vault,
         _amount,
-        _usePrevAmountOut = False,
-        _altLegoId = 0,
-        _altAsset = ZERO_ADDRESS,
-        _altVault = ZERO_ADDRESS,
-        _altAmount = 0,
-        _minAmountOut = 0,
-        _pool = ZERO_ADDRESS,
-        _proof = b"",
-        _nftAddr = ZERO_ADDRESS,
-        _nftTokenId = 0,
-        _tickLower = 0,
-        _tickUpper = 0,
-        _minAmountA = 0,
-        _minAmountB = 0,
-        _minLpAmount = 0,
-        _liqToRemove = 0,
-        _recipient = ZERO_ADDRESS,
-        _isWethToEthConversion = False,
+        _usePrevAmountOut=False,
+        _altLegoId=0,
+        _altAsset=ZERO_ADDRESS,
+        _altVault=ZERO_ADDRESS,
+        _altAmount=0,
+        _minAmountOut=0,
+        _pool=ZERO_ADDRESS,
+        _proof=b"",
+        _nftAddr=ZERO_ADDRESS,
+        _nftTokenId=0,
+        _tickLower=0,
+        _tickUpper=0,
+        _minAmountA=0,
+        _minAmountB=0,
+        _minLpAmount=0,
+        _liqToRemove=0,
+        _recipient=ZERO_ADDRESS,
+        _isWethToEthConversion=False,
     ):
         return (
             _usePrevAmountOut,
@@ -541,16 +542,16 @@ def signAddLiquidity(special_agent_signer):
         _legoId,
         _tokenA,
         _tokenB,
-        _amountA = MAX_UINT256,
-        _amountB = MAX_UINT256,
-        _nftAddr = ZERO_ADDRESS,
-        _nftTokenId = 0,
-        _pool = ZERO_ADDRESS,
-        _tickLower = 1,
-        _tickUpper = 1,
-        _minAmountA = 1,
-        _minAmountB = 1,
-        _minLpAmount = 1,
+        _amountA=MAX_UINT256,
+        _amountB=MAX_UINT256,
+        _nftAddr=ZERO_ADDRESS,
+        _nftTokenId=0,
+        _pool=ZERO_ADDRESS,
+        _tickLower=1,
+        _tickUpper=1,
+        _minAmountA=1,
+        _minAmountB=1,
+        _minLpAmount=1,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
 
@@ -612,11 +613,11 @@ def signRemoveLiquidity(special_agent_signer):
         _pool,
         _tokenA,
         _tokenB,
-        _nftAddr = ZERO_ADDRESS,
-        _nftTokenId = 0,
-        _liqToRemove = MAX_UINT256,
-        _minAmountA = 0,
-        _minAmountB = 0,
+        _nftAddr=ZERO_ADDRESS,
+        _nftTokenId=0,
+        _liqToRemove=MAX_UINT256,
+        _minAmountA=0,
+        _minAmountB=0,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
 
@@ -661,39 +662,6 @@ def signRemoveLiquidity(special_agent_signer):
     yield signRemoveLiquidity
 
 
-def _convert_instruction_tuple_to_dict(instruction_tuple):
-    def convert_address(addr):
-        if isinstance(addr, bytes) and len(addr) == 0:
-            return ZERO_ADDRESS
-        return addr
-
-    return {
-        "usePrevAmountOut": instruction_tuple[0],
-        "action": instruction_tuple[1],
-        "legoId": instruction_tuple[2],
-        "asset": convert_address(instruction_tuple[3]),
-        "vault": convert_address(instruction_tuple[4]),
-        "amount": instruction_tuple[5],
-        "altLegoId": instruction_tuple[6],
-        "altAsset": convert_address(instruction_tuple[7]),
-        "altVault": convert_address(instruction_tuple[8]),
-        "altAmount": instruction_tuple[9],
-        "minAmountOut": instruction_tuple[10],
-        "pool": instruction_tuple[11],
-        "proof": convert_address(instruction_tuple[12]),
-        "nftAddr": convert_address(instruction_tuple[13]),
-        "nftTokenId": instruction_tuple[14],
-        "tickLower": instruction_tuple[15],
-        "tickUpper": instruction_tuple[16],
-        "minAmountA": instruction_tuple[17],
-        "minAmountB": instruction_tuple[18],
-        "minLpAmount": instruction_tuple[19],
-        "liqToRemove": instruction_tuple[20],
-        "recipient": convert_address(instruction_tuple[21]),
-        "isWethToEthConversion": instruction_tuple[22],
-    }
-
-
 @pytest.fixture(scope="package")
 def signBatchAction(special_agent_signer):
     def signBatchAction(
@@ -702,62 +670,11 @@ def signBatchAction(special_agent_signer):
         _instructions,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
-        # Convert instructions from tuples to dictionaries for EIP-712 signing
-        instructions_dict = [_convert_instruction_tuple_to_dict(instr) for instr in _instructions]
-        
-        # the data to be signed
-        message = {
-            "domain": {
-                "name": "UnderscoreAgent",
-                "version": _agent.apiVersion(),
-                "chainId": boa.env.evm.patch.chain_id,
-                "verifyingContract": _agent.address,
-            },
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"}
-                ],
-                "BatchActions": [
-                    {"name": "userWallet", "type": "address"},
-                    {"name": "instructions", "type": "ActionInstruction[]"},
-                    {"name": "expiration", "type": "uint256"}
-                ],
-                "ActionInstruction": [
-                    {"name": "usePrevAmountOut", "type": "bool"},
-                    {"name": "action", "type": "uint256"},
-                    {"name": "legoId", "type": "uint256"},
-                    {"name": "asset", "type": "address"},
-                    {"name": "vault", "type": "address"},
-                    {"name": "amount", "type": "uint256"},
-                    {"name": "altLegoId", "type": "uint256"},
-                    {"name": "altAsset", "type": "address"},
-                    {"name": "altVault", "type": "address"},
-                    {"name": "altAmount", "type": "uint256"},
-                    {"name": "minAmountOut", "type": "uint256"},
-                    {"name": "pool", "type": "address"},
-                    {"name": "proof", "type": "bytes32"},
-                    {"name": "nftAddr", "type": "address"},
-                    {"name": "nftTokenId", "type": "uint256"},
-                    {"name": "tickLower", "type": "int24"},
-                    {"name": "tickUpper", "type": "int24"},
-                    {"name": "minAmountA", "type": "uint256"},
-                    {"name": "minAmountB", "type": "uint256"},
-                    {"name": "minLpAmount", "type": "uint256"},
-                    {"name": "liqToRemove", "type": "uint256"},
-                    {"name": "recipient", "type": "address"},
-                    {"name": "isWethToEthConversion", "type": "bool"}
-                ]
-            },
-            "primaryType": "BatchActions",
-            "message": {
-                "userWallet": _userWallet.address,
-                "instructions": instructions_dict,
-                "expiration": _expiration,
-            }
-        }
-        signed = Account.sign_typed_data(special_agent_signer.key, full_message=message)
+        # Get the contract's hash
+        message_hash = _agent.getBatchActionHash(_userWallet, _instructions, _expiration)
+
+        # Sign the hash directly without any prefix
+        signed = Account._sign_hash(message_hash, special_agent_signer.key)
+
         return (signed.signature, special_agent_signer.address, _expiration)
     yield signBatchAction
