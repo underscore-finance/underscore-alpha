@@ -4,8 +4,7 @@
 from ethereum.ercs import IERC20
 
 interface PriceSheets:
-    def getCombinedSubData(_agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
-    def getCombinedTxCostData(_agent: address, _action: ActionType, _usdValue: uint256, _oracleRegistry: address) -> (TxCostInfo, TxCostInfo): view
+    def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
     def getAgentSubPriceData(_agent: address) -> SubscriptionInfo: view
     def protocolSubPriceData() -> SubscriptionInfo: view
 
@@ -59,12 +58,6 @@ struct SubPaymentInfo:
     usdValue: uint256
     paidThroughBlock: uint256
     didChange: bool
-
-struct TxCostInfo:
-    recipient: address
-    asset: address
-    amount: uint256
-    usdValue: uint256
 
 struct ProtocolSub:
     installBlock: uint256
@@ -373,7 +366,7 @@ def getAgentSubscriptionStatus(_agent: address) -> SubPaymentInfo:
     cd: CoreData = self._getCoreData()
     na: SubPaymentInfo = empty(SubPaymentInfo)
     agentSub: SubPaymentInfo = empty(SubPaymentInfo)
-    na, agentSub = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(_agent, self.agentSettings[_agent].paidThroughBlock, 0, cd.oracleRegistry)
+    na, agentSub = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(cd.wallet, _agent, self.agentSettings[_agent].paidThroughBlock, 0, cd.oracleRegistry)
     return agentSub
 
 
@@ -383,7 +376,7 @@ def getProtocolSubscriptionStatus() -> SubPaymentInfo:
     cd: CoreData = self._getCoreData()
     protocolSub: SubPaymentInfo = empty(SubPaymentInfo)
     na: SubPaymentInfo = empty(SubPaymentInfo)
-    protocolSub, na = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(empty(address), 0, self.protocolSub.paidThroughBlock, cd.oracleRegistry)
+    protocolSub, na = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(cd.wallet, empty(address), 0, self.protocolSub.paidThroughBlock, cd.oracleRegistry)
     return protocolSub
 
 
@@ -393,7 +386,7 @@ def canMakeSubscriptionPayments(_agent: address) -> (bool, bool):
     cd: CoreData = self._getCoreData()
     protocolSub: SubPaymentInfo = empty(SubPaymentInfo)
     agentSub: SubPaymentInfo = empty(SubPaymentInfo)
-    protocolSub, agentSub = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(_agent, self.agentSettings[_agent].paidThroughBlock, self.protocolSub.paidThroughBlock, cd.oracleRegistry)
+    protocolSub, agentSub = staticcall PriceSheets(cd.priceSheets).getCombinedSubData(cd.wallet, _agent, self.agentSettings[_agent].paidThroughBlock, self.protocolSub.paidThroughBlock, cd.oracleRegistry)
     return self._checkIfSufficientFunds(protocolSub.asset, protocolSub.amount, agentSub.asset, agentSub.amount, cd)
 
 
@@ -428,7 +421,7 @@ def handleSubscriptionsAndPermissions(
     # get latest sub data for agent and protocol
     protocolSub: SubPaymentInfo = empty(SubPaymentInfo)
     agentSub: SubPaymentInfo = empty(SubPaymentInfo)
-    protocolSub, agentSub = staticcall PriceSheets(_cd.priceSheets).getCombinedSubData(_agent, userAgentData.paidThroughBlock, userProtocolData.paidThroughBlock, _cd.oracleRegistry)
+    protocolSub, agentSub = staticcall PriceSheets(_cd.priceSheets).getCombinedSubData(_cd.wallet, _agent, userAgentData.paidThroughBlock, userProtocolData.paidThroughBlock, _cd.oracleRegistry)
 
     # check if sufficient funds
     canPayProtocol: bool = False
@@ -447,46 +440,6 @@ def handleSubscriptionsAndPermissions(
 
     # actual payments will happen from wallet
     return protocolSub, agentSub
-
-
-# transaction fees
-
-
-@view
-@external
-def getTransactionCosts(_agent: address, _action: ActionType, _usdValue: uint256, _cd: CoreData) -> (TxCostInfo, TxCostInfo):
-    """
-    @notice Returns the transaction costs for the given agent and action
-    @param _agent The address of the agent
-    @param _action The action to check
-    @param _usdValue The USD value of the transaction
-    @param _cd The core data
-    @return protocolCost The transaction cost for the protocol
-    @return agentCost The transaction cost for the agent
-    """
-    protocolCost: TxCostInfo = empty(TxCostInfo)
-    agentCost: TxCostInfo = empty(TxCostInfo)
-    protocolCost, agentCost = staticcall PriceSheets(_cd.priceSheets).getCombinedTxCostData(_agent, _action, _usdValue, _cd.oracleRegistry)
-
-    # check if sufficient funds
-    canPayProtocol: bool = False
-    canPayAgent: bool = False
-    canPayProtocol, canPayAgent = self._checkIfSufficientFunds(protocolCost.asset, protocolCost.amount, agentCost.asset, agentCost.amount, _cd)
-    assert canPayProtocol # dev: insufficient balance for protocol tx fee
-    assert canPayAgent # dev: insufficient balance for agent tx fee
-
-    # actual payments will happen from wallet
-    return protocolCost, agentCost
-
-
-@view
-@external
-def canPayTransactionFees(_agent: address, _action: ActionType, _usdValue: uint256) -> (bool, bool):
-    cd: CoreData = self._getCoreData()
-    protocolCost: TxCostInfo = empty(TxCostInfo)
-    agentCost: TxCostInfo = empty(TxCostInfo)
-    protocolCost, agentCost = staticcall PriceSheets(cd.priceSheets).getCombinedTxCostData(_agent, _action, _usdValue, cd.oracleRegistry)
-    return self._checkIfSufficientFunds(protocolCost.asset, protocolCost.amount, agentCost.asset, agentCost.amount, cd)
 
 
 ####################

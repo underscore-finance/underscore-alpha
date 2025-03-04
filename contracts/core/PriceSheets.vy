@@ -31,7 +31,6 @@ flag ActionType:
     REPAY
 
 struct TxPriceSheet:
-    asset: address
     depositFee: uint256
     withdrawalFee: uint256
     rebalanceFee: uint256
@@ -39,6 +38,9 @@ struct TxPriceSheet:
     swapFee: uint256
     addLiqFee: uint256
     removeLiqFee: uint256
+    claimRewardsFee: uint256
+    borrowFee: uint256
+    repayFee: uint256
 
 struct SubscriptionInfo:
     asset: address
@@ -53,16 +55,6 @@ struct SubPaymentInfo:
     usdValue: uint256
     paidThroughBlock: uint256
     didChange: bool
-
-struct TxCostInfo:
-    recipient: address
-    asset: address
-    amount: uint256
-    usdValue: uint256
-
-struct PendingTxPriceSheet:
-    priceSheet: TxPriceSheet
-    effectiveBlock: uint256
 
 struct PendingSubPrice:
     subInfo: SubscriptionInfo
@@ -105,31 +97,7 @@ event ProtocolSubPriceRemoved:
 event AgentSubPricingEnabled:
     isEnabled: bool
 
-event AgentTxPriceSheetSet:
-    agent: indexed(address)
-    asset: indexed(address)
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
-    swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
-
-event PendingAgentTxPriceSheetSet:
-    agent: indexed(address)
-    asset: indexed(address)
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
-    swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
-    effectiveBlock: uint256
-
 event ProtocolTxPriceSheetSet:
-    asset: indexed(address)
     depositFee: uint256
     withdrawalFee: uint256
     rebalanceFee: uint256
@@ -137,20 +105,11 @@ event ProtocolTxPriceSheetSet:
     swapFee: uint256
     addLiqFee: uint256
     removeLiqFee: uint256
-
-event AgentTxPriceSheetRemoved:
-    agent: indexed(address)
-    asset: indexed(address)
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
-    swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
+    claimRewardsFee: uint256
+    borrowFee: uint256
+    repayFee: uint256
 
 event ProtocolTxPriceSheetRemoved:
-    asset: indexed(address)
     depositFee: uint256
     withdrawalFee: uint256
     rebalanceFee: uint256
@@ -158,9 +117,9 @@ event ProtocolTxPriceSheetRemoved:
     swapFee: uint256
     addLiqFee: uint256
     removeLiqFee: uint256
-
-event AgentTxPricingEnabled:
-    isEnabled: bool
+    claimRewardsFee: uint256
+    borrowFee: uint256
+    repayFee: uint256
 
 event ProtocolRecipientSet:
     recipient: indexed(address)
@@ -177,13 +136,10 @@ protocolTxPriceData: public(TxPriceSheet) # protocol transaction pricing
 protocolSubPriceData: public(SubscriptionInfo) # protocol subscription pricing
 
 # agent pricing
-isAgentTxPricingEnabled: public(bool)
-agentTxPriceData: public(HashMap[address, TxPriceSheet]) # agent -> transaction pricing
 isAgentSubPricingEnabled: public(bool)
 agentSubPriceData: public(HashMap[address, SubscriptionInfo]) # agent -> subscription pricing
 
 # pending price changes
-pendingAgentTxPrices: public(HashMap[address, PendingTxPriceSheet])
 pendingAgentSubPrices: public(HashMap[address, PendingSubPrice])
 priceChangeDelay: public(uint256) # number of blocks that must pass before price changes take effect
 
@@ -193,7 +149,6 @@ isActivated: public(bool)
 
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
-ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 MIN_TRIAL_PERIOD: public(immutable(uint256))
 MAX_TRIAL_PERIOD: public(immutable(uint256))
@@ -201,7 +156,6 @@ MIN_PAY_PERIOD: public(immutable(uint256))
 MAX_PAY_PERIOD: public(immutable(uint256))
 MIN_PRICE_CHANGE_BUFFER: public(immutable(uint256))
 
-HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 MAX_TX_FEE: constant(uint256) = 10_00 # 10.00%
 
 
@@ -241,10 +195,11 @@ def _isRegisteredAgent(_agent: address) -> bool:
 
 @view
 @external
-def getCombinedSubData(_agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo):
+def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo):
     """
     @notice Get combined subscription data for an agent and protocol
     @dev Returns a struct containing payment amounts and paid through blocks for both agent and protocol
+    @param _user The address of the user
     @param _agent The address of the agent
     @param _agentPaidThru The paid through block for the agent
     @param _protocolPaidThru The paid through block for the protocol
@@ -252,6 +207,8 @@ def getCombinedSubData(_agent: address, _agentPaidThru: uint256, _protocolPaidTh
     @return protocolData struct containing payment amounts and paid through blocks for the protocol
     @return agentData struct containing payment amounts and paid through blocks for the agent
     """
+    # NOTE: in future, we may have different pricing tiers depending on the `_user`
+
     # protocol sub info
     protocolData: SubPaymentInfo = self._updatePaidThroughBlock(_protocolPaidThru, self.protocolSubPriceData, _oracleRegistry)
     if protocolData.amount != 0:
@@ -523,84 +480,27 @@ def removeProtocolSubPrice() -> bool:
     return True
 
 
-#################
-# Tx Fees Utils #
-#################
+####################
+# Protocol Tx Fees #
+####################
+
+
+# utilities
 
 
 @view
 @external
-def getCombinedTxCostData(_agent: address, _action: ActionType, _usdValue: uint256, _oracleRegistry: address) -> (TxCostInfo, TxCostInfo):
-    """
-    @notice Get combined transaction cost data for an agent and protocol
-    @dev Returns a struct containing cost amounts and recipient addresses for both agent and protocol
-    @param _agent The address of the agent
-    @param _action The type of action being performed
-    @param _usdValue The USD value of the transaction
-    @param _oracleRegistry The address of the oracle registry
-    @return protocolCost struct containing cost amounts and recipient addresses for the protocol
-    @return agentCost struct containing cost amounts and recipient addresses for the agent
-    """
-    # protocol tx cost info
-    protocolCost: TxCostInfo = self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData, _oracleRegistry)
-    if protocolCost.amount != 0:
-        protocolCost.recipient = self.protocolRecipient
-
-    # agent tx cost info
-    agentCost: TxCostInfo = empty(TxCostInfo)
-    if _agent != empty(address) and self.isAgentTxPricingEnabled:
-        agentCost = self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent], _oracleRegistry)
-        agentCost.recipient = _agent
-
-    return protocolCost, agentCost
-
-
-@view
-@external
-def getAgentTransactionFeeData(_agent: address, _action: ActionType, _usdValue: uint256) -> TxCostInfo:
-    """
-    @notice Get transaction fee data for a specific agent
-    @dev Returns empty values if agent transaction pricing is disabled
-    @param _agent The address of the agent
-    @param _action The type of action being performed
-    @param _usdValue The USD value of the transaction
-    @return TxCostInfo struct containing cost amounts and recipient addresses for the agent
-    """
-    if not self.isAgentTxPricingEnabled:
-        return empty(TxCostInfo)
-    return self._getTransactionFeeData(_action, _usdValue, self.agentTxPriceData[_agent], staticcall AddyRegistry(ADDY_REGISTRY).getAddy(ORACLE_REGISTRY_ID))
-
-
-@view
-@external
-def getProtocolTransactionFeeData(_action: ActionType, _usdValue: uint256) -> TxCostInfo:
+def getTransactionFeeData(_user: address, _action: ActionType) -> (uint256, address):
     """
     @notice Get transaction fee data for the protocol
-    @dev Calculates protocol fees based on action type and transaction value
+    @dev Returns a tuple containing the fee amount and recipient address for the protocol
+    @param _user The address of the user
     @param _action The type of action being performed
-    @param _usdValue The USD value of the transaction
-    @return TxCostInfo struct containing cost amounts and recipient addresses for the protocol
+    @return feeAmount The fee amount for the action
+    @return recipient The recipient address for the fee
     """
-    return self._getTransactionFeeData(_action, _usdValue, self.protocolTxPriceData, staticcall AddyRegistry(ADDY_REGISTRY).getAddy(ORACLE_REGISTRY_ID))
-
-
-@view
-@internal
-def _getTransactionFeeData(_action: ActionType, _usdValue: uint256, _priceSheet: TxPriceSheet, _oracleRegistry: address) -> TxCostInfo:
-    if _usdValue == 0 or _priceSheet.asset == empty(address):
-        return empty(TxCostInfo)
-
-    fee: uint256 = self._getTxFeeForAction(_action, _priceSheet)
-    if fee == 0:
-        return empty(TxCostInfo)
-
-    usdValue: uint256 = _usdValue * fee // HUNDRED_PERCENT
-    return TxCostInfo(
-        recipient=empty(address),
-        asset=_priceSheet.asset,
-        amount=staticcall OracleRegistry(_oracleRegistry).getAssetAmount(_priceSheet.asset, usdValue, False),
-        usdValue=usdValue,
-    )
+    # NOTE: in future, we may have different pricing tiers depending on the `_user`
+    return self._getTxFeeForAction(_action, self.protocolTxPriceData), self.protocolRecipient
 
 
 @view
@@ -620,207 +520,22 @@ def _getTxFeeForAction(_action: ActionType, _prices: TxPriceSheet) -> uint256:
         return _prices.addLiqFee
     elif _action == ActionType.REMOVE_LIQ:
         return _prices.removeLiqFee
+    elif _action == ActionType.CLAIM_REWARDS:
+        return _prices.claimRewardsFee
+    elif _action == ActionType.BORROW:
+        return _prices.borrowFee
+    elif _action == ActionType.REPAY:
+        return _prices.repayFee
     else:
         return 0
-
-
-#################
-# Agent Tx Fees #
-#################
-
-
-# set agent tx price sheet
-
-
-@view
-@external
-def isValidTxPriceSheet(
-    _asset: address,
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
-    _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
-) -> bool:
-    """
-    @notice Check if transaction price sheet parameters are valid
-    @dev Validates asset and fee percentages against constraints
-    @param _asset The token address for fee payments
-    @param _depositFee The fee percentage for deposits
-    @param _withdrawalFee The fee percentage for withdrawals
-    @param _rebalanceFee The fee percentage for rebalances
-    @param _transferFee The fee percentage for transfers
-    @param _swapFee The fee percentage for swaps
-    @param _addLiqFee The fee percentage for adding liquidity
-    @param _removeLiqFee The fee percentage for removing liquidity
-    @return bool True if all parameters are valid
-    """
-    return self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee)
-
-
-@view
-@internal
-def _isValidTxPriceSheet(
-    _asset: address,
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
-    _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
-) -> bool:
-    if _asset == empty(address):
-        return False
-    return _depositFee <= MAX_TX_FEE and _withdrawalFee <= MAX_TX_FEE and _rebalanceFee <= MAX_TX_FEE and _transferFee <= MAX_TX_FEE and _swapFee <= MAX_TX_FEE and _addLiqFee <= MAX_TX_FEE and _removeLiqFee <= MAX_TX_FEE
-
-
-@external
-def setAgentTxPriceSheet(
-    _agent: address,
-    _asset: address,
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
-    _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
-) -> bool:
-    """
-    @notice Set transaction price sheet for a specific agent
-    @dev Creates a pending price change that can be finalized after priceChangeDelay blocks
-    @param _agent The address of the agent
-    @param _asset The token address for fee payments
-    @param _depositFee The fee percentage for deposits
-    @param _withdrawalFee The fee percentage for withdrawals
-    @param _rebalanceFee The fee percentage for rebalances
-    @param _transferFee The fee percentage for transfers
-    @param _swapFee The fee percentage for swaps
-    @param _addLiqFee The fee percentage for adding liquidity
-    @param _removeLiqFee The fee percentage for removing liquidity
-    @return bool True if pending price sheet was set successfully
-    """
-    assert self._isRegisteredAgent(_agent) # dev: agent not registered
-    isAgentOwner: bool = staticcall Agent(_agent).owner() == msg.sender
-    assert isAgentOwner or gov._isGovernor(msg.sender) # dev: no perms
-
-    if isAgentOwner:
-        assert self.isActivated # dev: not active
-
-    # validation
-    assert _agent != empty(address) # dev: invalid agent
-    if not self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee):
-        return False
-
-    # create pending price sheet
-    priceSheet: TxPriceSheet = TxPriceSheet(
-        asset=_asset,
-        depositFee=_depositFee,
-        withdrawalFee=_withdrawalFee,
-        rebalanceFee=_rebalanceFee,
-        transferFee=_transferFee,
-        swapFee=_swapFee,
-        addLiqFee=_addLiqFee,
-        removeLiqFee=_removeLiqFee,
-    )
-
-    # set price change immediately if delay is 0
-    priceChangeDelay: uint256 = self.priceChangeDelay
-    if priceChangeDelay == 0:
-        self._setPendingTxPriceSheet(_agent, priceSheet)
-        return True
-
-    # set pending price change
-    effectiveBlock: uint256 = block.number + priceChangeDelay
-    self.pendingAgentTxPrices[_agent] = PendingTxPriceSheet(priceSheet=priceSheet, effectiveBlock=effectiveBlock)
-    log PendingAgentTxPriceSheetSet(_agent, _asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, effectiveBlock)
-
-    return True
-
-
-# finalize pending tx price sheet
-
-
-@external
-def finalizePendingTxPriceSheet(_agent: address) -> bool:
-    """
-    @notice Finalize a pending transaction price sheet for an agent
-    @dev Can only be called after priceChangeDelay blocks have passed since the pending change was created
-    @param _agent The address of the agent
-    @return bool True if price sheet was finalized successfully
-    """
-    assert self.isActivated # dev: not active
-
-    pendingPrice: PendingTxPriceSheet = self.pendingAgentTxPrices[_agent]
-    assert pendingPrice.effectiveBlock != 0 and block.number >= pendingPrice.effectiveBlock # dev: time delay not reached
-    self.pendingAgentTxPrices[_agent] = empty(PendingTxPriceSheet)
-
-    # apply pending price sheet
-    self._setPendingTxPriceSheet(_agent, pendingPrice.priceSheet)
-    return True
-
-
-@internal
-def _setPendingTxPriceSheet(_agent: address, _priceSheet: TxPriceSheet):
-    self.agentTxPriceData[_agent] = _priceSheet
-    log AgentTxPriceSheetSet(_agent, _priceSheet.asset, _priceSheet.depositFee, _priceSheet.withdrawalFee, _priceSheet.rebalanceFee, _priceSheet.transferFee, _priceSheet.swapFee, _priceSheet.addLiqFee, _priceSheet.removeLiqFee)
-
-
-# removing tx price sheet
-
-
-@external
-def removeAgentTxPriceSheet(_agent: address) -> bool:
-    """
-    @notice Remove transaction price sheet for a specific agent
-    @dev Only callable by governor
-    @param _agent The address of the agent
-    @return bool True if agent price sheet was removed successfully
-    """
-    assert gov._isGovernor(msg.sender) # dev: no perms
-    assert self._isRegisteredAgent(_agent) # dev: agent not registered
-    
-    prevInfo: TxPriceSheet = self.agentTxPriceData[_agent]
-    if empty(address) in [prevInfo.asset, _agent]:
-        return False
-
-    self.agentTxPriceData[_agent] = empty(TxPriceSheet)
-    log AgentTxPriceSheetRemoved(_agent, prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee, prevInfo.addLiqFee, prevInfo.removeLiqFee)
-    return True
-
-
-# enable / disable agent tx pricing
-
-
-@external
-def setAgentTxPricingEnabled(_isEnabled: bool) -> bool:
-    """
-    @notice Enable or disable agent transaction pricing
-    @dev Only callable by governor
-    @param _isEnabled True to enable, False to disable
-    @return bool True if agent transaction pricing state was changed successfully
-    """
-    assert gov._isGovernor(msg.sender) # dev: no perms
-    assert _isEnabled != self.isAgentTxPricingEnabled # dev: no change
-    self.isAgentTxPricingEnabled = _isEnabled
-    log AgentTxPricingEnabled(_isEnabled)
-    return True
-
-
-####################
-# Protocol Tx Fees #
-####################
 
 
 # set protocol tx price sheet
 
 
+@view
 @external
-def setProtocolTxPriceSheet(
-    _asset: address,
+def isValidTxPriceSheet(
     _depositFee: uint256,
     _withdrawalFee: uint256,
     _rebalanceFee: uint256,
@@ -828,11 +543,13 @@ def setProtocolTxPriceSheet(
     _swapFee: uint256,
     _addLiqFee: uint256,
     _removeLiqFee: uint256,
+    _claimRewardsFee: uint256,
+    _borrowFee: uint256,
+    _repayFee: uint256,
 ) -> bool:
     """
-    @notice Set transaction price sheet for the protocol
-    @dev Only callable by governor
-    @param _asset The token address for fee payments
+    @notice Check if transaction price sheet parameters are valid
+    @dev Validates fee percentages against constraints
     @param _depositFee The fee percentage for deposits
     @param _withdrawalFee The fee percentage for withdrawals
     @param _rebalanceFee The fee percentage for rebalances
@@ -840,17 +557,67 @@ def setProtocolTxPriceSheet(
     @param _swapFee The fee percentage for swaps
     @param _addLiqFee The fee percentage for adding liquidity
     @param _removeLiqFee The fee percentage for removing liquidity
+    @param _claimRewardsFee The fee percentage for claiming rewards
+    @param _borrowFee The fee percentage for borrowing
+    @param _repayFee The fee percentage for repaying
+    @return bool True if all parameters are valid
+    """
+    return self._isValidTxPriceSheet(_depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, _claimRewardsFee, _borrowFee, _repayFee)
+
+
+@view
+@internal
+def _isValidTxPriceSheet(
+    _depositFee: uint256,
+    _withdrawalFee: uint256,
+    _rebalanceFee: uint256,
+    _transferFee: uint256,
+    _swapFee: uint256,
+    _addLiqFee: uint256,
+    _removeLiqFee: uint256,
+    _claimRewardsFee: uint256,
+    _borrowFee: uint256,
+    _repayFee: uint256,
+) -> bool:
+    return _depositFee <= MAX_TX_FEE and _withdrawalFee <= MAX_TX_FEE and _rebalanceFee <= MAX_TX_FEE and _transferFee <= MAX_TX_FEE and _swapFee <= MAX_TX_FEE and _addLiqFee <= MAX_TX_FEE and _removeLiqFee <= MAX_TX_FEE and _claimRewardsFee <= MAX_TX_FEE and _borrowFee <= MAX_TX_FEE and _repayFee <= MAX_TX_FEE
+
+
+@external
+def setProtocolTxPriceSheet(
+    _depositFee: uint256,
+    _withdrawalFee: uint256,
+    _rebalanceFee: uint256,
+    _transferFee: uint256,
+    _swapFee: uint256,
+    _addLiqFee: uint256,
+    _removeLiqFee: uint256,
+    _claimRewardsFee: uint256,
+    _borrowFee: uint256,
+    _repayFee: uint256,
+) -> bool:
+    """
+    @notice Set transaction price sheet for the protocol
+    @dev Only callable by governor
+    @param _depositFee The fee percentage for deposits
+    @param _withdrawalFee The fee percentage for withdrawals
+    @param _rebalanceFee The fee percentage for rebalances
+    @param _transferFee The fee percentage for transfers
+    @param _swapFee The fee percentage for swaps
+    @param _addLiqFee The fee percentage for adding liquidity
+    @param _removeLiqFee The fee percentage for removing liquidity
+    @param _claimRewardsFee The fee percentage for claiming rewards
+    @param _borrowFee The fee percentage for borrowing
+    @param _repayFee The fee percentage for repaying
     @return bool True if protocol price sheet was set successfully
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     # validation
-    if not self._isValidTxPriceSheet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee):
+    if not self._isValidTxPriceSheet(_depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, _claimRewardsFee, _borrowFee, _repayFee):
         return False
 
     # save data
     self.protocolTxPriceData = TxPriceSheet(
-        asset=_asset,
         depositFee=_depositFee,
         withdrawalFee=_withdrawalFee,
         rebalanceFee=_rebalanceFee,
@@ -858,9 +625,12 @@ def setProtocolTxPriceSheet(
         swapFee=_swapFee,
         addLiqFee=_addLiqFee,
         removeLiqFee=_removeLiqFee,
+        claimRewardsFee=_claimRewardsFee,
+        borrowFee=_borrowFee,
+        repayFee=_repayFee,
     )
 
-    log ProtocolTxPriceSheetSet(_asset, _depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee)
+    log ProtocolTxPriceSheetSet(_depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, _claimRewardsFee, _borrowFee, _repayFee)
     return True
 
 
@@ -877,11 +647,8 @@ def removeProtocolTxPriceSheet() -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     prevInfo: TxPriceSheet = self.protocolTxPriceData
-    if prevInfo.asset == empty(address):
-        return False
-
     self.protocolTxPriceData = empty(TxPriceSheet)
-    log ProtocolTxPriceSheetRemoved(prevInfo.asset, prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee, prevInfo.addLiqFee, prevInfo.removeLiqFee)
+    log ProtocolTxPriceSheetRemoved(prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee, prevInfo.addLiqFee, prevInfo.removeLiqFee, prevInfo.claimRewardsFee, prevInfo.borrowFee, prevInfo.repayFee)
     return True
 
 

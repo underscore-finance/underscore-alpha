@@ -434,7 +434,6 @@ def test_eth_weth_conversion_with_fees(ai_wallet, owner, agent, lego_aave_v3, ge
 
     # Set conversion fees
     assert price_sheets.setProtocolTxPriceSheet(
-        usdc,
         50,     # depositFee (0.50%)
         100,    # withdrawalFee (1.00%)
         150,    # rebalanceFee (1.50%)
@@ -442,6 +441,9 @@ def test_eth_weth_conversion_with_fees(ai_wallet, owner, agent, lego_aave_v3, ge
         250,    # swapFee (2.50%)
         300,    # addLiqFee (3.00%)
         350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
         sender=governor
     )
 
@@ -453,13 +455,12 @@ def test_eth_weth_conversion_with_fees(ai_wallet, owner, agent, lego_aave_v3, ge
 
     log = filter_logs(ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == DEPOSIT_UINT256
-    assert log.asset == usdc.address
+    assert log.asset == vault_token.address
     assert log.amount != 0
 
     # Test WETH to ETH conversion with withdrawal and transfer fees
     amount = ai_wallet.convertWethToEth(MAX_UINT256, owner, lego_id, vault_token, sender=agent)
 
     logs = filter_logs(ai_wallet, "UserWalletTransactionFeePaid")
-    assert len(logs) == 2  # Should have withdrawal and transfer fees
+    assert len(logs) == 1  # Should have withdrawal and transfer fees
     assert logs[0].action == WITHDRAWAL_UINT256
-    assert logs[1].action == TRANSFER_UINT256

@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256, ADD_LIQ_UINT256, REMOVE_LIQ_UINT256
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256, ADD_LIQ_UINT256, REMOVE_LIQ_UINT256, CLAIM_REWARDS_UINT256, BORROW_UINT256, REPAY_UINT256
 from conf_utils import filter_logs
 
 
@@ -107,6 +107,7 @@ def test_subscription_price_validation(price_sheets, alpha_token):
         3_900_001  # pay period too long
     )
 
+
 def test_agent_subscription_price(price_sheets, governor, bob_agent, alpha_token, bob):
     """Test agent subscription price management"""
     # Only governor can set prices
@@ -195,151 +196,55 @@ def test_protocol_subscription_price(price_sheets, governor, alpha_token):
     assert info.usdValue == 0
 
 
-def test_transaction_price_validation(price_sheets, alpha_token):
+def test_transaction_price_validation(price_sheets):
     """Test transaction price validation"""
     # Valid case
     assert price_sheets.isValidTxPriceSheet(
-        alpha_token,  # asset
-        1000,   # depositFee
-        1000,   # withdrawalFee
-        1000,   # rebalanceFee
-        1000,   # transferFee
-        1000,   # swapFee
-        1000,   # addLiqFee
-        1000    # removeLiqFee
+        100,    # depositFee
+        200,    # withdrawalFee
+        300,    # rebalanceFee
+        400,    # transferFee
+        500,    # swapFee
+        600,    # addLiqFee
+        700,    # removeLiqFee
+        800,    # claimRewardsFee
+        900,    # borrowFee
+        1000    # repayFee
     )
     
-    # Invalid cases
+    # Invalid cases - fees too high (>10.00%)
     assert not price_sheets.isValidTxPriceSheet(
-        ZERO_ADDRESS,  # invalid asset
-        1000,
-        1000,
-        1000,
-        1000,
-        1000,
-        1000,
+        1001,   # depositFee too high (>10.00%)
+        200,
+        300,
+        400,
+        500,
+        600,
+        700,
+        800,
+        900,
         1000
     )
     
     assert not price_sheets.isValidTxPriceSheet(
-        alpha_token,
-        1001,   # fee too high (>10.00%)
-        1000,
-        1000,
-        1000,
-        1000,
-        1000,
-        1000
+        100,
+        200,
+        300,
+        400,
+        500,
+        600,
+        700,
+        800,
+        900,
+        1001    # repayFee too high (>10.00%)
     )
 
 
-def test_agent_transaction_price(price_sheets, governor, bob_agent, oracle_custom, alpha_token, oracle_registry):
-    """Test agent transaction price management"""
-
-    price_sheets.setAgentTxPricingEnabled(True, sender=governor)
-
-    # set price on alpha_token
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
-
-    # Set valid price sheet
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,  # agent
-        alpha_token,    # asset
-        100,    # depositFee (1.00%)
-        200,    # withdrawalFee (2.00%)
-        300,    # rebalanceFee (3.00%)
-        400,    # transferFee (4.00%)
-        500,    # swapFee (5.00%)
-        600,    # addLiqFee (6.00%)
-        700,    # removeLiqFee (7.00%)
-        sender=governor
-    )
-    log = filter_logs(price_sheets, "AgentTxPriceSheetSet")[0]
-    assert log.agent == bob_agent
-    assert log.asset == alpha_token.address
-    assert log.depositFee == 100
-    assert log.withdrawalFee == 200
-    assert log.rebalanceFee == 300
-    assert log.transferFee == 400
-    assert log.swapFee == 500
-    assert log.addLiqFee == 600
-    assert log.removeLiqFee == 700
-    
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.asset == alpha_token.address
-    assert sheet.depositFee == 100
-    assert sheet.withdrawalFee == 200
-    assert sheet.rebalanceFee == 300
-    assert sheet.transferFee == 400
-    assert sheet.swapFee == 500
-    assert sheet.addLiqFee == 600
-    assert sheet.removeLiqFee == 700
-    
-    # Test fee calculations
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)  # DEPOSIT
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 10 * EIGHTEEN_DECIMALS # assetAmount (0.1 alpha tokens)
-    assert cost.usdValue == 10000000000000000000 # usdValue (10)
-    
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, WITHDRAWAL_UINT256, 1000 * EIGHTEEN_DECIMALS)  # WITHDRAWAL
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 20 * EIGHTEEN_DECIMALS # assetAmount (0.2 alpha tokens)
-    assert cost.usdValue == 20 * EIGHTEEN_DECIMALS # usdValue (20)
-    
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, REBALANCE_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REBALANCE
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 30 * EIGHTEEN_DECIMALS # assetAmount (0.3 alpha tokens)
-    assert cost.usdValue == 30 * EIGHTEEN_DECIMALS # usdValue (30)
-    
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, TRANSFER_UINT256, 1000 * EIGHTEEN_DECIMALS)  # TRANSFER
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 40 * EIGHTEEN_DECIMALS # assetAmount (0.4 alpha tokens)
-    assert cost.usdValue == 40 * EIGHTEEN_DECIMALS # usdValue (40)
-    
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, SWAP_UINT256, 1000 * EIGHTEEN_DECIMALS)  # SWAP
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 50 * EIGHTEEN_DECIMALS # assetAmount (0.5 alpha tokens)
-    assert cost.usdValue == 50 * EIGHTEEN_DECIMALS # usdValue (50)
-
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, ADD_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # ADD_LIQ
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 60 * EIGHTEEN_DECIMALS # assetAmount (0.6 alpha tokens)
-    assert cost.usdValue == 60 * EIGHTEEN_DECIMALS # usdValue (60)
-
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, REMOVE_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REMOVE_LIQ
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 70 * EIGHTEEN_DECIMALS # assetAmount (0.7 alpha tokens)
-    assert cost.usdValue == 70 * EIGHTEEN_DECIMALS # usdValue (70)
-    
-    # Remove price sheet
-    assert price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
-    log = filter_logs(price_sheets, "AgentTxPriceSheetRemoved")[0]
-    assert log.agent == bob_agent
-    assert log.asset == alpha_token.address
-    assert log.depositFee == 100
-    assert log.withdrawalFee == 200
-    assert log.rebalanceFee == 300
-    assert log.transferFee == 400
-    assert log.swapFee == 500
-    assert log.addLiqFee == 600
-    assert log.removeLiqFee == 700
-
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.asset == ZERO_ADDRESS
-    assert sheet.depositFee == 0
-
-
-def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha_token, oracle_registry):
+def test_protocol_transaction_price(price_sheets, governor, bob):
     """Test protocol transaction price management"""
-
-    # set price on alpha_token
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
     # Set valid price sheet
     assert price_sheets.setProtocolTxPriceSheet(
-        alpha_token,    # asset
         50,     # depositFee (0.50%)
         100,    # withdrawalFee (1.00%)
         150,    # rebalanceFee (1.50%)
@@ -347,10 +252,12 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
         250,    # swapFee (2.50%)
         300,    # addLiqFee (3.00%)
         350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
         sender=governor
     )
     log = filter_logs(price_sheets, "ProtocolTxPriceSheetSet")[0]
-    assert log.asset == alpha_token.address
     assert log.depositFee == 50
     assert log.withdrawalFee == 100
     assert log.rebalanceFee == 150
@@ -358,9 +265,11 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     assert log.swapFee == 250
     assert log.addLiqFee == 300
     assert log.removeLiqFee == 350
+    assert log.claimRewardsFee == 400
+    assert log.borrowFee == 450
+    assert log.repayFee == 500
     
     sheet = price_sheets.protocolTxPriceData()
-    assert sheet.asset == alpha_token.address
     assert sheet.depositFee == 50
     assert sheet.withdrawalFee == 100
     assert sheet.rebalanceFee == 150
@@ -368,42 +277,54 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     assert sheet.swapFee == 250
     assert sheet.addLiqFee == 300
     assert sheet.removeLiqFee == 350
+    assert sheet.claimRewardsFee == 400
+    assert sheet.borrowFee == 450
+    assert sheet.repayFee == 500
     
     # Test fee calculations
-    cost = price_sheets.getProtocolTransactionFeeData(DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)  # DEPOSIT
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 5 * EIGHTEEN_DECIMALS  # assetAmount (0.05 alpha tokens)
-    assert cost.usdValue == 5 * EIGHTEEN_DECIMALS  # usdValue (5)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, DEPOSIT_UINT256)
+    assert fee == 50  # 0.50%
+    assert recipient == price_sheets.protocolRecipient()
     
-    cost = price_sheets.getProtocolTransactionFeeData(WITHDRAWAL_UINT256, 1000 * EIGHTEEN_DECIMALS)  # WITHDRAWAL
-    assert cost.asset == alpha_token.address  # asset
-    assert cost.amount == 10 * EIGHTEEN_DECIMALS  # assetAmount (0.1 alpha tokens)
-    assert cost.usdValue == 10 * EIGHTEEN_DECIMALS  # usdValue (10)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, WITHDRAWAL_UINT256)
+    assert fee == 100  # 1.00%
+    assert recipient == price_sheets.protocolRecipient()
     
-    cost = price_sheets.getProtocolTransactionFeeData(REBALANCE_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REBALANCE
-    assert cost.amount == 15 * EIGHTEEN_DECIMALS  # assetAmount (0.15 alpha tokens)
-    assert cost.usdValue == 15 * EIGHTEEN_DECIMALS  # usdValue (15)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, REBALANCE_UINT256)
+    assert fee == 150  # 1.50%
+    assert recipient == price_sheets.protocolRecipient()
     
-    cost = price_sheets.getProtocolTransactionFeeData(TRANSFER_UINT256, 1000 * EIGHTEEN_DECIMALS)  # TRANSFER
-    assert cost.amount == 20 * EIGHTEEN_DECIMALS  # assetAmount (0.2 alpha tokens)
-    assert cost.usdValue == 20 * EIGHTEEN_DECIMALS  # usdValue (20)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, TRANSFER_UINT256)
+    assert fee == 200  # 2.00%
+    assert recipient == price_sheets.protocolRecipient()
     
-    cost = price_sheets.getProtocolTransactionFeeData(SWAP_UINT256, 1000 * EIGHTEEN_DECIMALS)  # SWAP
-    assert cost.amount == 25 * EIGHTEEN_DECIMALS  # assetAmount (0.25 alpha tokens)
-    assert cost.usdValue == 25 * EIGHTEEN_DECIMALS  # usdValue (25)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, SWAP_UINT256)
+    assert fee == 250  # 2.50%
+    assert recipient == price_sheets.protocolRecipient()
 
-    cost = price_sheets.getProtocolTransactionFeeData(ADD_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # ADD_LIQ
-    assert cost.amount == 30 * EIGHTEEN_DECIMALS  # assetAmount (0.3 alpha tokens)
-    assert cost.usdValue == 30 * EIGHTEEN_DECIMALS  # usdValue (30)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, ADD_LIQ_UINT256)
+    assert fee == 300  # 3.00%
+    assert recipient == price_sheets.protocolRecipient()
 
-    cost = price_sheets.getProtocolTransactionFeeData(REMOVE_LIQ_UINT256, 1000 * EIGHTEEN_DECIMALS)  # REMOVE_LIQ
-    assert cost.amount == 35 * EIGHTEEN_DECIMALS  # assetAmount (0.35 alpha tokens)
-    assert cost.usdValue == 35 * EIGHTEEN_DECIMALS  # usdValue (35)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, REMOVE_LIQ_UINT256)
+    assert fee == 350  # 3.50%
+    assert recipient == price_sheets.protocolRecipient()
+    
+    fee, recipient = price_sheets.getTransactionFeeData(bob, CLAIM_REWARDS_UINT256)
+    assert fee == 400  # 4.00%
+    assert recipient == price_sheets.protocolRecipient()
+    
+    fee, recipient = price_sheets.getTransactionFeeData(bob, BORROW_UINT256)
+    assert fee == 450  # 4.50%
+    assert recipient == price_sheets.protocolRecipient()
+    
+    fee, recipient = price_sheets.getTransactionFeeData(bob, REPAY_UINT256)
+    assert fee == 500  # 5.00%
+    assert recipient == price_sheets.protocolRecipient()
     
     # Remove price sheet
     assert price_sheets.removeProtocolTxPriceSheet(sender=governor)
     log = filter_logs(price_sheets, "ProtocolTxPriceSheetRemoved")[0]
-    assert log.asset == alpha_token.address
     assert log.depositFee == 50
     assert log.withdrawalFee == 100
     assert log.rebalanceFee == 150
@@ -411,87 +332,21 @@ def test_protocol_transaction_price(price_sheets, governor, oracle_custom, alpha
     assert log.swapFee == 250
     assert log.addLiqFee == 300
     assert log.removeLiqFee == 350
+    assert log.claimRewardsFee == 400
+    assert log.borrowFee == 450
+    assert log.repayFee == 500
 
     sheet = price_sheets.protocolTxPriceData()
-    assert sheet.asset == ZERO_ADDRESS
     assert sheet.depositFee == 0
-
-
-def test_combined_transaction_costs(price_sheets, governor, bob_agent, oracle_custom, alpha_token, oracle_registry):
-    """Test combined transaction costs (protocol + agent fees)"""
-
-    price_sheets.setAgentTxPricingEnabled(True, sender=governor)
-
-    # Setup prices
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
-
-    # Set protocol price sheet
-    assert price_sheets.setProtocolTxPriceSheet(
-        alpha_token,
-        50,     # depositFee (0.50%)
-        100,    # withdrawalFee (1.00%)
-        150,    # rebalanceFee (1.50%)
-        200,    # transferFee (2.00%)
-        250,    # swapFee (2.50%)
-        300,    # addLiqFee (3.00%)
-        350,    # removeLiqFee (3.50%)
-        sender=governor
-    )
-
-    # Set agent price sheet
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100,    # depositFee (1.00%)
-        200,    # withdrawalFee (2.00%)
-        300,    # rebalanceFee (3.00%)
-        400,    # transferFee (4.00%)
-        500,    # swapFee (5.00%)
-        600,    # addLiqFee (6.00%)
-        700,    # removeLiqFee (7.00%)
-        sender=governor
-    )
-
-    # Test combined fees
-    protocol_cost, agent_cost = price_sheets.getCombinedTxCostData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS, oracle_registry)
-
-    assert protocol_cost.recipient == price_sheets.protocolRecipient()
-    assert protocol_cost.asset == alpha_token.address
-    assert protocol_cost.amount == 5 * EIGHTEEN_DECIMALS  # 0.50% of 1000
-    assert protocol_cost.usdValue == 5 * EIGHTEEN_DECIMALS
-
-    assert agent_cost.recipient == bob_agent
-    assert agent_cost.asset == alpha_token.address
-    assert agent_cost.amount == 10 * EIGHTEEN_DECIMALS  # 1.00% of 1000
-    assert agent_cost.usdValue == 10 * EIGHTEEN_DECIMALS
-
-    # Test with zero protocol fee
-    price_sheets.removeProtocolTxPriceSheet(sender=governor)
-    protocol_cost, agent_cost = price_sheets.getCombinedTxCostData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS, oracle_registry)
-
-    assert protocol_cost.recipient == ZERO_ADDRESS
-    assert protocol_cost.asset == ZERO_ADDRESS
-    assert protocol_cost.amount == 0
-    assert protocol_cost.usdValue == 0
-
-    assert agent_cost.recipient == bob_agent
-    assert agent_cost.asset == alpha_token.address
-    assert agent_cost.amount == 10 * EIGHTEEN_DECIMALS
-    assert agent_cost.usdValue == 10 * EIGHTEEN_DECIMALS
-
-    # Test with zero agent fee
-    price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
-    protocol_cost, agent_cost = price_sheets.getCombinedTxCostData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS, oracle_registry)
-    assert protocol_cost.recipient == ZERO_ADDRESS
-    assert protocol_cost.asset == ZERO_ADDRESS
-    assert protocol_cost.amount == 0
-    assert protocol_cost.usdValue == 0
-    
-    assert agent_cost.recipient == bob_agent
-    assert agent_cost.asset == ZERO_ADDRESS
-    assert agent_cost.amount == 0
-    assert agent_cost.usdValue == 0
+    assert sheet.withdrawalFee == 0
+    assert sheet.rebalanceFee == 0
+    assert sheet.transferFee == 0
+    assert sheet.swapFee == 0
+    assert sheet.addLiqFee == 0
+    assert sheet.removeLiqFee == 0
+    assert sheet.claimRewardsFee == 0
+    assert sheet.borrowFee == 0
+    assert sheet.repayFee == 0
 
 
 def test_deactivated_state(price_sheets, governor, bob_agent, bob_agent_dev, alpha_token, sally):
@@ -510,52 +365,39 @@ def test_deactivated_state(price_sheets, governor, bob_agent, bob_agent_dev, alp
             302_400,
             sender=bob_agent_dev
         )
-    
-    with boa.reverts("not active"):
-        price_sheets.setAgentTxPriceSheet(
-            bob_agent,
-            alpha_token,
-            100,
-            200,
-            300,
-            400,
-            500,
-            600,
-            700,
-            sender=bob_agent_dev
-        )
 
-def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custom, oracle_registry, sally):
+
+def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, sally):
     """Test edge cases and boundary conditions"""
     
-    # Setup price
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
-
-    # Test maximum fees
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        1000,   # 10.00% (maximum allowed)
-        1000,
-        1000,
-        1000,
-        1000,
-        1000,   # addLiqFee (10.00%)
-        1000,   # removeLiqFee (10.00%)
-        sender=governor
-    )
-
-    # Test with zero USD value
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 0)
-    assert cost.asset == ZERO_ADDRESS
-    assert cost.amount == 0
-    assert cost.usdValue == 0
-
     # Test removing non-existent price sheets
     with boa.reverts("agent not registered"):
-        price_sheets.removeAgentTxPriceSheet(sally, sender=governor)  # non-existent agent
-    assert not price_sheets.removeProtocolTxPriceSheet(sender=governor)  # already removed
+        price_sheets.removeAgentSubPrice(sally, sender=governor)  # non-existent agent
+    
+    # Set and then remove protocol tx price sheet
+    price_sheets.setProtocolTxPriceSheet(
+        50, 100, 150, 200, 250, 300, 350, 400, 450, 500,
+        sender=governor
+    )
+    
+    # First removal should work
+    price_sheets.removeProtocolTxPriceSheet(sender=governor)
+    
+    # Check that the price sheet is empty
+    sheet = price_sheets.protocolTxPriceData()
+    assert sheet.depositFee == 0
+    assert sheet.withdrawalFee == 0
+    assert sheet.rebalanceFee == 0
+    assert sheet.transferFee == 0
+    assert sheet.swapFee == 0
+    assert sheet.addLiqFee == 0
+    assert sheet.removeLiqFee == 0
+    assert sheet.claimRewardsFee == 0
+    assert sheet.borrowFee == 0
+    assert sheet.repayFee == 0
+    
+    # Second removal should also work (the function always returns True)
+    price_sheets.removeProtocolTxPriceSheet(sender=governor)
 
     # Test setting invalid trial/pay periods
     assert not price_sheets.setAgentSubPrice(
@@ -575,41 +417,6 @@ def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custo
         302_399,    # too short pay period
         sender=governor
     )
-
-
-def test_transaction_fee_edge_cases(price_sheets, governor, bob_agent, alpha_token, oracle_custom, oracle_registry):
-    """Test edge cases in transaction fee calculations"""
-    
-    price_sheets.setAgentTxPricingEnabled(True, sender=governor)
-
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
-
-    # Set price sheet with minimum possible fees
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        1,      # 0.01% (minimum non-zero fee)
-        1,
-        1,
-        1,
-        1,
-        1,      # addLiqFee (0.01%)
-        1,      # removeLiqFee (0.01%)
-        sender=governor
-    )
-      
-    # Test with oracle returning zero price
-    oracle_custom.setPrice(alpha_token.address, 0, sender=governor)
-    cost = price_sheets.getAgentTransactionFeeData(
-        bob_agent,
-        DEPOSIT_UINT256,
-        1000 * EIGHTEEN_DECIMALS
-    )
-    # Verify handles zero price gracefully
-    assert cost.asset == alpha_token.address
-    assert cost.amount == 0  # Asset amount should be zero
-    assert cost.usdValue == 0.1 * EIGHTEEN_DECIMALS  # USD value should still be calculated
 
 
 def test_subscription_period_boundaries(price_sheets, governor, bob_agent, alpha_token):
@@ -688,122 +495,6 @@ def test_subscription_period_boundaries(price_sheets, governor, bob_agent, alpha
     )
 
 
-def test_price_sheet_state_transitions(price_sheets, governor, bob_agent, alpha_token):
-    """Test state transitions when updating price sheets"""
-    
-    # Set initial price sheet
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100,
-        200,
-        300,
-        400,
-        500,
-        600,    # addLiqFee
-        700,    # removeLiqFee
-        sender=governor
-    )
-    
-    # Verify initial state
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.depositFee == 100
-    assert sheet.withdrawalFee == 200
-    assert sheet.rebalanceFee == 300
-    assert sheet.transferFee == 400
-    assert sheet.swapFee == 500
-    assert sheet.addLiqFee == 600
-    assert sheet.removeLiqFee == 700
-    
-    # Update to new values
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        150,
-        250,
-        350,
-        450,
-        550,
-        650,    # addLiqFee
-        750,    # removeLiqFee
-        sender=governor
-    )
-    
-    # Verify complete update
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.depositFee == 150
-    assert sheet.withdrawalFee == 250
-    assert sheet.rebalanceFee == 350
-    assert sheet.transferFee == 450
-    assert sheet.swapFee == 550
-    assert sheet.addLiqFee == 650
-    assert sheet.removeLiqFee == 750
-    
-    # Remove price sheet
-    assert price_sheets.removeAgentTxPriceSheet(bob_agent, sender=governor)
-    
-    # Verify complete removal
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.asset == ZERO_ADDRESS
-    assert sheet.depositFee == 0
-    assert sheet.withdrawalFee == 0
-    assert sheet.rebalanceFee == 0
-    assert sheet.transferFee == 0
-    assert sheet.swapFee == 0
-    assert sheet.addLiqFee == 0
-    assert sheet.removeLiqFee == 0
-
-
-def test_agent_tx_pricing_enable_disable(price_sheets, governor, bob_agent, oracle_custom, alpha_token, sally):
-    """Test enabling and disabling agent transaction pricing"""
-
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-
-    # Only governor can enable/disable
-    with boa.reverts("no perms"):
-        price_sheets.setAgentTxPricingEnabled(True, sender=sally)
-    
-    # No change if already in desired state
-    with boa.reverts("no change"):
-        price_sheets.setAgentTxPricingEnabled(False, sender=governor)
-    
-    # Enable agent tx pricing
-    assert price_sheets.setAgentTxPricingEnabled(True, sender=governor)
-    log = filter_logs(price_sheets, "AgentTxPricingEnabled")[0]
-    assert log.isEnabled == True
-    assert price_sheets.isAgentTxPricingEnabled()
-    
-    # Set agent price sheet
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100,    # depositFee
-        200,    # withdrawalFee
-        300,    # rebalanceFee
-        400,    # transferFee
-        500,    # swapFee
-        600,    # addLiqFee
-        700,    # removeLiqFee
-        sender=governor
-    )
-    
-    # Verify fees are returned when enabled
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000)
-    assert cost.asset == alpha_token.address
-    assert cost.amount > 0  # Should have non-zero fee
-    
-    # Disable agent tx pricing
-    assert price_sheets.setAgentTxPricingEnabled(False, sender=governor)
-    log = filter_logs(price_sheets, "AgentTxPricingEnabled")[0]
-    assert log.isEnabled == False
-    assert not price_sheets.isAgentTxPricingEnabled()
-    
-    # Verify no fees are returned when disabled
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000)
-    assert cost.asset == ZERO_ADDRESS
-    assert cost.amount == 0  # Should have zero fee
-
-
 def test_agent_sub_pricing_enable_disable(price_sheets, governor, bob_agent, alpha_token, sally):
     """Test enabling and disabling agent subscription pricing"""
     
@@ -848,74 +539,6 @@ def test_agent_sub_pricing_enable_disable(price_sheets, governor, bob_agent, alp
     assert info.usdValue == 0
 
 
-def test_agent_pricing_combined_states(price_sheets, governor, bob_agent, alpha_token, oracle_custom, oracle_registry):
-    """Test interaction between transaction and subscription pricing states"""
-    
-    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
-    assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
-    
-    # Enable both pricing types
-    price_sheets.setAgentTxPricingEnabled(True, sender=governor)
-    price_sheets.setAgentSubPricingEnabled(True, sender=governor)
-    
-    # Set both price types
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100,    # depositFee
-        200,    # withdrawalFee
-        300,    # rebalanceFee
-        400,    # transferFee
-        500,    # swapFee
-        600,    # addLiqFee
-        700,    # removeLiqFee
-        sender=governor
-    )
-    
-    assert price_sheets.setAgentSubPrice(
-        bob_agent,
-        alpha_token,
-        1000,   # usdValue
-        43_200, # trialPeriod
-        302_400,# payPeriod
-        sender=governor
-    )
-    
-    # Verify both types of pricing are active
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost.asset == alpha_token.address
-    assert cost.amount > 0
-    
-    info = price_sheets.getAgentSubPriceData(bob_agent)
-    assert info.asset == alpha_token.address
-    assert info.usdValue == 1000
-    
-    # Disable transaction pricing only
-    price_sheets.setAgentTxPricingEnabled(False, sender=governor)
-    
-    # Verify only subscription pricing remains active
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost.asset == ZERO_ADDRESS
-    assert cost.amount == 0
-    
-    info = price_sheets.getAgentSubPriceData(bob_agent)
-    assert info.asset == alpha_token.address
-    assert info.usdValue == 1000
-    
-    # Disable subscription pricing only
-    price_sheets.setAgentTxPricingEnabled(True, sender=governor)
-    price_sheets.setAgentSubPricingEnabled(False, sender=governor)
-    
-    # Verify only transaction pricing remains active
-    cost = price_sheets.getAgentTransactionFeeData(bob_agent, DEPOSIT_UINT256, 1000 * EIGHTEEN_DECIMALS)
-    assert cost.asset == alpha_token.address
-    assert cost.amount > 0
-    
-    info = price_sheets.getAgentSubPriceData(bob_agent)
-    assert info.asset == ZERO_ADDRESS
-    assert info.usdValue == 0
-
-
 def test_price_change_delay(price_sheets, governor, sally):
     """Test setting and managing price change delay"""
     
@@ -936,62 +559,6 @@ def test_price_change_delay(price_sheets, governor, sally):
     # Can set to zero to disable delay
     assert price_sheets.setPriceChangeDelay(0, sender=governor)
     assert price_sheets.priceChangeDelay() == 0
-
-
-def test_pending_agent_tx_price_sheet(price_sheets, governor, bob_agent, alpha_token):
-    """Test setting and finalizing pending agent transaction price sheets"""
-    
-    delay = 43_200
-
-    # Set initial delay
-    price_sheets.setPriceChangeDelay(delay, sender=governor)
-    assert price_sheets.priceChangeDelay() == delay
-    
-    # Set pending price sheet
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100,    # depositFee
-        200,    # withdrawalFee
-        300,    # rebalanceFee
-        400,    # transferFee
-        500,    # swapFee
-        600,    # addLiqFee
-        700,    # removeLiqFee
-        sender=governor
-    )
-    
-    # Verify pending price sheet is set
-    pending = price_sheets.pendingAgentTxPrices(bob_agent)
-    assert pending.priceSheet.asset == alpha_token.address
-    assert pending.priceSheet.depositFee == 100
-    assert pending.priceSheet.withdrawalFee == 200
-    assert pending.priceSheet.rebalanceFee == 300
-    assert pending.priceSheet.transferFee == 400
-    assert pending.priceSheet.swapFee == 500
-    assert pending.effectiveBlock == boa.env.evm.patch.block_number + delay
-    
-    # Cannot finalize before delay
-    with boa.reverts("time delay not reached"):
-        price_sheets.finalizePendingTxPriceSheet(bob_agent)
-    
-    # Advance blocks
-    boa.env.time_travel(blocks=delay)
-    
-    # Now can finalize
-    assert price_sheets.finalizePendingTxPriceSheet(bob_agent)
-    
-    # Verify price sheet is set and pending is cleared
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.asset == alpha_token.address
-    assert sheet.depositFee == 100
-    assert sheet.withdrawalFee == 200
-    assert sheet.rebalanceFee == 300
-    assert sheet.transferFee == 400
-    assert sheet.swapFee == 500
-    
-    pending = price_sheets.pendingAgentTxPrices(bob_agent)
-    assert pending.effectiveBlock == 0
 
 
 def test_pending_agent_sub_price(price_sheets, governor, bob_agent, alpha_token):
@@ -1052,17 +619,9 @@ def test_pending_price_change_edge_cases(price_sheets, governor, bob_agent, alph
     
     # Cannot finalize non-existent pending changes
     with boa.reverts("time delay not reached"):
-        price_sheets.finalizePendingTxPriceSheet(bob_agent)
-    with boa.reverts("time delay not reached"):
         price_sheets.finalizePendingAgentSubPrice(bob_agent)
     
     # Set pending changes
-    price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100, 200, 300, 400, 500, 600, 700,  # fees including addLiqFee and removeLiqFee
-        sender=governor
-    )
     price_sheets.setAgentSubPrice(
         bob_agent,
         alpha_token,
@@ -1074,16 +633,9 @@ def test_pending_price_change_edge_cases(price_sheets, governor, bob_agent, alph
     boa.env.time_travel(blocks=delay)
     
     # anyone can finalize
-    assert price_sheets.finalizePendingTxPriceSheet(bob_agent, sender=sally)
     assert price_sheets.finalizePendingAgentSubPrice(bob_agent, sender=sally)
     
     # Setting new pending changes overwrites old ones
-    price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        150, 250, 350, 450, 550, 650, 750,  # fees including addLiqFee and removeLiqFee
-        sender=governor
-    )
     price_sheets.setAgentSubPrice(
         bob_agent,
         alpha_token,
@@ -1091,8 +643,6 @@ def test_pending_price_change_edge_cases(price_sheets, governor, bob_agent, alph
         sender=governor
     )
     
-    pending_tx = price_sheets.pendingAgentTxPrices(bob_agent)
-    assert pending_tx.priceSheet.depositFee == 150
     pending_sub = price_sheets.pendingAgentSubPrices(bob_agent)
     assert pending_sub.subInfo.usdValue == 2000
 
@@ -1104,23 +654,7 @@ def test_zero_delay_price_changes(price_sheets, governor, bob_agent, alpha_token
     price_sheets.setPriceChangeDelay(0, sender=governor)
     assert price_sheets.priceChangeDelay() == 0
     
-    # Price changes should take effect immediately
-    price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100, 200, 300, 400, 500, 600, 700,
-        sender=governor
-    )
-    
-    # Verify changes are immediate
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.depositFee == 100
-    
-    # No pending changes should be set
-    pending = price_sheets.pendingAgentTxPrices(bob_agent)
-    assert pending.effectiveBlock == 0
-    
-    # Same for subscription prices
+    # Subscription price changes should take effect immediately
     price_sheets.setAgentSubPrice(
         bob_agent,
         alpha_token,
@@ -1135,12 +669,10 @@ def test_zero_delay_price_changes(price_sheets, governor, bob_agent, alpha_token
     assert pending.effectiveBlock == 0
 
 
-
 def test_agent_owner_permissions(price_sheets, governor, bob_agent, bob_agent_dev, sally, alpha_token):
     """Test agent owner permissions for setting prices"""
     
     # Enable pricing features
-    price_sheets.setAgentTxPricingEnabled(True, sender=governor)
     price_sheets.setAgentSubPricingEnabled(True, sender=governor)
     
     # Test 1: Agent owner can set subscription price when activated
@@ -1158,25 +690,6 @@ def test_agent_owner_permissions(price_sheets, governor, bob_agent, bob_agent_de
     assert info.asset == alpha_token.address
     assert info.usdValue == 1000
     
-    # Test 2: Agent owner can set transaction price sheet when activated
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100,    # depositFee
-        200,    # withdrawalFee
-        300,    # rebalanceFee
-        400,    # transferFee
-        500,    # swapFee
-        600,    # addLiqFee
-        700,    # removeLiqFee
-        sender=bob_agent_dev
-    )
-    
-    # Verify price sheet was set
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.asset == alpha_token.address
-    assert sheet.depositFee == 100
-    
     # Test 3: Non-owner cannot set prices
     with boa.reverts("no perms"):
         price_sheets.setAgentSubPrice(
@@ -1188,14 +701,6 @@ def test_agent_owner_permissions(price_sheets, governor, bob_agent, bob_agent_de
             sender=sally
         )
     
-    with boa.reverts("no perms"):
-        price_sheets.setAgentTxPriceSheet(
-            bob_agent,
-            alpha_token,
-            100, 200, 300, 400, 500, 600, 700,
-            sender=sally
-        )
-    
     # Test 4: Governor can still set prices
     assert price_sheets.setAgentSubPrice(
         bob_agent,
@@ -1203,13 +708,6 @@ def test_agent_owner_permissions(price_sheets, governor, bob_agent, bob_agent_de
         2000,
         43_200,
         302_400,
-        sender=governor
-    )
-    
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        150, 250, 350, 450, 550, 650, 750,
         sender=governor
     )
     
@@ -1226,14 +724,6 @@ def test_agent_owner_permissions(price_sheets, governor, bob_agent, bob_agent_de
             sender=bob_agent_dev
         )
     
-    with boa.reverts("not active"):
-        price_sheets.setAgentTxPriceSheet(
-            bob_agent,
-            alpha_token,
-            100, 200, 300, 400, 500, 600, 700,
-            sender=bob_agent_dev
-        )
-    
     # Governor can still set prices when deactivated
     assert price_sheets.setAgentSubPrice(
         bob_agent,
@@ -1243,13 +733,7 @@ def test_agent_owner_permissions(price_sheets, governor, bob_agent, bob_agent_de
         302_400,
         sender=governor
     )
-    
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100, 200, 300, 400, 500, 600, 700,
-        sender=governor
-    )
+
 
 def test_agent_owner_pending_price_changes(price_sheets, governor, bob_agent, bob_agent_dev, sally, alpha_token):
     """Test agent owner permissions with pending price changes"""
@@ -1273,30 +757,15 @@ def test_agent_owner_pending_price_changes(price_sheets, governor, bob_agent, bo
     assert pending_sub.subInfo.usdValue == 1000
     assert pending_sub.effectiveBlock == boa.env.evm.patch.block_number + delay
     
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100, 200, 300, 400, 500, 600, 700,
-        sender=bob_agent_dev
-    )
-    
-    # Verify pending tx price is set
-    pending_tx = price_sheets.pendingAgentTxPrices(bob_agent)
-    assert pending_tx.priceSheet.depositFee == 100
-    assert pending_tx.effectiveBlock == boa.env.evm.patch.block_number + delay
-    
     # Anyone can finalize pending changes after delay
     boa.env.time_travel(blocks=delay)
     
     assert price_sheets.finalizePendingAgentSubPrice(bob_agent, sender=sally)
-    assert price_sheets.finalizePendingTxPriceSheet(bob_agent, sender=sally)
     
     # Verify changes are applied
     info = price_sheets.agentSubPriceData(bob_agent)
     assert info.usdValue == 1000
-    
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.depositFee == 100
+
 
 def test_agent_owner_zero_delay_changes(price_sheets, governor, bob_agent, bob_agent_dev, alpha_token):
     """Test agent owner permissions with zero delay price changes"""
@@ -1321,18 +790,278 @@ def test_agent_owner_zero_delay_changes(price_sheets, governor, bob_agent, bob_a
     # No pending changes
     pending = price_sheets.pendingAgentSubPrices(bob_agent)
     assert pending.effectiveBlock == 0
+
+
+def test_combined_sub_data(price_sheets, governor, bob_agent, alpha_token, oracle_registry):
+    """Test the getCombinedSubData function and subscription payment logic"""
     
-    assert price_sheets.setAgentTxPriceSheet(
-        bob_agent,
-        alpha_token,
-        100, 200, 300, 400, 500, 600, 700,
-        sender=bob_agent_dev
+    # Set protocol recipient
+    price_sheets.setProtocolRecipient(governor, sender=governor)
+    
+    # Set up protocol subscription
+    price_sheets.setProtocolSubPrice(
+        alpha_token,  # asset
+        10_00,   # usdValue ($10)
+        43_200,  # trialPeriod (1 day)
+        302_400, # payPeriod (7 days)
+        sender=governor
     )
     
-    # Verify immediate effect
-    sheet = price_sheets.agentTxPriceData(bob_agent)
-    assert sheet.depositFee == 100
+    # Set up agent subscription
+    price_sheets.setAgentSubPricingEnabled(True, sender=governor)
+    price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        5_00,    # usdValue ($5)
+        43_200,  # trialPeriod (1 day)
+        302_400, # payPeriod (7 days)
+        sender=governor
+    )
     
-    # No pending changes
-    pending = price_sheets.pendingAgentTxPrices(bob_agent)
-    assert pending.effectiveBlock == 0 
+    # Test initial state (both in trial period)
+    protocol_data, agent_data = price_sheets.getCombinedSubData(
+        governor,  # user
+        bob_agent, # agent
+        0,         # agentPaidThru (0 means not paid yet, should start trial)
+        0,         # protocolPaidThru (0 means not paid yet, should start trial)
+        oracle_registry
+    )
+    
+    # Verify trial period setup
+    assert protocol_data.paidThroughBlock == boa.env.evm.patch.block_number + 43_200
+    assert agent_data.paidThroughBlock == boa.env.evm.patch.block_number + 43_200
+    assert protocol_data.didChange == True
+    assert agent_data.didChange == True
+    assert protocol_data.amount == 0  # No payment during trial
+    assert agent_data.amount == 0     # No payment during trial
+    # Note: protocol_data.recipient is only set when amount != 0
+    assert agent_data.recipient == bob_agent
+    
+    # Test subscription removal
+    price_sheets.removeProtocolSubPrice(sender=governor)
+    price_sheets.removeAgentSubPrice(bob_agent, sender=governor)
+    
+    protocol_data, agent_data = price_sheets.getCombinedSubData(
+        governor,
+        bob_agent,
+        boa.env.evm.patch.block_number + 302_400,  # Previously paid through
+        boa.env.evm.patch.block_number + 302_400,  # Previously paid through
+        oracle_registry
+    )
+    
+    # Verify subscriptions were removed
+    assert protocol_data.paidThroughBlock == 0
+    assert agent_data.paidThroughBlock == 0
+    assert protocol_data.didChange == True
+    assert agent_data.didChange == True
+    assert protocol_data.amount == 0
+    assert agent_data.amount == 0
+
+
+def test_unknown_action_type(price_sheets, governor, bob):
+    """Test transaction fee calculation with unknown action type"""
+    
+    # Set up protocol transaction price sheet
+    price_sheets.setProtocolTxPriceSheet(
+        50,     # depositFee (0.50%)
+        100,    # withdrawalFee (1.00%)
+        150,    # rebalanceFee (1.50%)
+        200,    # transferFee (2.00%)
+        250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
+        sender=governor
+    )
+    
+    # Test with a valid action type
+    fee, recipient = price_sheets.getTransactionFeeData(bob, DEPOSIT_UINT256)
+    assert fee == 50  # 0.50%
+    assert recipient == price_sheets.protocolRecipient()
+    
+    # Test with an unknown action type (using a value outside the defined enum range)
+    unknown_action_type = 99  # Some value not defined in ActionType enum
+    fee, recipient = price_sheets.getTransactionFeeData(bob, unknown_action_type)
+    assert fee == 0  # Should return 0 for unknown action types
+    assert recipient == price_sheets.protocolRecipient()
+
+
+def test_subscription_payment_calculation_with_different_assets(price_sheets, governor, bob_agent, alpha_token, bravo_token, oracle_registry, oracle_custom):
+    """Test subscription payment calculation with different assets"""
+    # Set up oracle prices
+    oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)  # 1 USD
+    oracle_custom.setPrice(bravo_token.address, 2 * EIGHTEEN_DECIMALS, sender=governor)  # 2 USD
+    
+    # Set protocol subscription in alpha_token
+    price_sheets.setProtocolSubPrice(
+        alpha_token,
+        10 * EIGHTEEN_DECIMALS,  # 10 USD
+        43_200,                  # trial period
+        302_400,                 # pay period
+        sender=governor
+    )
+    
+    # Set agent subscription in bravo_token
+    price_sheets.setAgentSubPricingEnabled(True, sender=governor)
+    price_sheets.setAgentSubPrice(
+        bob_agent,
+        bravo_token,
+        5 * EIGHTEEN_DECIMALS,   # 5 USD
+        43_200,                  # trial period
+        302_400,                 # pay period
+        sender=governor
+    )
+    
+    # Fast forward past trial period
+    boa.env.time_travel(blocks=43_200 + 1)
+    
+    # Get subscription data
+    protocol_data, agent_data = price_sheets.getCombinedSubData(
+        governor,
+        bob_agent,
+        boa.env.evm.patch.block_number - 43_200,  # Trial period started
+        boa.env.evm.patch.block_number - 43_200,  # Trial period started
+        oracle_registry
+    )
+    
+    # Verify protocol subscription payment amount (10 USD in alpha_token)
+    assert protocol_data.asset == alpha_token.address
+    assert protocol_data.amount == 10 * EIGHTEEN_DECIMALS  # 10 alpha_tokens (1 USD each)
+    assert protocol_data.usdValue == 10 * EIGHTEEN_DECIMALS
+    
+    # Verify agent subscription payment amount (5 USD in bravo_token)
+    assert agent_data.asset == bravo_token.address
+    assert agent_data.amount == 2.5 * EIGHTEEN_DECIMALS  # 2.5 bravo_tokens (2 USD each)
+    assert agent_data.usdValue == 5 * EIGHTEEN_DECIMALS
+
+
+def test_subscription_payment_calculation_with_zero_oracle_price(price_sheets, governor, bob_agent, alpha_token, oracle_registry, oracle_custom):
+    """Test subscription payment calculation when oracle returns zero price"""
+    # Set up protocol subscription
+    price_sheets.setProtocolSubPrice(
+        alpha_token,
+        10 * EIGHTEEN_DECIMALS,  # 10 USD
+        43_200,                  # trial period
+        302_400,                 # pay period
+        sender=governor
+    )
+    
+    # Set up agent subscription
+    price_sheets.setAgentSubPricingEnabled(True, sender=governor)
+    price_sheets.setAgentSubPrice(
+        bob_agent,
+        alpha_token,
+        5 * EIGHTEEN_DECIMALS,   # 5 USD
+        43_200,                  # trial period
+        302_400,                 # pay period
+        sender=governor
+    )
+    
+    # Fast forward past trial period
+    boa.env.time_travel(blocks=43_200 + 1)
+    
+    # Set oracle price to zero
+    oracle_custom.setPrice(alpha_token.address, 0, sender=governor)
+    
+    # Get subscription data
+    protocol_data, agent_data = price_sheets.getCombinedSubData(
+        governor,
+        bob_agent,
+        boa.env.evm.patch.block_number - 43_200,  # Trial period started
+        boa.env.evm.patch.block_number - 43_200,  # Trial period started
+        oracle_registry
+    )
+    
+    # Verify no payment is required when price is zero
+    assert protocol_data.amount == 0
+    assert agent_data.amount == 0
+    assert protocol_data.paidThroughBlock == boa.env.evm.patch.block_number - 43_200  # Unchanged
+    assert agent_data.paidThroughBlock == boa.env.evm.patch.block_number - 43_200  # Unchanged
+
+
+def test_transaction_fee_calculation_with_different_user_addresses(price_sheets, governor, bob, sally):
+    """Test transaction fee calculation with different user addresses"""
+    # Set protocol transaction fees
+    price_sheets.setProtocolTxPriceSheet(
+        50,     # depositFee (0.50%)
+        100,    # withdrawalFee (1.00%)
+        150,    # rebalanceFee (1.50%)
+        200,    # transferFee (2.00%)
+        250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
+        sender=governor
+    )
+    
+    # Test fee calculation for different users
+    fee_bob, recipient_bob = price_sheets.getTransactionFeeData(bob, DEPOSIT_UINT256)
+    fee_sally, recipient_sally = price_sheets.getTransactionFeeData(sally, DEPOSIT_UINT256)
+    
+    # Verify fees are the same regardless of user
+    assert fee_bob == 50  # 0.50%
+    assert fee_sally == 50  # 0.50%
+    assert recipient_bob == price_sheets.protocolRecipient()
+    assert recipient_sally == price_sheets.protocolRecipient()
+    
+    # Test with different transaction types
+    fee_bob_withdrawal, _ = price_sheets.getTransactionFeeData(bob, WITHDRAWAL_UINT256)
+    fee_sally_withdrawal, _ = price_sheets.getTransactionFeeData(sally, WITHDRAWAL_UINT256)
+    
+    assert fee_bob_withdrawal == 100  # 1.00%
+    assert fee_sally_withdrawal == 100  # 1.00%
+
+
+def test_combined_subscription_data_with_multiple_agents(price_sheets, governor, bob_agent, sally, oracle_registry):
+    """Test getCombinedSubData with multiple agents"""
+    # Set up protocol subscription
+    price_sheets.setProtocolSubPrice(
+        sally,  # Using sally as a token address for this test
+        10 * EIGHTEEN_DECIMALS,  # 10 USD
+        43_200,                  # trial period
+        302_400,                 # pay period
+        sender=governor
+    )
+    
+    # Set up agent subscription
+    price_sheets.setAgentSubPricingEnabled(True, sender=governor)
+    price_sheets.setAgentSubPrice(
+        bob_agent,
+        sally,  # Using sally as a token address for this test
+        5 * EIGHTEEN_DECIMALS,   # 5 USD
+        43_200,                  # trial period
+        302_400,                 # pay period
+        sender=governor
+    )
+    
+    # Get subscription data for bob_agent
+    protocol_data_bob, agent_data_bob = price_sheets.getCombinedSubData(
+        governor,
+        bob_agent,
+        0,  # Not paid yet
+        0,  # Not paid yet
+        oracle_registry
+    )
+    
+    # Verify trial periods are set up correctly
+    assert protocol_data_bob.paidThroughBlock == boa.env.evm.patch.block_number + 43_200
+    assert agent_data_bob.paidThroughBlock == boa.env.evm.patch.block_number + 43_200
+    
+    # Get subscription data for a different agent (that doesn't have pricing set up)
+    protocol_data_other, agent_data_other = price_sheets.getCombinedSubData(
+        governor,
+        sally,  # Using sally as an agent address for this test
+        0,  # Not paid yet
+        0,  # Not paid yet
+        oracle_registry
+    )
+    
+    # Verify protocol trial period is set up, but no agent subscription
+    assert protocol_data_other.paidThroughBlock == boa.env.evm.patch.block_number + 43_200
+    assert agent_data_other.paidThroughBlock == 0  # No agent subscription for sally
+    assert agent_data_other.amount == 0
+    assert agent_data_other.asset == ZERO_ADDRESS 
