@@ -1023,6 +1023,9 @@ def getSwapAmountOut(
 @view
 @external
 def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    if _amountOut == 0 or _amountOut == max_value(uint256):
+        return empty(address), max_value(uint256)
+
     expAmountIn: uint256 = self._getSwapAmountIn(empty(address), _tokenIn, _tokenOut, _amountOut)
     if expAmountIn == 0:
         return empty(address), 0
@@ -1043,6 +1046,8 @@ def getSwapAmountIn(
     _tokenOut: address,
     _amountOut: uint256,
 ) -> uint256:
+    if _amountOut == 0 or _amountOut == max_value(uint256):
+        return max_value(uint256)
     return self._getSwapAmountIn(_pool, _tokenIn, _tokenOut, _amountOut)
 
 

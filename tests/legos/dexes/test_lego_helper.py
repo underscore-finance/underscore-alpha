@@ -18,7 +18,7 @@ def test_get_best_swap_amount_out(lego_helper, fork):
     virtual = boa.from_etherscan(CORE_TOKENS[fork]["VIRTUAL"])
     virtual_amount = 100 * (10 ** virtual.decimals())
 
-    routes = lego_helper.getBestSwapAmountOut(usdc, virtual, usdc_amount)
+    routes = lego_helper.getBestSwapRoutesAmountOut(usdc, virtual, usdc_amount)
     assert len(routes) != 0
 
     routeA = routes[0]
@@ -61,3 +61,4 @@ def test_get_best_swap_amount_in(lego_helper, fork):
         routeB = routes[1]
         assert routeB.tokenOut == virtual.address
         assert routeB.amountOut == virtual_amount
+

@@ -558,8 +558,12 @@ def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint2
     # TODO: implement stable pools
     pool: address = staticcall AeroFactory(AERODROME_FACTORY).getPool(_tokenIn, _tokenOut, False)
     if pool == empty(address):
-        return empty(address), 0
-    return pool, self._getAmountInForVolatilePools(pool, _tokenIn, _tokenOut, _amountOut)
+        return empty(address), max_value(uint256)
+
+    token0: address = empty(address)
+    token1: address = empty(address)
+    token0, token1 = staticcall AeroClassicPool(pool).tokens()
+    return pool, self._getAmountInForVolatilePools(pool, token0 == _tokenIn, _amountOut)
 
 
 @view
@@ -571,9 +575,12 @@ def getSwapAmountIn(
     _amountOut: uint256,
 ) -> uint256:
     if not staticcall AeroClassicPool(_pool).stable():
-        return self._getAmountInForVolatilePools(_pool, _tokenIn, _tokenOut, _amountOut)
+        token0: address = empty(address)
+        token1: address = empty(address)
+        token0, token1 = staticcall AeroClassicPool(_pool).tokens()
+        return self._getAmountInForVolatilePools(_pool, token0 == _tokenIn, _amountOut)
     else:
-        return 0 # TODO: implement stable pools
+        return max_value(uint256) # TODO: implement stable pools
 
 
 @view
@@ -688,20 +695,21 @@ def _getPriceUnsafeVolatilePool(_pool: address, _targetToken: address, _oracleRe
 
 @view
 @internal
-def _getAmountInForVolatilePools(_pool: address, _tokenIn: address, _tokenOut: address, _amountOut: uint256) -> uint256:
-    token0: address = empty(address)
-    token1: address = empty(address)
-    token0, token1 = staticcall AeroClassicPool(_pool).tokens()
+def _getAmountInForVolatilePools(_pool: address, _zeroForOne: bool, _amountOut: uint256) -> uint256:
+    if _amountOut == 0 or _amountOut == max_value(uint256):
+        return max_value(uint256)
 
     reserve0: uint256 = 0
     reserve1: uint256 = 0
     na: uint256 = 0
     reserve0, reserve1, na = staticcall AeroClassicPool(_pool).getReserves()
+    if reserve0 == 0 or reserve1 == 0:
+        return max_value(uint256)
 
     # determine which token is which
     reserveIn: uint256 = reserve0
     reserveOut: uint256 = reserve1
-    if _tokenIn != token0:
+    if not _zeroForOne:
         reserveIn = reserve1
         reserveOut = reserve0
 

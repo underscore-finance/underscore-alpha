@@ -488,7 +488,7 @@ def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint2
     if pool == empty(address):
         return empty(address), 0
     token0: address = staticcall IUniswapV2Pair(pool).token0()
-    return pool, self._getAmountIn(pool, _tokenIn, _tokenOut, _tokenIn == token0, _amountOut)
+    return pool, self._getAmountIn(pool, _tokenIn == token0, _amountOut)
 
 
 @view
@@ -500,7 +500,7 @@ def getSwapAmountIn(
     _amountOut: uint256,
 ) -> uint256:
     token0: address = staticcall IUniswapV2Pair(_pool).token0()
-    return self._getAmountIn(_pool, _tokenIn, _tokenOut, _tokenIn == token0, _amountOut)
+    return self._getAmountIn(_pool, _tokenIn == token0, _amountOut)
 
 
 @view
@@ -685,10 +685,15 @@ def _getAmountOut(
 
 @view
 @internal
-def _getAmountIn(_pool: address, _tokenIn: address, _tokenOut: address, _zeroForOne: bool, _amountOut: uint256) -> uint256:
+def _getAmountIn(_pool: address, _zeroForOne: bool, _amountOut: uint256) -> uint256:
+    if _amountOut == 0 or _amountOut == max_value(uint256):
+        return max_value(uint256)
+
     reserveIn: uint256 = 0
     reserveOut: uint256 = 0
     reserveIn, reserveOut = self._getReserves(_pool, _zeroForOne)
+    if reserveIn == 0 or reserveOut == 0:
+        return max_value(uint256)
 
     if _amountOut > reserveOut:
         return max_value(uint256)

@@ -737,7 +737,6 @@ def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint2
     bestPoolAddr: address = empty(address)
     bestTickSpacing: int24 = 0
     bestPoolAddr, bestTickSpacing = self._getDeepestLiqPool(_tokenIn, _tokenOut)
-
     if bestPoolAddr == empty(address):
         return empty(address), 0
 
@@ -784,10 +783,12 @@ def getSwapAmountOut(
 # annoying that this cannot be view function, thanks uni v3
 @external
 def getBestSwapAmountIn(_tokenIn: address, _tokenOut: address, _amountOut: uint256) -> (address, uint256):
+    if _amountOut == 0 or _amountOut == max_value(uint256):
+        return empty(address), max_value(uint256)
+
     bestPoolAddr: address = empty(address)
     bestTickSpacing: int24 = 0
     bestPoolAddr, bestTickSpacing = self._getDeepestLiqPool(_tokenIn, _tokenOut)
-
     if bestPoolAddr == empty(address):
         return empty(address), 0
 
@@ -815,6 +816,9 @@ def getSwapAmountIn(
     _tokenOut: address,
     _amountOut: uint256,
 ) -> uint256:
+    if _amountOut == 0 or _amountOut == max_value(uint256):
+        return max_value(uint256)
+
     amountIn: uint256 = 0
     na1: uint160 = 0
     na2: uint32 = 0
