@@ -261,7 +261,7 @@ def _encodeSwapInstructions(_swapInstructions: DynArray[SwapInstruction, MAX_SWA
             ),
             Bytes[2720]
         )
-    return slice(concatenated, 0, len(_swapInstructions) * 544)
+    return concatenated
 
 
 @view
@@ -654,7 +654,7 @@ def _encodeBatchInstructions(_instructions: DynArray[ActionInstruction, MAX_INST
             ),
             Bytes[15360]
         )
-    return slice(concatenated, 0, len(_instructions) * 768)
+    return concatenated
 
 
 @view
