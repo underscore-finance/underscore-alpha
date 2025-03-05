@@ -149,6 +149,7 @@ event CurveSwap:
     amountIn: uint256
     amountOut: uint256
     usdValue: uint256
+    numTokens: uint256
     recipient: address
 
 event CurveLiquidityAdded:
@@ -209,7 +210,7 @@ ADDY_REGISTRY: public(immutable(address))
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
 MAX_POOLS: constant(uint256) = 50
 MAX_QUOTES: constant(uint256) = 100
-MAX_SWAP_HOPS: constant(uint256) = 5
+MAX_TOKEN_PATH: constant(uint256) = 5
 
 
 @deploy
@@ -249,51 +250,66 @@ def getAccessForLego(_user: address) -> (address, String[64], uint256):
 
 @external
 def swapTokens(
-    _tokenIn: address,
-    _tokenOut: address,
     _amountIn: uint256,
     _minAmountOut: uint256,
-    _pool: address,
-    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
-    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _tokenPath: DynArray[address, MAX_TOKEN_PATH],
+    _poolPath: DynArray[address, MAX_TOKEN_PATH - 1],
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
 
-    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
-    assert _tokenIn != _tokenOut # dev: invalid tokens
+    # validate inputs
+    numTokens: uint256 = len(_tokenPath)
+    numPools: uint256 = len(_poolPath)
+    assert numTokens >= 2 # dev: invalid path
+    assert numPools == numTokens - 1 # dev: invalid path
 
-    # get pool data
-    p: PoolData = empty(PoolData)
-    if _pool != empty(address):
-        p = self._getPoolData(_pool, _tokenIn, _tokenOut, CURVE_META_REGISTRY)
-    else:
-        p = self._getBestPoolForSwap(_tokenIn, _tokenOut, CURVE_META_REGISTRY)
+    # get first token and last token
+    tokenIn: address = _tokenPath[0]
+    tokenOut: address = _tokenPath[numTokens - 1]
 
     # pre balances
-    preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+    preLegoBalance: uint256 = staticcall IERC20(tokenIn).balanceOf(self)
 
     # transfer deposit asset to this contract
-    transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
-    assert transferAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
-    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
+    initialAmountIn: uint256 = min(_amountIn, staticcall IERC20(tokenIn).balanceOf(msg.sender))
+    assert initialAmountIn != 0 # dev: nothing to transfer
+    assert extcall IERC20(tokenIn).transferFrom(msg.sender, self, initialAmountIn, default_return_value=True) # dev: transfer failed
+    initialAmountIn = min(initialAmountIn, staticcall IERC20(tokenIn).balanceOf(self))
 
-    # swap assets via lego partner
-    toAmount: uint256 = self._swapTokensInPool(p, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
+    curveMetaRegistry: address = CURVE_META_REGISTRY
+
+    # iterate through swap routes
+    tempAmountIn: uint256 = initialAmountIn
+    for i: uint256 in range(numTokens - 1, bound=MAX_TOKEN_PATH):
+        tempTokenIn: address = _tokenPath[i]
+        tempTokenOut: address = _tokenPath[i + 1]
+        tempPool: address = _poolPath[i]
+
+        # transfer to self (or to recipient if last swap)
+        recipient: address = _recipient
+        if i < numTokens - 2:
+            recipient = self
+
+        # swap
+        tempAmountIn = self._swapTokensInPool(tempPool, tempTokenIn, tempTokenOut, tempAmountIn, recipient, curveMetaRegistry)
+
+    # final amount
+    toAmount: uint256 = tempAmountIn
+    assert toAmount >= _minAmountOut # dev: min amount out not met
 
     # refund if full swap didn't get through
-    currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+    currentLegoBalance: uint256 = staticcall IERC20(tokenIn).balanceOf(self)
     refundAssetAmount: uint256 = 0
     if currentLegoBalance > preLegoBalance:
         refundAssetAmount = currentLegoBalance - preLegoBalance
-        assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
-        swapAmount -= refundAssetAmount
+        assert extcall IERC20(tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        initialAmountIn -= refundAssetAmount
 
-    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, True, _oracleRegistry)
-    log CurveSwap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
-    return swapAmount, toAmount, refundAssetAmount, usdValue
+    usdValue: uint256 = self._getUsdValue(tokenIn, initialAmountIn, tokenOut, toAmount, True, _oracleRegistry)
+    log CurveSwap(msg.sender, tokenIn, tokenOut, initialAmountIn, toAmount, usdValue, numTokens, _recipient)
+    return initialAmountIn, toAmount, refundAssetAmount, usdValue
 
 
 # swap in pool
@@ -301,45 +317,43 @@ def swapTokens(
 
 @internal
 def _swapTokensInPool(
-    _p: PoolData,
+    _pool: address,
     _tokenIn: address,
     _tokenOut: address,
     _amountIn: uint256,
-    _minAmountOut: uint256,
     _recipient: address,
+    _curveMetaRegistry: address,
 ) -> uint256:
     toAmount: uint256 = 0
-
-    # approve token in
-    assert extcall IERC20(_tokenIn).approve(_p.pool, _amountIn, default_return_value=True) # dev: approval failed
+    p: PoolData = self._getPoolData(_pool, _tokenIn, _tokenOut, _curveMetaRegistry)
+    assert extcall IERC20(_tokenIn).approve(_pool, _amountIn, default_return_value=True) # dev: approval failed
 
     # stable ng
-    if _p.poolType == PoolType.STABLESWAP_NG:
-        toAmount = extcall CommonCurvePool(_p.pool).exchange(convert(_p.indexTokenA, int128), convert(_p.indexTokenB, int128), _amountIn, _minAmountOut, _recipient)
+    if p.poolType == PoolType.STABLESWAP_NG:
+        toAmount = extcall CommonCurvePool(_pool).exchange(convert(p.indexTokenA, int128), convert(p.indexTokenB, int128), _amountIn, 0, _recipient)
 
     # two crypto ng
-    elif _p.poolType == PoolType.TWO_CRYPTO_NG:
-        toAmount = extcall TwoCryptoNgPool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, _recipient)
+    elif p.poolType == PoolType.TWO_CRYPTO_NG:
+        toAmount = extcall TwoCryptoNgPool(_pool).exchange(p.indexTokenA, p.indexTokenB, _amountIn, 0, _recipient)
 
     # two crypto + tricrypto ng pools
-    elif _p.poolType == PoolType.TRICRYPTO_NG or _p.poolType == PoolType.TWO_CRYPTO:
-        toAmount = extcall TwoCryptoPool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, False, _recipient)
+    elif p.poolType == PoolType.TRICRYPTO_NG or p.poolType == PoolType.TWO_CRYPTO:
+        toAmount = extcall TwoCryptoPool(_pool).exchange(p.indexTokenA, p.indexTokenB, _amountIn, 0, False, _recipient)
 
     # meta pools
-    elif _p.poolType == PoolType.METAPOOL:
-        if staticcall CurveMetaRegistry(CURVE_META_REGISTRY).is_meta(_p.pool):
+    elif p.poolType == PoolType.METAPOOL:
+        if staticcall CurveMetaRegistry(_curveMetaRegistry).is_meta(_pool):
             raise "Not Implemented"
         else:
-            toAmount = extcall CommonCurvePool(_p.pool).exchange(convert(_p.indexTokenA, int128), convert(_p.indexTokenB, int128), _amountIn, _minAmountOut, _recipient)
+            toAmount = extcall CommonCurvePool(_pool).exchange(convert(p.indexTokenA, int128), convert(p.indexTokenB, int128), _amountIn, 0, _recipient)
 
     # crypto v1
     else:
-        toAmount = extcall CryptoLegacyPool(_p.pool).exchange(_p.indexTokenA, _p.indexTokenB, _amountIn, _minAmountOut, False)
-        assert extcall IERC20(_tokenOut).transfer(_recipient, toAmount, default_return_value=True) # dev: transfer failed
+        toAmount = extcall CryptoLegacyPool(_pool).exchange(p.indexTokenA, p.indexTokenB, _amountIn, 0, False)
+        if _recipient != self:
+            assert extcall IERC20(_tokenOut).transfer(_recipient, toAmount, default_return_value=True) # dev: transfer failed
 
-    # reset approvals
-    assert extcall IERC20(_tokenIn).approve(_p.pool, 0, default_return_value=True) # dev: approval failed
-
+    assert extcall IERC20(_tokenIn).approve(_pool, 0, default_return_value=True) # dev: approval failed
     assert toAmount != 0 # dev: no tokens swapped
     return toAmount
 
@@ -1252,6 +1266,7 @@ def _getBestPoolForSwap(_tokenA: address, _tokenB: address, _metaRegistry: addre
 @view
 @internal
 def _getPoolData(_pool: address, _tokenA: address, _tokenB: address, _metaRegistry: address) -> PoolData:
+    assert staticcall CurveMetaRegistry(_metaRegistry).is_registered(_pool) # dev: invalid pool
     coins: address[8] = staticcall CurveMetaRegistry(_metaRegistry).get_coins(_pool)
     
     # validate tokens

@@ -4,6 +4,7 @@ import boa
 from constants import ZERO_ADDRESS, MAX_UINT256, EIGHTEEN_DECIMALS
 from conf_tokens import TEST_AMOUNTS, TOKENS
 from conf_utils import filter_logs
+from utils.BluePrint import CORE_TOKENS
 
 
 TEST_ASSETS = [
@@ -91,108 +92,153 @@ def getPool(fork):
 #########
 
 
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_curve_swap_max(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_curve,
+#     getToToken,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
+#     toToken = getToToken(token_str)
+
+#     testLegoSwap(lego_curve.legoId(), fromAsset, toToken)
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_curve_swap_partial(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_curve,
+#     getToToken,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+#     toToken = getToToken(token_str)
+
+#     testLegoSwap(lego_curve.legoId(), fromAsset, toToken, testAmount // 2)
+
+
+# @pytest.always
+# def test_curve_preferred_pool(
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_curve,
+#     getToToken,
+#     governor,
+#     bob_agent
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale("crvusd")
+#     testAmount = TEST_AMOUNTS["crvusd"] * (10 ** fromAsset.decimals())
+#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+#     toToken = getToToken("crvusd")
+
+#     # set preferred pool
+#     four_pool = "0xf6c5f01c7f3148891ad0e19df78743d31e390d1f"
+#     assert lego_curve.setPreferredPools([four_pool], sender=governor)
+#     log = filter_logs(lego_curve, "CurvePreferredPoolsSet")[0]
+#     assert log.numPools == 1
+
+#     fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_curve.legoId(), fromAsset.address, toToken.address, MAX_UINT256, 0, sender=bob_agent)
+#     assert fromSwapAmount != 0
+#     assert toAmount != 0
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_curve_swap_max_with_pool(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_curve,
+#     getToToken,
+#     getPool,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
+#     toToken = getToToken(token_str)
+
+#     pool = getPool(token_str)
+#     testLegoSwap(lego_curve.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_curve_swap_partial_with_pool(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_curve,
+#     getToToken,
+#     getPool,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+#     toToken = getToToken(token_str)
+
+#     pool = getPool(token_str)
+#     testLegoSwap(lego_curve.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+
+
 @pytest.always
-def test_curve_swap_max(
-    token_str,
-    testLegoSwap,
+def test_curve_swap_with_routes(
+    oracle_chainlink,
     getTokenAndWhale,
-    bob_ai_wallet,
+    bob,
     lego_curve,
-    getToToken,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-    toToken = getToToken(token_str)
-
-    testLegoSwap(lego_curve.legoId(), fromAsset, toToken)
-
-
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_curve_swap_partial(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_curve,
-    getToToken,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-    toToken = getToToken(token_str)
-
-    testLegoSwap(lego_curve.legoId(), fromAsset, toToken, testAmount // 2)
-
-
-@pytest.always
-def test_curve_preferred_pool(
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_curve,
-    getToToken,
+    fork,
+    oracle_registry,
     governor,
-    bob_agent
+    _test,
 ):
-    # setup
-    fromAsset, whale = getTokenAndWhale("crvusd")
-    testAmount = TEST_AMOUNTS["crvusd"] * (10 ** fromAsset.decimals())
-    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-    toToken = getToToken("crvusd")
+    # tbtc setup
+    tbtc, tbtc_whale = getTokenAndWhale("tbtc")
+    tbtc_amount = int(0.1 * (10 ** tbtc.decimals()))
+    tbtc.transfer(bob, tbtc_amount, sender=tbtc_whale)
+    assert oracle_chainlink.setChainlinkFeed(tbtc, "0x6D75BFB5A5885f841b132198C9f0bE8c872057BF", sender=governor)
 
-    # set preferred pool
-    four_pool = "0xf6c5f01c7f3148891ad0e19df78743d31e390d1f"
-    assert lego_curve.setPreferredPools([four_pool], sender=governor)
-    log = filter_logs(lego_curve, "CurvePreferredPoolsSet")[0]
-    assert log.numPools == 1
+    # crvusd setup
+    crvusd = TOKENS["crvusd"][fork]
+    tbtc_crvusd = "0x6e53131f68a034873b6bfa15502af094ef0c5854"
 
-    fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_curve.legoId(), fromAsset.address, toToken.address, MAX_UINT256, 0, sender=bob_agent)
-    assert fromSwapAmount != 0
+    # usdc
+    usdc = boa.from_etherscan(CORE_TOKENS[fork]["USDC"], name="usdc token")
+    usdc_4pool = "0xf6c5f01c7f3148891ad0e19df78743d31e390d1f"
+    assert oracle_chainlink.setChainlinkFeed(usdc, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", sender=governor)
+
+    # pre balances
+    pre_tbtc_bal = tbtc.balanceOf(bob)
+    pre_usdc_bal = usdc.balanceOf(bob)
+
+    # swap curve
+    tbtc.approve(lego_curve, tbtc_amount, sender=bob)
+    fromSwapAmount, toAmount, _, usd_value = lego_curve.swapTokens(tbtc_amount, 0, [tbtc, crvusd, usdc], [tbtc_crvusd, usdc_4pool], bob, sender=bob)
     assert toAmount != 0
 
+    # post balances
+    assert tbtc.balanceOf(bob) == pre_tbtc_bal - fromSwapAmount
+    assert usdc.balanceOf(bob) == pre_usdc_bal + toAmount
 
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_curve_swap_max_with_pool(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_curve,
-    getToToken,
-    getPool,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-    toToken = getToToken(token_str)
-
-    pool = getPool(token_str)
-    testLegoSwap(lego_curve.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
-
-
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_curve_swap_partial_with_pool(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_curve,
-    getToToken,
-    getPool,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-    toToken = getToToken(token_str)
-
-    pool = getPool(token_str)
-    testLegoSwap(lego_curve.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+    # usd values
+    tbtc_input_usd_value = oracle_registry.getUsdValue(tbtc, tbtc_amount, False)
+    usdc_output_usd_value = oracle_registry.getUsdValue(usdc, toAmount, False)
+    _test(tbtc_input_usd_value, usdc_output_usd_value, 4_00) # 4%
 
 
 # add liquidity

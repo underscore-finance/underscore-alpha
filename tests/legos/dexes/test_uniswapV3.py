@@ -63,103 +63,127 @@ def getPool(fork):
 #########
 
 
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_uniswapV3_swap_max(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_uniswap_v3,
-    getToToken,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-    toToken = getToToken(token_str)
-
-    testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken)
-
-
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_uniswapV3_swap_partial(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_uniswap_v3,
-    getToToken,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-    toToken = getToToken(token_str)
-
-    testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, testAmount // 2)
-
-
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_uniswapV3_swap_max_with_pool(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_uniswap_v3,
-    getToToken,
-    getPool,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-    toToken = getToToken(token_str)
-
-    pool = getPool(token_str)
-    testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
-
-
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_uniswapV3_swap_partial_with_pool(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_uniswap_v3,
-    getToToken,
-    getPool,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-    toToken = getToToken(token_str)
-
-    pool = getPool(token_str)
-    testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
-
-
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
 # @pytest.always
-# def test_uniswapV3_swap_with_hop(
+# def test_uniswapV3_swap_max(
+#     token_str,
+#     testLegoSwap,
 #     getTokenAndWhale,
 #     bob_ai_wallet,
 #     lego_uniswap_v3,
-#     bob_agent,
-#     fork,
+#     getToToken,
 # ):
 #     # setup
-#     usdc, usdc_whale = getTokenAndWhale("usdc")
-#     usdc_amount = 10_000 * (10 ** usdc.decimals())
-#     usdc.transfer(bob_ai_wallet.address, usdc_amount, sender=usdc_whale)
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
+#     toToken = getToToken(token_str)
 
-#     # usdc -> weth -> virtual
-#     hop_token = CORE_TOKENS[fork]["WETH"]
-#     virtual = CORE_TOKENS[fork]["VIRTUAL"]
+#     testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken)
 
-#     fromSwapAmount, toAmount, usd_value = bob_ai_wallet.swapTokens(lego_uniswap_v3.legoId(), usdc, virtual, usdc_amount, 0, "0xd0b53D9277642d899DF5C87A3966A349A798F224", hop_token, "0x9c087Eb773291e50CF6c6a90ef0F4500e349B903", sender=bob_agent)
-#     assert toAmount != 0
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_uniswapV3_swap_partial(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_uniswap_v3,
+#     getToToken,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+#     toToken = getToToken(token_str)
+
+#     testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, testAmount // 2)
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_uniswapV3_swap_max_with_pool(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_uniswap_v3,
+#     getToToken,
+#     getPool,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
+#     toToken = getToToken(token_str)
+
+#     pool = getPool(token_str)
+#     testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_uniswapV3_swap_partial_with_pool(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_uniswap_v3,
+#     getToToken,
+#     getPool,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+#     toToken = getToToken(token_str)
+
+#     pool = getPool(token_str)
+#     testLegoSwap(lego_uniswap_v3.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+
+
+@pytest.always
+def test_uniswapV3_swap_with_routes(
+    oracle_chainlink,
+    getTokenAndWhale,
+    bob,
+    lego_uniswap_v3,
+    fork,
+    oracle_registry,
+    governor,
+    _test,
+):
+    # usdc setup
+    usdc, usdc_whale = getTokenAndWhale("usdc")
+    usdc_amount = 10_000 * (10 ** usdc.decimals())
+    usdc.transfer(bob, usdc_amount, sender=usdc_whale)
+    assert oracle_chainlink.setChainlinkFeed(usdc, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", sender=governor)
+
+    # weth setup
+    weth = CORE_TOKENS[fork]["WETH"]
+    weth_usdc_pool = "0xd0b53D9277642d899DF5C87A3966A349A798F224"
+
+    # cbbtc setup
+    cbbtc = boa.from_etherscan(CORE_TOKENS[fork]["CBBTC"], name="cbbtc token")
+    weth_cbbtc_pool = "0x8c7080564B5A792A33Ef2FD473fbA6364d5495e5"
+    cbbtc_price = lego_uniswap_v3.getPriceUnsafe(weth_cbbtc_pool, cbbtc)
+
+    # pre balances
+    pre_usdc_bal = usdc.balanceOf(bob)
+    pre_cbbtc_bal = cbbtc.balanceOf(bob)
+
+    # swap uniswap v3
+    usdc.approve(lego_uniswap_v3, usdc_amount, sender=bob)
+    fromSwapAmount, toAmount, _, usd_value = lego_uniswap_v3.swapTokens(usdc_amount, 0, [usdc, weth, cbbtc], [weth_usdc_pool, weth_cbbtc_pool], bob, sender=bob)
+    assert toAmount != 0
+
+    # post balances
+    assert usdc.balanceOf(bob) == pre_usdc_bal - fromSwapAmount
+    assert cbbtc.balanceOf(bob) == pre_cbbtc_bal + toAmount
+
+    # usd values
+    usdc_input_usd_value = oracle_registry.getUsdValue(usdc, usdc_amount, False)
+    cbbtc_output_usd_value = cbbtc_price * toAmount // (10 ** cbbtc.decimals())
+    _test(usdc_input_usd_value, cbbtc_output_usd_value, 1_00)
 
 
 # add liquidity
@@ -182,7 +206,7 @@ def test_uniswapV3_add_liquidity_new_position_more_token_A(
     tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
 
     pool = boa.from_etherscan("0xd0b53D9277642d899DF5C87A3966A349A798F224")
-    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[2])
+    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[1])
     nftTokenId = testLegoLiquidityAdded(lego_uniswap_v3, uniswap_nft_token_manager, 0, pool, tokenA, tokenB, amountA, amountB)
     assert nftTokenId != 0
 
@@ -204,7 +228,7 @@ def test_uniswapV3_add_liquidity_new_position_more_token_B(
     tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
 
     pool = boa.from_etherscan("0xd0b53D9277642d899DF5C87A3966A349A798F224")
-    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[2])
+    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[1])
     nftTokenId = testLegoLiquidityAdded(lego_uniswap_v3, uniswap_nft_token_manager, 0, pool, tokenA, tokenB, amountA, amountB)
     assert nftTokenId != 0
 
@@ -227,7 +251,7 @@ def test_uniswapV3_add_liquidity_increase_position(
     tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
 
     pool = boa.from_etherscan("0xd0b53D9277642d899DF5C87A3966A349A798F224")
-    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[2])
+    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[1])
 
     # initial mint position
     liquidityAdded, _a, _b, _c, nftTokenId = bob_ai_wallet.addLiquidity(lego_uniswap_v3.legoId(), uniswap_nft_token_manager.address, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
@@ -272,7 +296,7 @@ def test_uniswapV3_remove_liq_max(
     assert nftTokenId != 0 and liquidityAdded != 0
 
     # test remove liquidity
-    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[2])
+    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[1])
     testLegoLiquidityRemoved(lego_uniswap_v3, uniswap_nft_token_manager, nftTokenId, pool, tokenA, tokenB)
 
 
@@ -301,7 +325,7 @@ def test_uniswapV3_remove_liq_partial(
     assert nftTokenId != 0 and liquidityAdded != 0
 
     # test remove liquidity (partial)
-    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[2])
+    uniswap_nft_token_manager = boa.from_etherscan(lego_uniswap_v3.getRegistries()[1])
     testLegoLiquidityRemoved(lego_uniswap_v3, uniswap_nft_token_manager, nftTokenId, pool, tokenA, tokenB, liquidityAdded // 2)
 
 

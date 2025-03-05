@@ -1,6 +1,19 @@
 # @version 0.4.0
 
 
+# struct SwapInstruction:
+#     legoId: uint256
+#     amountIn: uint256
+#     minAmountOut: uint256
+#     tokenPath: DynArray[address, 5]
+#     poolPath: DynArray[address, 5 - 1]
+
+
+# @external
+# def swapTokens(_swapInstructions: DynArray[SwapInstruction, 5]) -> (uint256, uint256, uint256):
+#     ...
+
+
 @external
 def depositTokens(
     _legoId: uint256,
@@ -30,20 +43,6 @@ def rebalance(
     _toVault: address,
     _fromVaultTokenAmount: uint256 = max_value(uint256),
 ) -> (uint256, address, uint256, uint256):
-    ...
-
-
-@external
-def swapTokens(
-    _legoId: uint256,
-    _tokenIn: address,
-    _tokenOut: address,
-    _amountIn: uint256 = max_value(uint256),
-    _minAmountOut: uint256 = 0,
-    _pool: address = empty(address),
-    _extraTokensIfHop: DynArray[address, 5] = empty(DynArray[address, 5]),
-    _extraPoolsIfHop: DynArray[address, 5] = empty(DynArray[address, 5]),
-) -> (uint256, uint256, uint256):
     ...
 
 

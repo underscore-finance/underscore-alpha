@@ -242,24 +242,16 @@ def signSwap(special_agent_signer):
     def signSwap(
         _agent,
         _userWallet,
-        _legoId,
-        _tokenIn,
-        _tokenOut,
-        _amountIn,
-        _minAmountOut,
-        _pool,
-        _extraTokensIfHop,
-        _extraPoolsIfHop,
+        _swapInstructions,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
-         # Get the contract's hash
-        message_hash = _agent.getSwapDataHash(_expiration, _userWallet, _legoId, _tokenIn, _tokenOut, _amountIn, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop)
+        # Get the contract's hash
+        message_hash = _agent.getSwapActionHash(_userWallet, _swapInstructions, _expiration)
 
         # Sign the hash directly without any prefix
         signed = Account._sign_hash(message_hash, special_agent_signer.key)
 
         return (signed.signature, special_agent_signer.address, _expiration)
-    
     yield signSwap
 
 

@@ -91,83 +91,128 @@ def getPool(fork):
 #########
 
 
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_aero_slipstream_swap_max(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_aero_slipstream,
+#     getToToken,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
+#     toToken = getToToken(token_str)
+
+#     testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken)
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_aero_slipstream_swap_partial(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_aero_slipstream,
+#     getToToken,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+#     toToken = getToToken(token_str)
+
+#     testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken, testAmount // 2)
+
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_aero_slipstream_swap_max_with_pool(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_aero_slipstream,
+#     getToToken,
+#     getPool,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
+#     toToken = getToToken(token_str)
+
+#     pool = getPool(token_str)
+#     testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
+
+
+# @pytest.mark.parametrize("token_str", TEST_ASSETS)
+# @pytest.always
+# def test_aero_slipstream_swap_partial_with_pool(
+#     token_str,
+#     testLegoSwap,
+#     getTokenAndWhale,
+#     bob_ai_wallet,
+#     lego_aero_slipstream,
+#     getToToken,
+#     getPool,
+# ):
+#     # setup
+#     fromAsset, whale = getTokenAndWhale(token_str)
+#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+#     toToken = getToToken(token_str)
+
+#     pool = getPool(token_str)
+#     testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+
+
 @pytest.always
-def test_aero_slipstream_swap_max(
-    token_str,
-    testLegoSwap,
+def test_aero_slipstream_swap_with_routes(
+    oracle_chainlink,
     getTokenAndWhale,
-    bob_ai_wallet,
+    bob,
     lego_aero_slipstream,
-    getToToken,
+    fork,
+    oracle_registry,
+    governor,
+    _test,
 ):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-    toToken = getToToken(token_str)
+    # usdc setup
+    usdc, usdc_whale = getTokenAndWhale("usdc")
+    usdc_amount = 10_000 * (10 ** usdc.decimals())
+    usdc.transfer(bob, usdc_amount, sender=usdc_whale)
+    assert oracle_chainlink.setChainlinkFeed(usdc, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", sender=governor)
 
-    testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken)
+    # weth setup
+    weth = CORE_TOKENS[fork]["WETH"]
+    weth_usdc_pool = "0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59"
 
+    # virtual setup
+    cbbtc = boa.from_etherscan(CORE_TOKENS[fork]["CBBTC"], name="cbbtc token")
+    weth_cbbtc_pool = "0x70aCDF2Ad0bf2402C957154f944c19Ef4e1cbAE1"
+    cbbtc_price = lego_aero_slipstream.getPriceUnsafe(weth_cbbtc_pool, cbbtc)
 
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_aero_slipstream_swap_partial(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_aero_slipstream,
-    getToToken,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-    toToken = getToToken(token_str)
+    # pre balances
+    pre_usdc_bal = usdc.balanceOf(bob)
+    pre_cbbtc_bal = cbbtc.balanceOf(bob)
 
-    testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken, testAmount // 2)
+    # swap uniswap v3
+    usdc.approve(lego_aero_slipstream, usdc_amount, sender=bob)
+    fromSwapAmount, toAmount, _, usd_value = lego_aero_slipstream.swapTokens(usdc_amount, 0, [usdc, weth, cbbtc], [weth_usdc_pool, weth_cbbtc_pool], bob, sender=bob)
+    assert toAmount != 0
 
+    # post balances
+    assert usdc.balanceOf(bob) == pre_usdc_bal - fromSwapAmount
+    assert cbbtc.balanceOf(bob) == pre_cbbtc_bal + toAmount
 
-
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_aero_slipstream_swap_max_with_pool(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_aero_slipstream,
-    getToToken,
-    getPool,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-    toToken = getToToken(token_str)
-
-    pool = getPool(token_str)
-    testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
-
-
-@pytest.mark.parametrize("token_str", TEST_ASSETS)
-@pytest.always
-def test_aero_slipstream_swap_partial_with_pool(
-    token_str,
-    testLegoSwap,
-    getTokenAndWhale,
-    bob_ai_wallet,
-    lego_aero_slipstream,
-    getToToken,
-    getPool,
-):
-    # setup
-    fromAsset, whale = getTokenAndWhale(token_str)
-    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-    toToken = getToToken(token_str)
-
-    pool = getPool(token_str)
-    testLegoSwap(lego_aero_slipstream.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+    # usd values
+    usdc_input_usd_value = oracle_registry.getUsdValue(usdc, usdc_amount, False)
+    cbbtc_output_usd_value = cbbtc_price * toAmount // (10 ** cbbtc.decimals())
+    _test(usdc_input_usd_value, cbbtc_output_usd_value, 1_00)
 
 
 # add liquidity
@@ -190,7 +235,7 @@ def test_aero_slipstream_add_liquidity_new_position_more_token_A(
     tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
 
     pool = boa.from_etherscan("0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59")
-    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[2])
+    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[1])
     nftTokenId = testLegoLiquidityAdded(lego_aero_slipstream, nft_token_manager, 0, pool, tokenA, tokenB, amountA, amountB)
     assert nftTokenId != 0
 
@@ -212,7 +257,7 @@ def test_aero_slipstream_add_liquidity_new_position_more_token_B(
     tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
 
     pool = boa.from_etherscan("0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59")
-    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[2])
+    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[1])
     nftTokenId = testLegoLiquidityAdded(lego_aero_slipstream, nft_token_manager, 0, pool, tokenA, tokenB, amountA, amountB)
     assert nftTokenId != 0
 
@@ -235,7 +280,7 @@ def test_aero_slipstream_add_liquidity_increase_position(
     tokenB.transfer(bob_ai_wallet.address, amountB, sender=whaleB)
 
     pool = boa.from_etherscan("0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59")
-    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[2])
+    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[1])
 
     # initial mint position
     liquidityAdded, _a, _b, _c, nftTokenId = bob_ai_wallet.addLiquidity(lego_aero_slipstream.legoId(), nft_token_manager.address, 0, pool.address, tokenA.address, tokenB.address, amountA, amountB, sender=bob_agent)
@@ -280,7 +325,7 @@ def test_aero_slipstream_remove_liq_max(
     assert nftTokenId != 0 and liquidityAdded != 0
 
     # test remove liquidity
-    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[2])
+    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[1])
     testLegoLiquidityRemoved(lego_aero_slipstream, nft_token_manager, nftTokenId, pool, tokenA, tokenB)
 
 
@@ -309,7 +354,7 @@ def test_aero_slipstream_remove_liq_partial(
     assert nftTokenId != 0 and liquidityAdded != 0
 
     # test remove liquidity (partial)
-    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[2])
+    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[1])
     testLegoLiquidityRemoved(lego_aero_slipstream, nft_token_manager, nftTokenId, pool, tokenA, tokenB, liquidityAdded // 2)
 
 
@@ -338,7 +383,7 @@ def test_aero_slipstream_remove_liq_max_stable(
     assert nftTokenId != 0 and liquidityAdded != 0
 
     # test remove liquidity
-    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[2])
+    nft_token_manager = boa.from_etherscan(lego_aero_slipstream.getRegistries()[1])
     testLegoLiquidityRemoved(lego_aero_slipstream, nft_token_manager, nftTokenId, pool, tokenA, tokenB)
 
 

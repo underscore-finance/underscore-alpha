@@ -449,8 +449,19 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     
     # Get the pre-swap bravo_token balance of the governor
     pre_protocol_wallet_bravo = bravo_token.balanceOf(governor)
-    
-    a, b, c = new_ai_wallet.swapTokens(mock_lego_alpha.legoId(), alpha_token, bravo_token, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+
+    # setup swap 
+    deposit_amount = 1000 * EIGHTEEN_DECIMALS
+    alpha_token.transfer(new_ai_wallet, deposit_amount, sender=alpha_token_whale)
+    bravo_token.transfer(mock_lego_alpha.address, deposit_amount, sender=bravo_token_whale)
+    instruction = (
+        mock_lego_alpha.legoId(),
+        deposit_amount,
+        0,
+        [alpha_token, bravo_token],
+        [alpha_token]
+    )
+    a, b, c = new_ai_wallet.swapTokens([instruction], sender=bob_agent)
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == SWAP_UINT256  # SWAP
     assert log.asset == bravo_token.address  # Fee is in bravo_token (the output token)
@@ -825,3 +836,20 @@ def test_transaction_fees_at_maximum(price_sheets, governor, new_ai_wallet, bob_
     # The exact amount will depend on the vault token value
 
 
+
+# def test_swap_tokens(ai_wallet, agent, mock_lego_alpha, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale):
+#     deposit_amount = 1000 * EIGHTEEN_DECIMALS
+#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+#     bravo_token.transfer(mock_lego_alpha.address, deposit_amount, sender=bravo_token_whale)
+
+#     instruction = (
+#         mock_lego_alpha.legoId(),
+#         deposit_amount,
+#         0,
+#         [alpha_token, bravo_token],
+#         [alpha_token]
+#     )
+
+#     initialAmountIn, lastTokenOutAmount, lastUsdValue = ai_wallet.swapTokens([instruction], sender=agent)
+
+#     assert lastTokenOutAmount != 0

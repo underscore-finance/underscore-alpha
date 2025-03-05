@@ -3,7 +3,14 @@
 # core dex
 
 @external
-def swapTokens(_tokenIn: address, _tokenOut: address, _amountIn: uint256, _minAmountOut: uint256, _pool: address, _extraTokensIfHop: DynArray[address, 5], _extraPoolsIfHop: DynArray[address, 5], _recipient: address, _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
+def swapTokens(
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _tokenPath: DynArray[address, 5],
+    _poolPath: DynArray[address, 4],
+    _recipient: address,
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256):
     ...
 
 @external

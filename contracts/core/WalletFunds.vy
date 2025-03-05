@@ -74,6 +74,13 @@ struct TrialFundsOpp:
     legoId: uint256
     vaultToken: address
 
+struct SwapInstruction:
+    legoId: uint256
+    amountIn: uint256
+    minAmountOut: uint256
+    tokenPath: DynArray[address, MAX_TOKEN_PATH]
+    poolPath: DynArray[address, MAX_TOKEN_PATH - 1]
+
 event UserWalletDeposit:
     signer: indexed(address)
     asset: indexed(address)
@@ -104,9 +111,9 @@ event UserWalletSwap:
     tokenOut: indexed(address)
     swapAmount: uint256
     toAmount: uint256
-    pool: address
     refundAssetAmount: uint256
     usdValue: uint256
+    numTokens: uint256
     legoId: uint256
     legoAddr: address
     isSignerAgent: bool
@@ -236,7 +243,8 @@ LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
-MAX_SWAP_HOPS: constant(uint256) = 5
+MAX_SWAP_INSTRUCTIONS: constant(uint256) = 5
+MAX_TOKEN_PATH: constant(uint256) = 5
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
@@ -504,62 +512,128 @@ def rebalance(
 
 @nonreentrant
 @external
-def swapTokens(
-    _legoId: uint256,
-    _tokenIn: address,
-    _tokenOut: address,
-    _amountIn: uint256 = max_value(uint256),
-    _minAmountOut: uint256 = 0,
-    _pool: address = empty(address),
-    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS] = empty(DynArray[address, MAX_SWAP_HOPS]),
-    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS] = empty(DynArray[address, MAX_SWAP_HOPS]),
-) -> (uint256, uint256, uint256):
+def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]) -> (uint256, uint256, uint256):
     """
-    @notice Swaps tokens using a specified lego integration
-    @dev Validates agent permissions if caller is not the owner
-    @param _legoId The ID of the lego to use for swapping
-    @param _tokenIn The address of the token to swap from
-    @param _tokenOut The address of the token to swap to
-    @param _amountIn The amount of input tokens to swap (defaults to max balance)
-    @param _minAmountOut The minimum amount of output tokens to receive (defaults to 0)
-    @param _pool The pool address to use for swapping (optional)
-    @param _extraTokensIfHop The token addresses to use for multi-hops (optional)
-    @param _extraPoolsIfHop The pool addresses to use for multi-hops (optional)
-    @return uint256 The actual amount of input tokens swapped
-    @return uint256 The amount of output tokens received
+    @notice Swaps tokens between lego integrations
+    @param _swapInstructions The instructions for the swaps
+    @return uint256 The amount of assets deposited
+    @return uint256 The amount of assets received
     @return uint256 The usd value of the transaction
     """
+    numSwapInstructions: uint256 = len(_swapInstructions)
+    assert numSwapInstructions != 0 # dev: no swaps
+
     cd: CoreData = self._getCoreData()
 
+    # get high level swap info to check permissions
+    tokenIn: address = empty(address)
+    tokenOut: address = empty(address)
+    initialAmountIn: uint256 = 0
+    legoIds: DynArray[uint256, MAX_LEGOS] = []
+    tokenIn, tokenOut, initialAmountIn, legoIds = self._getHighLevelSwapInfo(numSwapInstructions, _swapInstructions, cd)
+
     # check permissions / subscription data
-    isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.SWAP, [_tokenIn, _tokenOut], [_legoId], cd)
+    isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.SWAP, [tokenIn, tokenOut], legoIds, cd)
 
-    # get lego addr
-    legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
-    assert legoAddr != empty(address) # dev: invalid lego
+    # check if swap token is trial funds asset
+    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(tokenIn, cd.trialFundsAsset, cd.legoRegistry)
 
-    # finalize amount
-    swapAmount: uint256 = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenIn, _amountIn, True, cd)
-    assert extcall IERC20(_tokenIn).approve(legoAddr, swapAmount, default_return_value=True) # dev: approval failed
+    # perform swap instructions
+    amountIn: uint256 = initialAmountIn
+    lastTokenOut: address = empty(address)
+    lastTokenOutAmount: uint256 = 0
+    lastUsdValue: uint256 = 0
+    for j: uint256 in range(numSwapInstructions, bound=MAX_SWAP_INSTRUCTIONS):
+        i: SwapInstruction = _swapInstructions[j]
 
-    # check if swap token of trial funds asset
-    isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_tokenIn, cd.trialFundsAsset, cd.legoRegistry)
+        # from lego to lego, must follow the same token path
+        if lastTokenOut != empty(address):
+            newTokenIn: address = i.tokenPath[0]
+            assert lastTokenOut == newTokenIn # dev: invalid token path
+            amountIn = min(lastTokenOutAmount, staticcall IERC20(newTokenIn).balanceOf(self))
 
-    # swap assets via lego partner
-    toAmount: uint256 = 0
-    refundAssetAmount: uint256 = 0
-    usdValue: uint256 = 0
-    swapAmount, toAmount, refundAssetAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _pool, _extraTokensIfHop, _extraPoolsIfHop, self, cd.oracleRegistry)
-    assert extcall IERC20(_tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+        lastTokenOut, lastTokenOutAmount, lastUsdValue = self._performSwapInstruction(i.legoId, amountIn, i.minAmountOut, i.tokenPath, i.poolPath, msg.sender, isSignerAgent, cd.legoRegistry, cd.oracleRegistry)
 
     # make sure they still have enough trial funds
     self._checkTrialFundsPostTx(isTrialFundsVaultToken, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
 
     # handle tx fees
-    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.SWAP, _tokenOut, toAmount, cd.priceSheets)
+    self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.SWAP, lastTokenOut, lastTokenOutAmount, cd.priceSheets)
+    return initialAmountIn, lastTokenOutAmount, lastUsdValue
 
-    log UserWalletSwap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, _pool, refundAssetAmount, usdValue, _legoId, legoAddr, isSignerAgent)
-    return swapAmount, toAmount, usdValue
+
+@internal
+def _performSwapInstruction(
+    _legoId: uint256,
+    _amountIn: uint256,
+    _minAmountOut: uint256,
+    _tokenPath: DynArray[address, MAX_TOKEN_PATH],
+    _poolPath: DynArray[address, MAX_TOKEN_PATH - 1],
+    _signer: address,
+    _isSignerAgent: bool,
+    _legoRegistry: address,
+    _oracleRegistry: address,
+) -> (address, uint256, uint256):
+    legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(_legoId)
+    assert legoAddr != empty(address) # dev: invalid lego
+
+    # get token in and token out
+    tokenIn: address = _tokenPath[0]
+    tokenOut: address = _tokenPath[len(_tokenPath) - 1]
+
+    # approve token in
+    assert extcall IERC20(tokenIn).approve(legoAddr, _amountIn, default_return_value=True) # dev: approval failed
+
+    # swap assets via lego partner
+    tokenInAmount: uint256 = 0
+    tokenOutAmount: uint256 = 0
+    refundTokenInAmount: uint256 = 0
+    usdValue: uint256 = 0
+    tokenInAmount, tokenOutAmount, refundTokenInAmount, usdValue = extcall LegoDex(legoAddr).swapTokens(_amountIn, _minAmountOut, _tokenPath, _poolPath, self, _oracleRegistry)
+
+    # reset approvals
+    assert extcall IERC20(tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    log UserWalletSwap(_signer, tokenIn, tokenOut, tokenInAmount, tokenOutAmount, refundTokenInAmount, usdValue, len(_tokenPath), _legoId, legoAddr, _isSignerAgent)
+    return tokenOut, tokenOutAmount, usdValue
+
+
+@view
+@internal
+def _getHighLevelSwapInfo(
+    _numSwapInstructions: uint256,
+    _swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS],
+    _cd: CoreData,
+) -> (address, address, uint256, DynArray[uint256, MAX_LEGOS]):   
+    firstRoutePath: DynArray[address, MAX_TOKEN_PATH] = _swapInstructions[0].tokenPath
+    firstRouteNumTokens: uint256 = len(firstRoutePath)
+    assert firstRouteNumTokens >= 2 # dev: invalid token path
+
+    # finalize token in and token out
+    tokenIn: address = firstRoutePath[0]
+    tokenOut: address = empty(address)
+    if _numSwapInstructions == 1:
+        tokenOut = firstRoutePath[firstRouteNumTokens - 1]
+
+    else:
+        lastRoutePath: DynArray[address, MAX_TOKEN_PATH] = _swapInstructions[_numSwapInstructions - 1].tokenPath
+        lastRouteNumTokens: uint256 = len(lastRoutePath)
+        assert lastRouteNumTokens >= 2 # dev: invalid token path
+        tokenOut = lastRoutePath[lastRouteNumTokens - 1]
+
+    assert empty(address) not in [tokenIn, tokenOut] # dev: invalid token path
+
+    # get lego ids
+    legoIds: DynArray[uint256, MAX_LEGOS] = []
+    for i: uint256 in range(_numSwapInstructions, bound=MAX_SWAP_INSTRUCTIONS):
+        legoId: uint256 = _swapInstructions[i].legoId
+        if legoId not in legoIds:
+            legoIds.append(legoId)
+
+    # finalize amount in
+    amountIn: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(tokenIn, _swapInstructions[0].amountIn, True, _cd)
+
+    return tokenIn, tokenOut, amountIn, legoIds
 
 
 ##################

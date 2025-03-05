@@ -64,7 +64,7 @@ legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: immutable(address)
 withdrawFails: public(bool)
-MAX_SWAP_HOPS: constant(uint256) = 5
+MAX_TOKEN_PATH: constant(uint256) = 5
 
 
 @deploy
@@ -314,27 +314,35 @@ def withdrawTokens(
 
 @external
 def swapTokens(
-    _tokenIn: address,
-    _tokenOut: address,
     _amountIn: uint256,
     _minAmountOut: uint256,
-    _pool: address,
-    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
-    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _tokenPath: DynArray[address, MAX_TOKEN_PATH],
+    _poolPath: DynArray[address, MAX_TOKEN_PATH - 1],
     _recipient: address,
-    _oracleRegistry: address = empty(address)) -> (uint256, uint256, uint256, uint256):
+    _oracleRegistry: address = empty(address),
+) -> (uint256, uint256, uint256, uint256):
     # THIS IS A TOTAL HACK
 
+    # validate inputs
+    numTokens: uint256 = len(_tokenPath)
+    numPools: uint256 = len(_poolPath)
+    assert numTokens >= 2 # dev: invalid path
+    assert numPools == numTokens - 1 # dev: invalid path
+
+    # get first token and last token
+    tokenIn: address = _tokenPath[0]
+    tokenOut: address = _tokenPath[numTokens - 1]
+
     # transfer tokens to this contract
-    tokenInAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
+    tokenInAmount: uint256 = min(_amountIn, staticcall IERC20(tokenIn).balanceOf(msg.sender))
     assert tokenInAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, tokenInAmount, default_return_value=True) # dev: transfer failed
+    assert extcall IERC20(tokenIn).transferFrom(msg.sender, self, tokenInAmount, default_return_value=True) # dev: transfer failed
 
-    # make sure equivalent amount of `_tokenOut` is in contract before doing this 
-    assert staticcall IERC20(_tokenOut).balanceOf(self) >= tokenInAmount # dev: need equivalent amount of `_tokenOut`
-    assert extcall IERC20(_tokenOut).transfer(msg.sender, tokenInAmount, default_return_value=True) # dev: transfer failed
+    # make sure equivalent amount of `tokenOut` is in contract before doing this 
+    assert staticcall IERC20(tokenOut).balanceOf(self) >= tokenInAmount # dev: need equivalent amount of `tokenOut`
+    assert extcall IERC20(tokenOut).transfer(_recipient, tokenInAmount, default_return_value=True) # dev: transfer failed
 
-    usdValue: uint256 = self._getUsdValue(_tokenIn, tokenInAmount, _oracleRegistry)
+    usdValue: uint256 = self._getUsdValue(tokenIn, tokenInAmount, _oracleRegistry)
     return tokenInAmount, tokenInAmount, 0, usdValue
 
 

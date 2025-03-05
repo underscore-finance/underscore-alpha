@@ -3,7 +3,8 @@ import boa
 
 from conf_utils import filter_logs
 from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, CONVERSION_UINT256
-from contracts.core import WalletFunds
+from utils.BluePrint import CORE_TOKENS
+
 
 #########
 # Tests #
@@ -464,3 +465,73 @@ def test_eth_weth_conversion_with_fees(ai_wallet, owner, agent, lego_aave_v3, ge
     logs = filter_logs(ai_wallet, "UserWalletTransactionFeePaid")
     assert len(logs) == 1  # Should have withdrawal and transfer fees
     assert logs[0].action == WITHDRAWAL_UINT256
+
+
+def test_swap_tokens(ai_wallet, agent, mock_lego_alpha, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale):
+    deposit_amount = 1000 * EIGHTEEN_DECIMALS
+    alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
+    bravo_token.transfer(mock_lego_alpha.address, deposit_amount, sender=bravo_token_whale)
+
+    instruction = (
+        mock_lego_alpha.legoId(),
+        deposit_amount,
+        0,
+        [alpha_token, bravo_token],
+        [alpha_token]
+    )
+
+    initialAmountIn, lastTokenOutAmount, lastUsdValue = ai_wallet.swapTokens([instruction], sender=agent)
+
+    assert lastTokenOutAmount != 0
+
+
+@pytest.base
+def test_swap_tokens_with_multiple_instructions(ai_wallet, agent, oracle_chainlink, getTokenAndWhale, governor, lego_uniswap_v2, lego_uniswap_v3, fork):
+    # usdc setup
+    usdc, usdc_whale = getTokenAndWhale("usdc")
+    usdc_amount = 10_000 * (10 ** usdc.decimals())
+    usdc.transfer(ai_wallet, usdc_amount, sender=usdc_whale)
+    assert oracle_chainlink.setChainlinkFeed(usdc, "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B", sender=governor)
+
+    # weth setup
+    weth = boa.from_etherscan(CORE_TOKENS[fork]["WETH"], name="weth token")
+    univ2_weth_usdc_pool = "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C"
+
+    # virtual setup
+    virtual = boa.from_etherscan(CORE_TOKENS[fork]["VIRTUAL"], name="virtual token")
+    univ2_weth_virtual_pool = "0xE31c372a7Af875b3B5E0F3713B17ef51556da667"
+    univ3_weth_virtual_pool = "0x9c087Eb773291e50CF6c6a90ef0F4500e349B903"
+
+    # cbbtc setup
+    cbbtc = boa.from_etherscan(CORE_TOKENS[fork]["CBBTC"], name="cbbtc token")
+    weth_cbbtc_pool = "0x8c7080564B5A792A33Ef2FD473fbA6364d5495e5"
+
+    # usdc -> weth -> virtual
+    first_instruction = (
+        lego_uniswap_v2.legoId(),
+        usdc_amount,
+        0,
+        [usdc, weth, virtual],
+        [univ2_weth_usdc_pool, univ2_weth_virtual_pool]
+    )
+
+    # virtual -> weth -> cbbtc
+    second_instruction = (
+        lego_uniswap_v3.legoId(),
+        MAX_UINT256,
+        0,
+        [virtual, weth, cbbtc],
+        [univ3_weth_virtual_pool, weth_cbbtc_pool]
+    )
+
+    pre_usdc_balance = usdc.balanceOf(ai_wallet)
+    pre_weth_balance = weth.balanceOf(ai_wallet)
+    pre_virtual_balance = virtual.balanceOf(ai_wallet)
+    pre_cbbtc_balance = cbbtc.balanceOf(ai_wallet)
+
+    initialAmountIn, lastTokenOutAmount, lastUsdValue = ai_wallet.swapTokens([first_instruction, second_instruction], sender=agent)
+
+    assert usdc.balanceOf(ai_wallet) == pre_usdc_balance - initialAmountIn
+    assert weth.balanceOf(ai_wallet) == pre_weth_balance
+    assert virtual.balanceOf(ai_wallet) == pre_virtual_balance
+    assert cbbtc.balanceOf(ai_wallet) == pre_cbbtc_balance + lastTokenOutAmount

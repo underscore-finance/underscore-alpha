@@ -56,6 +56,7 @@ event AerodromeSwap:
     amountIn: uint256
     amountOut: uint256
     usdValue: uint256
+    numTokens: uint256
     recipient: address
 
 event AerodromeLiquidityAdded:
@@ -106,6 +107,7 @@ ADDY_REGISTRY: public(immutable(address))
 
 MAX_SWAP_HOPS: constant(uint256) = 5
 EIGHTEEN_DECIMALS: constant(uint256) = 10 ** 18
+MAX_TOKEN_PATH: constant(uint256) = 5
 
 
 @deploy
@@ -143,49 +145,69 @@ def getAccessForLego(_user: address) -> (address, String[64], uint256):
 
 @external
 def swapTokens(
-    _tokenIn: address,
-    _tokenOut: address,
     _amountIn: uint256,
     _minAmountOut: uint256,
-    _pool: address,
-    _extraTokensIfHop: DynArray[address, MAX_SWAP_HOPS],
-    _extraPoolsIfHop: DynArray[address, MAX_SWAP_HOPS],
+    _tokenPath: DynArray[address, MAX_TOKEN_PATH],
+    _poolPath: DynArray[address, MAX_TOKEN_PATH - 1],
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
     assert self.isActivated # dev: not activated
 
-    assert empty(address) not in [_tokenIn, _tokenOut] # dev: invalid tokens
-    assert _tokenIn != _tokenOut # dev: invalid tokens
+    # validate inputs
+    numTokens: uint256 = len(_tokenPath)
+    numPools: uint256 = len(_poolPath)
+    assert numTokens >= 2 # dev: invalid path
+    assert numPools == numTokens - 1 # dev: invalid path
+
+    # get first token and last token
+    tokenIn: address = _tokenPath[0]
+    tokenOut: address = _tokenPath[numTokens - 1]
 
     # pre balances
-    preLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+    preLegoBalance: uint256 = staticcall IERC20(tokenIn).balanceOf(self)
 
     # transfer deposit asset to this contract
-    transferAmount: uint256 = min(_amountIn, staticcall IERC20(_tokenIn).balanceOf(msg.sender))
-    assert transferAmount != 0 # dev: nothing to transfer
-    assert extcall IERC20(_tokenIn).transferFrom(msg.sender, self, transferAmount, default_return_value=True) # dev: transfer failed
-    swapAmount: uint256 = min(transferAmount, staticcall IERC20(_tokenIn).balanceOf(self))
+    initialAmountIn: uint256 = min(_amountIn, staticcall IERC20(tokenIn).balanceOf(msg.sender))
+    assert initialAmountIn != 0 # dev: nothing to transfer
+    assert extcall IERC20(tokenIn).transferFrom(msg.sender, self, initialAmountIn, default_return_value=True) # dev: transfer failed
+    initialAmountIn = min(initialAmountIn, staticcall IERC20(tokenIn).balanceOf(self))
 
-    # perform swap
-    toAmount: uint256 = 0
-    if _pool != empty(address):
-        toAmount = self._swapTokensInPool(_pool, _tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
-    else:
-        toAmount = self._swapTokensGeneric(_tokenIn, _tokenOut, swapAmount, _minAmountOut, _recipient)
-    assert toAmount != 0 # dev: no tokens swapped
+    # transfer initial amount to first pool
+    assert extcall IERC20(tokenIn).transfer(_poolPath[0], initialAmountIn, default_return_value=True) # dev: transfer failed
+
+    aeroFactory: address = AERODROME_FACTORY
+
+    # iterate through swap routes
+    tempAmountIn: uint256 = initialAmountIn
+    for i: uint256 in range(numTokens - 1, bound=MAX_TOKEN_PATH):
+        tempTokenIn: address = _tokenPath[i]
+        tempTokenOut: address = _tokenPath[i + 1]
+        tempPool: address = _poolPath[i]
+
+        # transfer to next pool (or to recipient if last swap)
+        recipient: address = _recipient
+        if i < numTokens - 2:
+            recipient = _poolPath[i + 1]
+
+        # swap
+        tempAmountIn = self._swapTokensInPool(tempPool, tempTokenIn, tempTokenOut, tempAmountIn, recipient, aeroFactory)
+
+    # final amount
+    toAmount: uint256 = tempAmountIn
+    assert toAmount >= _minAmountOut # dev: min amount out not met
 
     # refund if full swap didn't get through
-    currentLegoBalance: uint256 = staticcall IERC20(_tokenIn).balanceOf(self)
+    currentLegoBalance: uint256 = staticcall IERC20(tokenIn).balanceOf(self)
     refundAssetAmount: uint256 = 0
     if currentLegoBalance > preLegoBalance:
         refundAssetAmount = currentLegoBalance - preLegoBalance
-        assert extcall IERC20(_tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
-        swapAmount -= refundAssetAmount
+        assert extcall IERC20(tokenIn).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
+        initialAmountIn -= refundAssetAmount
 
-    usdValue: uint256 = self._getUsdValue(_tokenIn, swapAmount, _tokenOut, toAmount, True, _oracleRegistry)
-    log AerodromeSwap(msg.sender, _tokenIn, _tokenOut, swapAmount, toAmount, usdValue, _recipient)
-    return swapAmount, toAmount, refundAssetAmount, usdValue
+    usdValue: uint256 = self._getUsdValue(tokenIn, initialAmountIn, tokenOut, toAmount, True, _oracleRegistry)
+    log AerodromeSwap(msg.sender, tokenIn, tokenOut, initialAmountIn, toAmount, usdValue, numTokens, _recipient)
+    return initialAmountIn, toAmount, refundAssetAmount, usdValue
 
 
 # swap in pool
@@ -197,8 +219,8 @@ def _swapTokensInPool(
     _tokenIn: address,
     _tokenOut: address,
     _amountIn: uint256,
-    _minAmountOut: uint256,
     _recipient: address,
+    _aeroFactory: address,
 ) -> uint256:
     token0: address = empty(address)
     token1: address = empty(address)
@@ -207,71 +229,24 @@ def _swapTokensInPool(
     tokens: address[2] = [token0, token1]
     assert _tokenIn in tokens # dev: invalid tokenIn
     assert _tokenOut in tokens # dev: invalid tokenOut
+    assert _tokenIn != _tokenOut # dev: invalid tokens
+
+    # verify actual aerodrome pool
+    assert staticcall AeroFactory(_aeroFactory).getPool(_tokenIn, _tokenOut, staticcall AeroClassicPool(_pool).stable()) == _pool # dev: invalid pool
 
     zeroForOne: bool = _tokenIn == token0
-    preRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
-
-    # finalize amount out
     amountOut: uint256 = staticcall AeroClassicPool(_pool).getAmountOut(_amountIn, _tokenIn)
+    assert amountOut != 0 # dev: no tokens swapped
 
+    # put in correct order
     amount0Out: uint256 = amountOut
     amount1Out: uint256 = 0
     if zeroForOne:
         amount0Out = 0
         amount1Out = amountOut
 
-    # perform swap
-    assert extcall IERC20(_tokenIn).transfer(_pool, _amountIn, default_return_value=True) # dev: transfer failed
     extcall AeroClassicPool(_pool).swap(amount0Out, amount1Out, _recipient, b"")
-
-    # get post-swap recipient balance
-    toAmount: uint256 = 0
-    postRecipientBalance: uint256 = staticcall IERC20(_tokenOut).balanceOf(_recipient)
-    if postRecipientBalance > preRecipientBalance:
-        toAmount = postRecipientBalance - preRecipientBalance
-
-    assert toAmount != 0 and toAmount >= _minAmountOut # dev: insufficient output
-    return toAmount
-
-
-# generic swap
-
-
-@internal
-def _swapTokensGeneric(
-    _tokenIn: address,
-    _tokenOut: address,
-    _amountIn: uint256,
-    _minAmountOut: uint256, 
-    _recipient: address,
-) -> uint256:
-    factory: address = AERODROME_FACTORY
-    swapRouter: address = AERODROME_ROUTER
-    assert extcall IERC20(_tokenIn).approve(swapRouter, _amountIn, default_return_value=True) # dev: approval failed
-
-    # perform swap
-    route: Route = Route(
-        from_=_tokenIn,
-        to=_tokenOut,
-        stable=self._isStablePair(_tokenIn, _tokenOut, factory),
-        factory=factory,
-    )
-    amounts: DynArray[uint256, MAX_SWAP_HOPS + 2] = extcall AeroRouter(swapRouter).swapExactTokensForTokens(_amountIn, _minAmountOut, [route], _recipient, block.timestamp)
-
-    assert extcall IERC20(_tokenIn).approve(swapRouter, 0, default_return_value=True) # dev: approval failed
-    return amounts[1]
-
-
-@view
-@internal
-def _isStablePair(_tokenA: address, _tokenB: address, _factory: address) -> bool:
-    pool: address = staticcall AeroFactory(_factory).getPool(_tokenA, _tokenB, True)
-    if pool != empty(address):
-        return True
-
-    pool = staticcall AeroFactory(_factory).getPool(_tokenA, _tokenB, False)
-    assert pool != empty(address) # dev: no pool found
-    return False
+    return amountOut
 
 
 #################
