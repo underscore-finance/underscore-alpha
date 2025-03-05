@@ -167,20 +167,17 @@ def test_claim_rewards_with_signature(special_ai_wallet, special_agent, mock_leg
     assert log.isSignerAgent
 
 
-def test_transfer_with_signature(special_ai_wallet, special_ai_wallet_config, sally, special_agent, owner, mock_lego_alpha, alpha_token, alpha_token_whale, broadcaster, signTransfer):
+def test_transfer_with_signature(special_ai_wallet, special_agent, owner, mock_lego_alpha, alpha_token, alpha_token_whale, broadcaster, signTransfer):
     # setup
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
     alpha_token.transfer(special_ai_wallet, deposit_amount, sender=alpha_token_whale)
 
-    # setup whitelist
-    assert special_ai_wallet_config.setWhitelistAddr(sally, True, sender=owner)
-
     # signature
-    signature = signTransfer(special_agent, special_ai_wallet, sally, MAX_UINT256, alpha_token.address)
+    signature = signTransfer(special_agent, special_ai_wallet, owner, MAX_UINT256, alpha_token.address)
 
     # transfer
-    special_agent.transferFunds(special_ai_wallet, sally, MAX_UINT256, alpha_token.address, signature, sender=broadcaster)
+    special_agent.transferFunds(special_ai_wallet, owner, MAX_UINT256, alpha_token.address, signature, sender=broadcaster)
     
     log = filter_logs(special_agent, "UserWalletFundsTransferred")[0]
     assert log.signer == special_agent.address

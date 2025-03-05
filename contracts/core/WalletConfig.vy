@@ -12,9 +12,17 @@ interface LegoRegistry:
     def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
     def isValidLegoId(_legoId: uint256) -> bool: view
 
-interface WalletFunds:
+interface UserWallet:
     def trialFundsInitialAmount() -> uint256: view
     def trialFundsAsset() -> address: view
+    def walletConfig() -> address: view
+
+interface WalletConfig:
+    def hasPendingOwnerChange() -> bool: view
+    def owner() -> address: view
+
+interface AgentFactory:
+    def isUserWallet(_wallet: address) -> bool: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -39,6 +47,10 @@ struct AgentInfo:
     allowedAssets: DynArray[address, MAX_ASSETS]
     allowedLegoIds: DynArray[uint256, MAX_LEGOS]
     allowedActions: AllowedActions
+
+struct PendingWhitelist:
+    initiatedBlock: uint256
+    confirmBlock: uint256
 
 struct CoreData:
     owner: address
@@ -129,9 +141,22 @@ event AllowedActionsModified:
     canBorrow: bool
     canRepay: bool
 
-event WhitelistAddrSet:
+event WhitelistAddrPending:
     addr: indexed(address)
-    isAllowed: bool
+    confirmBlock: uint256
+
+event WhitelistAddrConfirmed:
+    addr: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event WhitelistAddrCancelled:
+    addr: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event WhitelistAddrRemoved:
+    addr: indexed(address)
 
 event ReserveAssetSet:
     asset: indexed(address)
@@ -173,13 +198,17 @@ ownershipChangeDelay: public(uint256) # num blocks to wait before owner can be c
 protocolSub: public(ProtocolSub) # subscription info
 reserveAssets: public(HashMap[address, uint256]) # asset -> reserve amount
 agentSettings: public(HashMap[address, AgentInfo]) # agent -> agent info
+
+# transfer whitelist
 isRecipientAllowed: public(HashMap[address, bool]) # recipient -> is allowed
+pendingWhitelist: public(HashMap[address, PendingWhitelist]) # addr -> pending whitelist
 
 # config
 addyRegistry: public(address)
 initialized: public(bool)
 
 # registry ids
+AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
@@ -460,8 +489,8 @@ def _getCoreData() -> CoreData:
         legoRegistry=staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID),
         priceSheets=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_SHEETS_ID),
         oracleRegistry=staticcall AddyRegistry(addyRegistry).getAddy(ORACLE_REGISTRY_ID),
-        trialFundsAsset=staticcall WalletFunds(wallet).trialFundsAsset(),
-        trialFundsInitialAmount=staticcall WalletFunds(wallet).trialFundsInitialAmount(),
+        trialFundsAsset=staticcall UserWallet(wallet).trialFundsAsset(),
+        trialFundsInitialAmount=staticcall UserWallet(wallet).trialFundsInitialAmount(),
     )
 
 
@@ -773,27 +802,80 @@ def _hasAllowedActionsSet(_actions: AllowedActions) -> bool:
 ######################
 
 
+@view
+@external
+def canTransferToRecipient(_recipient: address) -> bool:
+    isAllowed: bool = self.isRecipientAllowed[_recipient]
+    if isAllowed:
+        return True
+
+    # pending ownership change, don't even check if recipient is Underscore wallet
+    if self.pendingOwner.initiatedBlock != 0:
+        return False
+
+    # check if recipient is Underscore wallet, if owner is same (no pending ownership changes), transfer is allowed
+    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
+    if staticcall AgentFactory(agentFactory).isUserWallet(_recipient):
+        walletConfig: address = staticcall UserWallet(_recipient).walletConfig()
+        if not staticcall WalletConfig(walletConfig).hasPendingOwnerChange():
+            isAllowed = self.owner == staticcall WalletConfig(walletConfig).owner()
+
+    return isAllowed
+
+
 @nonreentrant
 @external
-def setWhitelistAddr(_addr: address, _isAllowed: bool) -> bool:
-    """
-    @notice Sets or removes an address from the transfer whitelist
-    @dev Can only be called by the owner
-    @param _addr The external address to whitelist/blacklist
-    @param _isAllowed Whether the address can receive funds
-    @return bool True if the whitelist was updated successfully
-    """
+def addWhitelistAddr(_addr: address):
     owner: address = self.owner
-    assert msg.sender == owner # dev: no perms
+    assert msg.sender == owner # dev: only owner can add whitelist
 
     assert _addr != empty(address) # dev: invalid addr
     assert _addr != owner # dev: owner cannot be whitelisted
     assert _addr != self # dev: wallet cannot be whitelisted
-    assert _isAllowed != self.isRecipientAllowed[_addr] # dev: already set
+    assert not self.isRecipientAllowed[_addr] # dev: already whitelisted
+    assert self.pendingWhitelist[_addr].initiatedBlock == 0 # dev: pending whitelist already exists
 
-    self.isRecipientAllowed[_addr] = _isAllowed
-    log WhitelistAddrSet(_addr, _isAllowed)
-    return True
+    # this uses same delay as ownership change
+    confirmBlock: uint256 = block.number + self.ownershipChangeDelay
+    self.pendingWhitelist[_addr] = PendingWhitelist(
+        initiatedBlock = block.number,
+        confirmBlock = confirmBlock,
+    )
+    log WhitelistAddrPending(_addr, confirmBlock)
+
+
+@nonreentrant
+@external
+def confirmWhitelistAddr(_addr: address):
+    assert msg.sender == self.owner # dev: only owner can confirm
+
+    data: PendingWhitelist = self.pendingWhitelist[_addr]
+    assert data.initiatedBlock != 0 # dev: no pending whitelist
+    assert data.confirmBlock != 0 and block.number >= data.confirmBlock # dev: time delay not reached
+
+    self.pendingWhitelist[_addr] = empty(PendingWhitelist)
+    self.isRecipientAllowed[_addr] = True
+    log WhitelistAddrConfirmed(_addr, data.initiatedBlock, data.confirmBlock)
+
+
+@nonreentrant
+@external
+def cancelPendingWhitelistAddr(_addr: address):
+    assert msg.sender == self.owner # dev: only owner can cancel
+    data: PendingWhitelist = self.pendingWhitelist[_addr]
+    assert data.initiatedBlock != 0 # dev: no pending whitelist
+    self.pendingWhitelist[_addr] = empty(PendingWhitelist)
+    log WhitelistAddrCancelled(_addr, data.initiatedBlock, data.confirmBlock)
+
+
+@nonreentrant
+@external
+def removeWhitelistAddr(_addr: address):
+    assert msg.sender == self.owner # dev: only owner can remove whitelist
+    assert self.isRecipientAllowed[_addr] # dev: not on whitelist
+
+    self.isRecipientAllowed[_addr] = False
+    log WhitelistAddrRemoved(_addr)
 
 
 ##################
@@ -829,6 +911,12 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
 ####################
 # Ownership Change #
 ####################
+
+
+@view
+@external
+def hasPendingOwnerChange() -> bool:
+    return self.pendingOwner.initiatedBlock != 0
 
 
 @external

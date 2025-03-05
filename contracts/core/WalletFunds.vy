@@ -13,7 +13,7 @@ from ethereum.ercs import IERC721
 interface WalletConfig:
     def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo): nonpayable
     def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData = empty(CoreData)) -> uint256: view
-    def isRecipientAllowed(_recipient: address) -> bool: view
+    def canTransferToRecipient(_recipient: address) -> bool: view
     def owner() -> address: view
 
 interface LegoRegistry:
@@ -1032,7 +1032,7 @@ def _transferFunds(
 
     # validate recipient
     if _recipient != _cd.owner:
-        assert staticcall WalletConfig(_cd.walletConfig).isRecipientAllowed(_recipient) # dev: recipient not allowed
+        assert staticcall WalletConfig(_cd.walletConfig).canTransferToRecipient(_recipient) # dev: recipient not allowed
 
     # handle eth
     if _asset == empty(address):

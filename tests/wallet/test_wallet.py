@@ -205,8 +205,13 @@ def test_fund_transfers(ai_wallet, ai_wallet_config, owner, agent, alpha_token, 
 
     # Setup
     ai_wallet_config.addAssetForAgent(agent, alpha_token, sender=owner)
-    ai_wallet_config.setWhitelistAddr(sally, True, sender=owner)
     alpha_token.transfer(ai_wallet, transfer_amount, sender=alpha_token_whale)
+
+    # add whitelist
+    ai_wallet_config.addWhitelistAddr(sally, sender=owner)
+    delay = ai_wallet_config.ownershipChangeDelay()
+    boa.env.time_travel(blocks=delay)
+    ai_wallet_config.confirmWhitelistAddr(sally, sender=owner)
 
     # Test transfer by owner
     assert ai_wallet.transferFunds(sally, MAX_UINT256, alpha_token, sender=owner)
@@ -240,11 +245,6 @@ def test_fund_transfers(ai_wallet, ai_wallet_config, owner, agent, alpha_token, 
     assert log.asset == ZERO_ADDRESS
     assert log.amount == amount
     assert log.isSignerAgent
-
-    # Test whitelist functionality
-    assert not ai_wallet_config.isRecipientAllowed(bob)
-    ai_wallet_config.setWhitelistAddr(bob, True, sender=owner)
-    assert ai_wallet_config.isRecipientAllowed(bob)
 
     # Test transfer restrictions
     with boa.reverts("recipient not allowed"):
