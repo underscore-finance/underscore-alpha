@@ -64,7 +64,12 @@ def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, bravo_to
     # Setup initial permissions
     ai_wallet_config.addAssetForAgent(agent, alpha_token, sender=owner)
     ai_wallet_config.addLegoIdForAgent(agent, mock_lego_alpha.legoId(), sender=owner)
-    ai_wallet_config.setWhitelistAddr(sally, True, sender=owner)
+
+    # add whitelist
+    ai_wallet_config.addWhitelistAddr(sally, sender=owner)
+    delay = ai_wallet_config.ownershipChangeDelay()
+    boa.env.time_travel(blocks=delay)
+    ai_wallet_config.confirmWhitelistAddr(sally, sender=owner)
 
     # Set restricted permissions - only allow deposits, transfers, add liquidity, claim rewards, and borrow
     allowed_actions = (True, True, False, False, True, False, False, True, False, True, True, False)
