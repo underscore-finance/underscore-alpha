@@ -71,7 +71,7 @@ AERODROME_ID: public(immutable(uint256))
 AERODROME_SLIPSTREAM_ID: public(immutable(uint256))
 CURVE_ID: public(immutable(uint256))
 
-MAX_ROUTES: constant(uint256) = 3
+MAX_ROUTES: constant(uint256) = 5
 
 
 @deploy

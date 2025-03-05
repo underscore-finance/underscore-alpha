@@ -86,6 +86,10 @@ interface CommonCurvePool:
     def exchange(_i: int128, _j: int128, _dx: uint256, _min_dy: uint256, _receiver: address = msg.sender) -> uint256: nonpayable
     def fee() -> uint256: view
 
+interface CurveRateProvider:
+    def get_quotes(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> DynArray[Quote, MAX_QUOTES]: view
+    def get_aggregated_rate(_tokenIn: address, _tokenOut: address) -> uint256: view
+
 interface CryptoLegacyPool:
     def exchange(_i: uint256, _j: uint256, _dx: uint256, _min_dy: uint256, _use_eth: bool = False) -> uint256: payable
 
@@ -97,10 +101,6 @@ interface CurveAddressProvider:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-
-interface CurveRateProvider:
-    def get_quotes(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> DynArray[Quote, MAX_QUOTES]: view
-    def get_aggregated_rate(_tokenIn: address, _tokenOut: address) -> uint256: view
 
 flag PoolType:
     STABLESWAP_NG
@@ -179,9 +179,6 @@ event CurveFundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
-event CurvePreferredPoolsSet:
-    numPools: uint256
-
 event CurveLegoIdSet:
     legoId: uint256
 
@@ -189,7 +186,6 @@ event CurveActivated:
     isActivated: bool
 
 # curve
-preferredPools: public(DynArray[address, MAX_POOLS])
 CURVE_META_REGISTRY: public(immutable(address))
 CURVE_REGISTRIES: public(immutable(CurveRegistries))
 
@@ -1224,47 +1220,6 @@ def _getDeepestLiqPool(_tokenA: address, _tokenB: address, _allPools: DynArray[a
 
 @view
 @internal
-def _getBestPoolForSwap(_tokenA: address, _tokenB: address, _metaRegistry: address) -> PoolData:
-    allPools: DynArray[address, MAX_POOLS] = staticcall CurveMetaRegistry(_metaRegistry).find_pools_for_coins(_tokenA, _tokenB)
-    if len(allPools) == 0:
-        return empty(PoolData)
-
-    bestPoolAddr: address = empty(address)
-    bestTokenAIndex: int128 = 0
-    bestTokenBIndex: int128 = 0
-
-    # check preferred pools first
-    preferredPools: DynArray[address, MAX_POOLS] = self.preferredPools
-    for i: uint256 in range(len(preferredPools), bound=MAX_POOLS):
-        preferredPool: address = preferredPools[i]
-        if preferredPool in allPools:
-            bestPoolAddr = preferredPool
-            break
-
-    # get missing data on preferred pool
-    if bestPoolAddr != empty(address):
-        na: bool = False
-        bestTokenAIndex, bestTokenBIndex, na = staticcall CurveMetaRegistry(_metaRegistry).get_coin_indices(bestPoolAddr, _tokenA, _tokenB)
-
-    # get deepest liquidity pool
-    else:
-        na: uint256 = 0
-        bestPoolAddr, bestTokenAIndex, bestTokenBIndex, na = self._getDeepestLiqPool(_tokenA, _tokenB, allPools, _metaRegistry)
-
-    if bestPoolAddr == empty(address):
-        return empty(PoolData)
-
-    return PoolData(
-        pool=bestPoolAddr,
-        indexTokenA=convert(bestTokenAIndex, uint256),
-        indexTokenB=convert(bestTokenBIndex, uint256),
-        poolType=self._getPoolType(bestPoolAddr, _metaRegistry),
-        numCoins=staticcall CurveMetaRegistry(_metaRegistry).get_n_coins(bestPoolAddr),
-    )
-
-
-@view
-@internal
 def _getPoolData(_pool: address, _tokenA: address, _tokenB: address, _metaRegistry: address) -> PoolData:
     assert staticcall CurveMetaRegistry(_metaRegistry).is_registered(_pool) # dev: invalid pool
     coins: address[8] = staticcall CurveMetaRegistry(_metaRegistry).get_coins(_pool)
@@ -1473,28 +1428,6 @@ def _getCorrectRatioAmounts(
 @internal
 def _quote(_amountA: uint256, _reserveA: uint256, _reserveB: uint256) -> uint256:
     return (_amountA * _reserveB) // _reserveA
-
-
-###################
-# Preferred Pools #
-###################
-
-
-@external
-def setPreferredPools(_pools: DynArray[address, MAX_POOLS]) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
-
-    pools: DynArray[address, MAX_POOLS] = []
-    for i: uint256 in range(len(_pools), bound=MAX_POOLS):
-        p: address = _pools[i]
-        if p == empty(address):
-            continue
-        if p not in pools and staticcall CurveMetaRegistry(CURVE_META_REGISTRY).is_registered(p):
-            pools.append(p)
-
-    self.preferredPools = pools
-    log CurvePreferredPoolsSet(len(pools))
-    return True
 
 
 #################

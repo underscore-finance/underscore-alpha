@@ -82,83 +82,45 @@ def getPool(fork):
 #########
 
 
-# @pytest.mark.parametrize("token_str", TEST_ASSETS)
-# @pytest.always
-# def test_aerodrome_classic_swap_max(
-#     token_str,
-#     testLegoSwap,
-#     getTokenAndWhale,
-#     bob_ai_wallet,
-#     lego_aero_classic,
-#     getToToken,
-# ):
-#     # setup
-#     fromAsset, whale = getTokenAndWhale(token_str)
-#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-#     toToken = getToToken(token_str)
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_aerodrome_classic_swap_max_with_pool(
+    token_str,
+    testLegoSwap,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+    getToToken,
+    getPool,
+):
+    # setup
+    fromAsset, whale = getTokenAndWhale(token_str)
+    fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
+    toToken = getToToken(token_str)
 
-#     testLegoSwap(lego_aero_classic.legoId(), fromAsset, toToken)
-
-
-# @pytest.mark.parametrize("token_str", TEST_ASSETS)
-# @pytest.always
-# def test_aerodrome_classic_swap_partial(
-#     token_str,
-#     testLegoSwap,
-#     getTokenAndWhale,
-#     bob_ai_wallet,
-#     lego_aero_classic,
-#     getToToken,
-# ):
-#     # setup
-#     fromAsset, whale = getTokenAndWhale(token_str)
-#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-#     toToken = getToToken(token_str)
-
-#     testLegoSwap(lego_aero_classic.legoId(), fromAsset, toToken, testAmount // 2)
+    pool = getPool(token_str)
+    testLegoSwap(lego_aero_classic.legoId(), fromAsset, toToken, pool)
 
 
+@pytest.mark.parametrize("token_str", TEST_ASSETS)
+@pytest.always
+def test_aerodrome_classic_swap_partial_with_pool(
+    token_str,
+    testLegoSwap,
+    getTokenAndWhale,
+    bob_ai_wallet,
+    lego_aero_classic,
+    getToToken,
+    getPool,
+):
+    # setup
+    fromAsset, whale = getTokenAndWhale(token_str)
+    testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
+    fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
+    toToken = getToToken(token_str)
 
-# @pytest.mark.parametrize("token_str", TEST_ASSETS)
-# @pytest.always
-# def test_aerodrome_classic_swap_max_with_pool(
-#     token_str,
-#     testLegoSwap,
-#     getTokenAndWhale,
-#     bob_ai_wallet,
-#     lego_aero_classic,
-#     getToToken,
-#     getPool,
-# ):
-#     # setup
-#     fromAsset, whale = getTokenAndWhale(token_str)
-#     fromAsset.transfer(bob_ai_wallet.address, TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals()), sender=whale)
-#     toToken = getToToken(token_str)
-
-#     pool = getPool(token_str)
-#     testLegoSwap(lego_aero_classic.legoId(), fromAsset, toToken, MAX_UINT256, 0, pool)
-
-
-# @pytest.mark.parametrize("token_str", TEST_ASSETS)
-# @pytest.always
-# def test_aerodrome_classic_swap_partial_with_pool(
-#     token_str,
-#     testLegoSwap,
-#     getTokenAndWhale,
-#     bob_ai_wallet,
-#     lego_aero_classic,
-#     getToToken,
-#     getPool,
-# ):
-#     # setup
-#     fromAsset, whale = getTokenAndWhale(token_str)
-#     testAmount = TEST_AMOUNTS[token_str] * (10 ** fromAsset.decimals())
-#     fromAsset.transfer(bob_ai_wallet.address, testAmount, sender=whale)
-#     toToken = getToToken(token_str)
-
-#     pool = getPool(token_str)
-#     testLegoSwap(lego_aero_classic.legoId(), fromAsset, toToken, testAmount // 2, 0, pool)
+    pool = getPool(token_str)
+    testLegoSwap(lego_aero_classic.legoId(), fromAsset, toToken, pool, testAmount // 2)
 
 
 @pytest.always
