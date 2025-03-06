@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 # pragma optimize codesize
 
 implements: LegoDex
@@ -177,7 +177,7 @@ event CurveLiquidityRemoved:
 event CurveFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
-    balance: uint256
+    amount: uint256
 
 event CurveLegoIdSet:
     legoId: uint256
@@ -304,7 +304,7 @@ def swapTokens(
         initialAmountIn -= refundAssetAmount
 
     usdValue: uint256 = self._getUsdValue(tokenIn, initialAmountIn, tokenOut, toAmount, True, _oracleRegistry)
-    log CurveSwap(msg.sender, tokenIn, tokenOut, initialAmountIn, toAmount, usdValue, numTokens, _recipient)
+    log CurveSwap(sender=msg.sender, tokenIn=tokenIn, tokenOut=tokenOut, amountIn=initialAmountIn, amountOut=toAmount, usdValue=usdValue, numTokens=numTokens, recipient=_recipient)
     return initialAmountIn, toAmount, refundAssetAmount, usdValue
 
 
@@ -441,7 +441,7 @@ def addLiquidity(
             liqAmountB -= refundAssetAmountB
 
     usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
-    log CurveLiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, usdValue, _recipient)
+    log CurveLiquidityAdded(sender=msg.sender, tokenA=_tokenA, tokenB=_tokenB, amountA=liqAmountA, amountB=liqAmountB, lpAmountReceived=lpAmountReceived, usdValue=usdValue, recipient=_recipient)
     return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, 0
 
 
@@ -634,7 +634,7 @@ def removeLiquidity(
         lpAmount -= refundedLpAmount
 
     usdValue: uint256 = self._getUsdValue(_tokenA, amountA, _tokenB, amountB, False, _oracleRegistry)
-    log CurveLiquidityRemoved(msg.sender, _pool, _tokenA, _tokenB, amountA, amountB, _lpToken, lpAmount, usdValue, _recipient)
+    log CurveLiquidityRemoved(sender=msg.sender, pool=_pool, tokenA=_tokenA, tokenB=_tokenB, amountA=amountA, amountB=amountB, lpToken=_lpToken, lpAmountBurned=lpAmount, usdValue=usdValue, recipient=_recipient)
     return amountA, amountB, usdValue, lpAmount, refundedLpAmount, refundedLpAmount != 0
 
 
@@ -1449,7 +1449,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log CurveFundsRecovered(_asset, _recipient, balance)
+    log CurveFundsRecovered(asset=_asset, recipient=_recipient, amount=balance)
     return True
 
 
@@ -1464,7 +1464,7 @@ def setLegoId(_legoId: uint256) -> bool:
     prevLegoId: uint256 = self.legoId
     assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
-    log CurveLegoIdSet(_legoId)
+    log CurveLegoIdSet(legoId=_legoId)
     return True
 
 
@@ -1472,4 +1472,4 @@ def setLegoId(_legoId: uint256) -> bool:
 def activate(_shouldActivate: bool):
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
-    log CurveActivated(_shouldActivate)
+    log CurveActivated(isActivated=_shouldActivate)

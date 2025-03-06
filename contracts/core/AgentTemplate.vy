@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 from interfaces import UserWalletInterface
 from ethereum.ercs import IERC20
@@ -774,7 +774,7 @@ def changeOwnership(_newOwner: address):
         initiatedBlock= block.number,
         confirmBlock= confirmBlock,
     )
-    log AgentOwnershipChangeInitiated(currentOwner, _newOwner, confirmBlock)
+    log AgentOwnershipChangeInitiated(prevOwner=currentOwner, newOwner=_newOwner, confirmBlock=confirmBlock)
 
 
 @external
@@ -791,7 +791,7 @@ def confirmOwnershipChange():
     prevOwner: address = self.owner
     self.owner = data.newOwner
     self.pendingOwner = empty(PendingOwner)
-    log AgentOwnershipChangeConfirmed(prevOwner, data.newOwner, data.initiatedBlock, data.confirmBlock)
+    log AgentOwnershipChangeConfirmed(prevOwner=prevOwner, newOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @external
@@ -804,7 +804,7 @@ def cancelOwnershipChange():
     data: PendingOwner = self.pendingOwner
     assert data.confirmBlock != 0 # dev: no pending change
     self.pendingOwner = empty(PendingOwner)
-    log AgentOwnershipChangeCancelled(data.newOwner, data.initiatedBlock, data.confirmBlock)
+    log AgentOwnershipChangeCancelled(cancelledOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @external
@@ -817,7 +817,7 @@ def setOwnershipChangeDelay(_numBlocks: uint256):
     assert msg.sender == self.owner # dev: no perms
     assert _numBlocks >= MIN_OWNER_CHANGE_DELAY and _numBlocks <= MAX_OWNER_CHANGE_DELAY # dev: invalid delay
     self.ownershipChangeDelay = _numBlocks
-    log AgentOwnershipChangeDelaySet(_numBlocks)
+    log AgentOwnershipChangeDelaySet(delayBlocks=_numBlocks)
 
 
 #################
@@ -840,5 +840,5 @@ def recoverFunds(_asset: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(owner, balance, default_return_value=True) # dev: recovery failed
-    log AgentFundsRecovered(_asset, owner, balance)
+    log AgentFundsRecovered(asset=_asset, recipient=owner, balance=balance)
     return True

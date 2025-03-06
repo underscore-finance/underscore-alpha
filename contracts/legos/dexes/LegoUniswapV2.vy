@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: LegoDex
 implements: LegoCommon
@@ -76,7 +76,7 @@ event UniV2WethCoreRouterPoolSet:
 event UniV2FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
-    balance: uint256
+    amount: uint256
 
 event UniswapV2LegoIdSet:
     legoId: uint256
@@ -194,7 +194,7 @@ def swapTokens(
         initialAmountIn -= refundAssetAmount
 
     usdValue: uint256 = self._getUsdValue(tokenIn, initialAmountIn, tokenOut, toAmount, True, _oracleRegistry)
-    log UniswapV2Swap(msg.sender, tokenIn, tokenOut, initialAmountIn, toAmount, usdValue, numTokens, _recipient)
+    log UniswapV2Swap(sender=msg.sender, tokenIn=tokenIn, tokenOut=tokenOut, amountIn=initialAmountIn, amountOut=toAmount, usdValue=usdValue, numTokens=numTokens, recipient=_recipient)
     return initialAmountIn, toAmount, refundAssetAmount, usdValue
 
 
@@ -316,7 +316,7 @@ def addLiquidity(
         assert extcall IERC20(_tokenB).transfer(msg.sender, refundAssetAmountB, default_return_value=True) # dev: transfer failed
 
     usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
-    log UniswapV2LiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, lpAmountReceived, usdValue, _recipient)
+    log UniswapV2LiquidityAdded(sender=msg.sender, tokenA=_tokenA, tokenB=_tokenB, amountA=liqAmountA, amountB=liqAmountB, lpAmountReceived=lpAmountReceived, usdValue=usdValue, recipient=_recipient)
     return lpAmountReceived, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, 0
 
 
@@ -386,7 +386,7 @@ def removeLiquidity(
         lpAmount -= refundedLpAmount
 
     usdValue: uint256 = self._getUsdValue(_tokenA, amountA, _tokenB, amountB, False, _oracleRegistry)
-    log UniswapV2LiquidityRemoved(msg.sender, _pool, _tokenA, _tokenB, amountA, amountB, _lpToken, lpAmount, usdValue, _recipient)
+    log UniswapV2LiquidityRemoved(sender=msg.sender, pool=_pool, tokenA=_tokenA, tokenB=_tokenB, amountA=amountA, amountB=amountB, lpToken=_lpToken, lpAmountBurned=lpAmount, usdValue=usdValue, recipient=_recipient)
     return amountA, amountB, usdValue, lpAmount, refundedLpAmount, refundedLpAmount != 0
 
 
@@ -712,7 +712,7 @@ def _getAmountIn(_pool: address, _zeroForOne: bool, _amountOut: uint256) -> uint
 def setCoreRouterPool(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.coreRouterPool = _addr
-    log UniV2WethCoreRouterPoolSet(_addr)
+    log UniV2WethCoreRouterPoolSet(pool=_addr)
     return True
 
 
@@ -730,7 +730,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log UniV2FundsRecovered(_asset, _recipient, balance)
+    log UniV2FundsRecovered(asset=_asset, recipient=_recipient, amount=balance)
     return True
 
 
@@ -745,7 +745,7 @@ def setLegoId(_legoId: uint256) -> bool:
     prevLegoId: uint256 = self.legoId
     assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
-    log UniswapV2LegoIdSet(_legoId)
+    log UniswapV2LegoIdSet(legoId=_legoId)
     return True
 
 
@@ -753,4 +753,4 @@ def setLegoId(_legoId: uint256) -> bool:
 def activate(_shouldActivate: bool):
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
-    log UniswapV2Activated(_shouldActivate)
+    log UniswapV2Activated(isActivated=_shouldActivate)

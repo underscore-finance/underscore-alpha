@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 # @dev Implementation of ERC-20 token standard.
 # @author Takayuki Jimba (@yudetamago)
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
@@ -56,7 +56,7 @@ def __init__(_hq: address, _name: String[32], _symbol: String[32], _decimals: ui
     if init_supply != 0:
         self.balanceOf[_hq] = init_supply
         self.totalSupply = init_supply
-        log Transfer(empty(address), _hq, init_supply)
+        log Transfer(sender=empty(address), receiver=_hq, value=init_supply)
 
 
 @external
@@ -70,7 +70,7 @@ def transfer(_to : address, _value : uint256) -> bool:
     #       so the following subtraction would revert on insufficient balance
     self.balanceOf[msg.sender] -= _value
     self.balanceOf[_to] += _value
-    log Transfer(msg.sender, _to, _value)
+    log Transfer(sender=msg.sender, receiver=_to, value=_value)
     return True
 
 
@@ -89,7 +89,7 @@ def transferFrom(_from : address, _to : address, _value : uint256) -> bool:
     # NOTE: vyper does not allow underflows
     #      so the following subtraction would revert on insufficient allowance
     self.allowance[_from][msg.sender] -= _value
-    log Transfer(_from, _to, _value)
+    log Transfer(sender=_from, receiver=_to, value=_value)
     return True
 
 
@@ -105,7 +105,7 @@ def approve(_spender : address, _value : uint256) -> bool:
     @param _value The amount of tokens to be spent.
     """
     self.allowance[msg.sender][_spender] = _value
-    log Approval(msg.sender, _spender, _value)
+    log Approval(owner=msg.sender, spender=_spender, value=_value)
     return True
 
 
@@ -122,7 +122,7 @@ def mint(_to: address, _value: uint256):
     assert _to != empty(address)
     self.totalSupply += _value
     self.balanceOf[_to] += _value
-    log Transfer(empty(address), _to, _value)
+    log Transfer(sender=empty(address), receiver=_to, value=_value)
 
 
 @internal
@@ -136,7 +136,7 @@ def _burn(_to: address, _value: uint256):
     assert _to != empty(address)
     self.totalSupply -= _value
     self.balanceOf[_to] -= _value
-    log Transfer(_to, empty(address), _value)
+    log Transfer(sender=_to, receiver=empty(address), value=_value)
 
 
 @external
@@ -164,5 +164,5 @@ def setMinter(_minter: address, _canMint: bool) -> bool:
     assert msg.sender == self.hq
     assert _minter != empty(address) and _minter != self.hq
     self.isMinter[_minter] = _canMint
-    log MinterUpdated(_minter, _canMint)
+    log MinterUpdated(minter=_minter, canMint=_canMint)
     return True

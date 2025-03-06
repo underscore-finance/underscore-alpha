@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: IUniswapV3Callback
 implements: LegoCommon
@@ -171,7 +171,7 @@ event UniswapV3LiquidityRemoved:
 event UniV3FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
-    balance: uint256
+    amount: uint256
 
 event UniV3CoreRouterPoolSet:
     pool: indexed(address)
@@ -314,7 +314,7 @@ def swapTokens(
         initialAmountIn -= refundAssetAmount
 
     usdValue: uint256 = self._getUsdValue(tokenIn, initialAmountIn, tokenOut, toAmount, True, _oracleRegistry)
-    log UniswapV3Swap(msg.sender, tokenIn, tokenOut, initialAmountIn, toAmount, usdValue, numTokens, _recipient)
+    log UniswapV3Swap(sender=msg.sender, tokenIn=tokenIn, tokenOut=tokenOut, amountIn=initialAmountIn, amountOut=toAmount, usdValue=usdValue, numTokens=numTokens, recipient=_recipient)
     return initialAmountIn, toAmount, refundAssetAmount, usdValue
 
 
@@ -480,7 +480,7 @@ def addLiquidity(
         liqAmountB = amount0
 
     usdValue: uint256 = self._getUsdValue(_tokenA, liqAmountA, _tokenB, liqAmountB, False, _oracleRegistry)
-    log UniswapV3LiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, liquidityAdded, nftTokenId, usdValue, _recipient)
+    log UniswapV3LiquidityAdded(sender=msg.sender, tokenA=_tokenA, tokenB=_tokenB, amountA=liqAmountA, amountB=liqAmountB, liquidityAdded=liquidityAdded, nftTokenId=nftTokenId, usdValue=usdValue, recipient=_recipient)
     return liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId
 
 
@@ -666,7 +666,7 @@ def removeLiquidity(
 
     usdValue: uint256 = self._getUsdValue(_tokenA, amountA, _tokenB, amountB, False, _oracleRegistry)
     liquidityRemoved: uint256 = convert(originalLiquidity - positionData.liquidity, uint256)
-    log UniswapV3LiquidityRemoved(msg.sender, _pool, _nftTokenId, _tokenA, _tokenB, amountA, amountB, liquidityRemoved, usdValue, _recipient)
+    log UniswapV3LiquidityRemoved(sender=msg.sender, pool=_pool, nftTokenId=_nftTokenId, tokenA=_tokenA, tokenB=_tokenB, amountA=amountA, amountB=amountB, liquidityRemoved=liquidityRemoved, usdValue=usdValue, recipient=_recipient)
     return amountA, amountB, usdValue, liquidityRemoved, 0, isDepleted
 
 
@@ -1014,7 +1014,7 @@ def _getSqrtPriceX96(_pool: address) -> uint256:
 def setCoreRouterPool(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.coreRouterPool = _addr
-    log UniV3CoreRouterPoolSet(_addr)
+    log UniV3CoreRouterPoolSet(pool=_addr)
     return True
 
 
@@ -1032,7 +1032,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log UniV3FundsRecovered(_asset, _recipient, balance)
+    log UniV3FundsRecovered(asset=_asset, recipient=_recipient, amount=balance)
     return True
 
 
@@ -1044,7 +1044,7 @@ def recoverNft(_collection: address, _nftTokenId: uint256, _recipient: address) 
         return False
 
     extcall IERC721(_collection).safeTransferFrom(self, _recipient, _nftTokenId)
-    log UniV3NftRecovered(_collection, _nftTokenId, _recipient)
+    log UniV3NftRecovered(collection=_collection, nftTokenId=_nftTokenId, recipient=_recipient)
     return True
 
 
@@ -1059,7 +1059,7 @@ def setLegoId(_legoId: uint256) -> bool:
     prevLegoId: uint256 = self.legoId
     assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
-    log UniswapV3LegoIdSet(_legoId)
+    log UniswapV3LegoIdSet(legoId=_legoId)
     return True
 
 
@@ -1067,4 +1067,4 @@ def setLegoId(_legoId: uint256) -> bool:
 def activate(_shouldActivate: bool):
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
-    log UniswapV3Activated(_shouldActivate)
+    log UniswapV3Activated(isActivated=_shouldActivate)

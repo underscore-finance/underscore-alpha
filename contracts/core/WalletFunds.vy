@@ -1,3 +1,4 @@
+# @version 0.4.1
 # pragma optimize codesize
 
 implements: UserWalletInterface
@@ -377,7 +378,7 @@ def _depositTokens(
     if _shouldChargeFees:
         self._handleTransactionFees(_signer, _isSignerAgent, ActionType.DEPOSIT, vaultToken, vaultTokenAmountReceived, _cd.priceSheets)
 
-    log UserWalletDeposit(_signer, _asset, vaultToken, assetAmountDeposited, vaultTokenAmountReceived, refundAssetAmount, usdValue, _legoId, legoAddr, _isSignerAgent)
+    log UserWalletDeposit(signer=_signer, asset=_asset, vaultToken=vaultToken, assetAmountDeposited=assetAmountDeposited, vaultTokenAmountReceived=vaultTokenAmountReceived, refundAssetAmount=refundAssetAmount, usdValue=usdValue, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=_isSignerAgent)
     return assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue
 
 
@@ -448,7 +449,7 @@ def _withdrawTokens(
     if _shouldChargeFees:
         self._handleTransactionFees(_signer, _isSignerAgent, ActionType.WITHDRAWAL, _asset, assetAmountReceived, _cd.priceSheets)
 
-    log UserWalletWithdrawal(_signer, _asset, _vaultToken, assetAmountReceived, vaultTokenAmountBurned, refundVaultTokenAmount, usdValue, _legoId, legoAddr, _isSignerAgent)
+    log UserWalletWithdrawal(signer=_signer, asset=_asset, vaultToken=_vaultToken, assetAmountReceived=assetAmountReceived, vaultTokenAmountBurned=vaultTokenAmountBurned, refundVaultTokenAmount=refundVaultTokenAmount, usdValue=usdValue, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=_isSignerAgent)
     return assetAmountReceived, vaultTokenAmountBurned, usdValue
 
 
@@ -594,7 +595,7 @@ def _performSwapInstruction(
     # reset approvals
     assert extcall IERC20(tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log UserWalletSwap(_signer, tokenIn, tokenOut, tokenInAmount, tokenOutAmount, refundTokenInAmount, usdValue, len(_tokenPath), _legoId, legoAddr, _isSignerAgent)
+    log UserWalletSwap(signer=_signer, tokenIn=tokenIn, tokenOut=tokenOut, swapAmount=tokenInAmount, toAmount=tokenOutAmount, refundAssetAmount=refundTokenInAmount, usdValue=usdValue, numTokens=len(_tokenPath), legoId=_legoId, legoAddr=legoAddr, isSignerAgent=_isSignerAgent)
     return tokenOut, tokenOutAmount, usdValue
 
 
@@ -681,7 +682,7 @@ def borrow(
     # handle tx fees
     self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.BORROW, borrowAsset, borrowAmount, cd.priceSheets)
 
-    log UserWalletBorrow(msg.sender, borrowAsset, borrowAmount, usdValue, _legoId, legoAddr, isSignerAgent)
+    log UserWalletBorrow(signer=msg.sender, borrowAsset=borrowAsset, borrowAmount=borrowAmount, usdValue=usdValue, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
     return borrowAsset, borrowAmount, usdValue
 
 
@@ -738,7 +739,7 @@ def repayDebt(
     # make sure they still have enough trial funds
     self._checkTrialFundsPostTx(isTrialFundsVaultToken, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
 
-    log UserWalletRepayDebt(msg.sender, paymentAsset, paymentAmount, usdValue, remainingDebt, _legoId, legoAddr, isSignerAgent)
+    log UserWalletRepayDebt(signer=msg.sender, paymentAsset=paymentAsset, paymentAmount=paymentAmount, usdValue=usdValue, remainingDebt=remainingDebt, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
     return paymentAsset, paymentAmount, usdValue, remainingDebt
 
 
@@ -797,7 +798,7 @@ def claimRewards(
     # handle tx fees
     self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.CLAIM_REWARDS, _rewardToken, rewardAmount, cd.priceSheets)
 
-    log UserWalletRewardsClaimed(msg.sender, _market, _rewardToken, rewardAmount, usdValue, _proof, _legoId, legoAddr, isSignerAgent)
+    log UserWalletRewardsClaimed(signer=msg.sender, market=_market, rewardToken=_rewardToken, rewardAmount=rewardAmount, usdValue=usdValue, proof=_proof, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
 
 
 #################
@@ -907,7 +908,7 @@ def addLiquidity(
     if amountB != 0:
         assert extcall IERC20(_tokenB).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log UserWalletLiquidityAdded(msg.sender, _tokenA, _tokenB, liqAmountA, liqAmountB, liquidityAdded, _pool, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId, _legoId, legoAddr, isSignerAgent)
+    log UserWalletLiquidityAdded(signer=msg.sender, tokenA=_tokenA, tokenB=_tokenB, liqAmountA=liqAmountA, liqAmountB=liqAmountB, liquidityAdded=liquidityAdded, pool=_pool, usdValue=usdValue, refundAssetAmountA=refundAssetAmountA, refundAssetAmountB=refundAssetAmountB, nftTokenId=nftTokenId, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
     return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId
 
 
@@ -988,7 +989,7 @@ def removeLiquidity(
     self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REMOVE_LIQ, _tokenA, amountA, cd.priceSheets)
     self._handleTransactionFees(msg.sender, isSignerAgent, ActionType.REMOVE_LIQ, _tokenB, amountB, cd.priceSheets)
 
-    log UserWalletLiquidityRemoved(msg.sender, _tokenA, _tokenB, amountA, amountB, usdValue, isDepleted, liquidityRemoved, lpToken, refundedLpAmount, _legoId, legoAddr, isSignerAgent)
+    log UserWalletLiquidityRemoved(signer=msg.sender, tokenA=_tokenA, tokenB=_tokenB, removedAmountA=amountA, removedAmountB=amountB, usdValue=usdValue, isDepleted=isDepleted, liquidityRemoved=liquidityRemoved, lpToken=lpToken, refundedLpAmount=refundedLpAmount, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
     return amountA, amountB, usdValue, isDepleted
 
 
@@ -1058,7 +1059,7 @@ def _transferFunds(
         # make sure they still have enough trial funds
         self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
 
-    log UserWalletFundsTransferred(_signer, _recipient, _asset, transferAmount, usdValue, _isSignerAgent)
+    log UserWalletFundsTransferred(signer=_signer, recipient=_recipient, asset=_asset, amount=transferAmount, usdValue=usdValue, isSignerAgent=_isSignerAgent)
     return transferAmount, usdValue
 
 
@@ -1097,7 +1098,7 @@ def convertEthToWeth(
     amount: uint256 = min(_amount, self.balance)
     assert amount != 0 # dev: nothing to convert
     extcall WethContract(weth).deposit(value=amount)
-    log UserWalletEthConvertedToWeth(msg.sender, amount, msg.value, weth, isSignerAgent)
+    log UserWalletEthConvertedToWeth(signer=msg.sender, amount=amount, paidEth=msg.value, weth=weth, isSignerAgent=isSignerAgent)
 
     # deposit weth into lego partner
     vaultToken: address = empty(address)
@@ -1145,7 +1146,7 @@ def convertWethToEth(
     amount = min(amount, staticcall IERC20(weth).balanceOf(self))
     assert amount != 0 # dev: nothing to convert
     extcall WethContract(weth).withdraw(amount)
-    log UserWalletWethConvertedToEth(msg.sender, amount, weth, isSignerAgent)
+    log UserWalletWethConvertedToEth(signer=msg.sender, amount=amount, weth=weth, isSignerAgent=isSignerAgent)
 
     # transfer eth to recipient (if applicable)
     if _recipient != empty(address):
@@ -1205,12 +1206,12 @@ def _checkPermsAndHandleSubs(
     # handle protocol subscription payment
     if protocolSub.amount != 0:
         assert extcall IERC20(protocolSub.asset).transfer(protocolSub.recipient, protocolSub.amount, default_return_value=True) # dev: protocol subscription payment failed
-        log UserWalletSubscriptionPaid(protocolSub.recipient, protocolSub.asset, protocolSub.amount, protocolSub.usdValue, protocolSub.paidThroughBlock, False)
+        log UserWalletSubscriptionPaid(recipient=protocolSub.recipient, asset=protocolSub.asset, amount=protocolSub.amount, usdValue=protocolSub.usdValue, paidThroughBlock=protocolSub.paidThroughBlock, isAgent=False)
 
     # handle agent subscription payment
     if agentSub.amount != 0:
         assert extcall IERC20(agentSub.asset).transfer(agentSub.recipient, agentSub.amount, default_return_value=True) # dev: agent subscription payment failed
-        log UserWalletSubscriptionPaid(agent, agentSub.asset, agentSub.amount, agentSub.usdValue, agentSub.paidThroughBlock, True)
+        log UserWalletSubscriptionPaid(recipient=agent, asset=agentSub.asset, amount=agentSub.amount, usdValue=agentSub.usdValue, paidThroughBlock=agentSub.paidThroughBlock, isAgent=True)
 
     return agent != empty(address)
 
@@ -1236,7 +1237,7 @@ def _handleTransactionFees(
     amount: uint256 = min(_amount * fee // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
     if amount != 0:
         assert extcall IERC20(_asset).transfer(recipient, amount, default_return_value=True) # dev: protocol tx fee payment failed
-        log UserWalletTransactionFeePaid(recipient, _asset, amount, fee, _action)
+        log UserWalletTransactionFeePaid(recipient=recipient, asset=_asset, amount=amount, fee=fee, action=_action)
 
     return amount
 
@@ -1371,7 +1372,7 @@ def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -
     if remainingTrialFunds == 0:
         self.trialFundsAsset = empty(address)
 
-    log UserWalletTrialFundsRecovered(cd.trialFundsAsset, amountRecovered, remainingTrialFunds)
+    log UserWalletTrialFundsRecovered(asset=cd.trialFundsAsset, amountRecovered=amountRecovered, remainingAmount=remainingTrialFunds)
     return True
 
 
@@ -1393,5 +1394,5 @@ def recoverNft(_collection: address, _nftTokenId: uint256) -> bool:
         return False
 
     extcall IERC721(_collection).safeTransferFrom(self, owner, _nftTokenId)
-    log UserWalletNftRecovered(_collection, _nftTokenId, owner)
+    log UserWalletNftRecovered(collection=_collection, nftTokenId=_nftTokenId, owner=owner)
     return True

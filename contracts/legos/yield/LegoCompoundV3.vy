@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: LegoYield
 initializes: yld
@@ -62,7 +62,7 @@ event CompoundV3Withdrawal:
 event CompoundV3FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
-    balance: uint256
+    amount: uint256
 
 event CompoundV3RewardsAddrSet:
     addr: address
@@ -286,7 +286,7 @@ def depositTokens(
         depositAmount -= refundAssetAmount
 
     usdValue: uint256 = self._getUsdValue(_asset, depositAmount, _oracleRegistry)
-    log CompoundV3Deposit(msg.sender, _asset, _vault, depositAmount, usdValue, vaultTokenAmountReceived, _recipient)
+    log CompoundV3Deposit(sender=msg.sender, asset=_asset, vaultToken=_vault, assetAmountDeposited=depositAmount, usdValue=usdValue, vaultTokenAmountReceived=vaultTokenAmountReceived, recipient=_recipient)
     return depositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount, usdValue
 
 
@@ -331,7 +331,7 @@ def withdrawTokens(
         vaultTokenAmount -= refundVaultTokenAmount
 
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
-    log CompoundV3Withdrawal(msg.sender, _asset, _vaultToken, assetAmountReceived, usdValue, vaultTokenAmount, _recipient)
+    log CompoundV3Withdrawal(sender=msg.sender, asset=_asset, vaultToken=_vaultToken, assetAmountReceived=assetAmountReceived, usdValue=usdValue, vaultTokenAmountBurned=vaultTokenAmount, recipient=_recipient)
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
 
 
@@ -389,7 +389,7 @@ def setCompRewardsAddr(_addr: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
     assert _addr != empty(address) # dev: invalid addr
     self.compoundRewards = _addr
-    log CompoundV3RewardsAddrSet(_addr)
+    log CompoundV3RewardsAddrSet(addr=_addr)
     return True
 
 
@@ -433,7 +433,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log CompoundV3FundsRecovered(_asset, _recipient, balance)
+    log CompoundV3FundsRecovered(asset=_asset, recipient=_recipient, amount=balance)
     return True
 
 
@@ -448,7 +448,7 @@ def setLegoId(_legoId: uint256) -> bool:
     prevLegoId: uint256 = self.legoId
     assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
-    log CompoundV3LegoIdSet(_legoId)
+    log CompoundV3LegoIdSet(legoId=_legoId)
     return True
 
 
@@ -456,4 +456,4 @@ def setLegoId(_legoId: uint256) -> bool:
 def activate(_shouldActivate: bool):
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
-    log CompoundV3Activated(_shouldActivate)
+    log CompoundV3Activated(isActivated=_shouldActivate)

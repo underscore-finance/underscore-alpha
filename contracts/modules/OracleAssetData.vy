@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 # assets
 assets: public(HashMap[uint256, address]) # index -> asset
