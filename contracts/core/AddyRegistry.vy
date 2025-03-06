@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 struct AddyInfo:
     addr: address
@@ -26,9 +26,6 @@ event AddyIdDisabled:
 
 event AddyRegistryGovernorSet:
     governor: indexed(address)
-
-event AddyRegistryActivated:
-    isActivated: bool
 
 # core
 addyInfo: public(HashMap[uint256, AddyInfo])
@@ -99,7 +96,7 @@ def registerNewAddy(_addy: address, _description: String[64]) -> uint256:
     self.numAddys = addyId + 1
     self.addyInfo[addyId] = data
 
-    log NewAddyRegistered(_addy, addyId, _description)
+    log NewAddyRegistered(addr=_addy, addyId=addyId, description=_description)
     return addyId
 
 
@@ -159,7 +156,7 @@ def updateAddy(_addyId: uint256, _newAddy: address) -> bool:
     if prevAddy != empty(address):
         self.addyToId[prevAddy] = 0
 
-    log AddyIdUpdated(_newAddy, prevAddy, _addyId, data.version, data.description)
+    log AddyIdUpdated(newAddr=_newAddy, prevAddy=prevAddy, addyId=_addyId, version=data.version, description=data.description)
     return True
 
 
@@ -211,7 +208,7 @@ def disableAddy(_addyId: uint256) -> bool:
     self.addyInfo[_addyId] = data
     self.addyToId[prevAddy] = 0
 
-    log AddyIdDisabled(prevAddy, _addyId, data.version, data.description)
+    log AddyIdDisabled(prevAddy=prevAddy, addyId=_addyId, version=data.version, description=data.description)
     return True
 
 
@@ -378,5 +375,5 @@ def setGovernor(_newGovernor: address) -> bool:
     if not self._isValidGovernor(_newGovernor):
         return False
     self.governor = _newGovernor
-    log AddyRegistryGovernorSet(_newGovernor)
+    log AddyRegistryGovernorSet(governor=_newGovernor)
     return True

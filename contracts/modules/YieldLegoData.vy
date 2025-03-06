@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 event AssetOpportunityAdded:
     asset: indexed(address)
@@ -78,7 +78,7 @@ def _addAssetOpportunity(_asset: address, _vault: address):
     # add asset
     self._addAsset(_asset)
 
-    log AssetOpportunityAdded(_asset, _vault)
+    log AssetOpportunityAdded(asset=_asset, vaultToken=_vault)
 
 
 @internal
@@ -117,7 +117,7 @@ def _removeAssetOpportunity(_asset: address, _vault: address):
     if lastIndex <= 1:
         self._removeAsset(_asset)
 
-    log AssetOpportunityRemoved(_asset, _vault)
+    log AssetOpportunityRemoved(asset=_asset, vaultToken=_vault)
 
 
 @internal

@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: OraclePartner
 initializes: gov
@@ -155,7 +155,7 @@ def updatePythPrices(_payloads: DynArray[Bytes[2048], MAX_PRICE_UPDATES]):
         feeAmount: uint256 = staticcall PythNetwork(PYTH).getUpdateFee(p)
         assert self.balance >= feeAmount # dev: insufficient balance
         extcall PythNetwork(PYTH).updatePriceFeeds(p, value=feeAmount)
-        log PythPriceUpdated(p, feeAmount, msg.sender)
+        log PythPriceUpdated(payload=p, feeAmount=feeAmount, caller=msg.sender)
 
 
 #####################
@@ -187,7 +187,7 @@ def setPythFeed(_asset: address, _feedId: bytes32) -> bool:
         return False
     self.feedConfig[_asset] = _feedId
     oad._addAsset(_asset)
-    log PythFeedAdded(_asset, _feedId)
+    log PythFeedAdded(asset=_asset, feedId=_feedId)
     return True
 
 
@@ -201,7 +201,7 @@ def disablePythPriceFeed(_asset: address) -> bool:
         return False
     self.feedConfig[_asset] = empty(bytes32)
     oad._removeAsset(_asset)
-    log PythFeedDisabled(_asset)
+    log PythFeedDisabled(asset=_asset)
     return True
 
 
@@ -229,7 +229,7 @@ def recoverEthBalance(_recipient: address) -> bool:
     if not self._isValidEthRecovery(_recipient, balance):
         return False
     send(_recipient, balance)
-    log EthRecoveredFromPyth(_recipient, balance)
+    log EthRecoveredFromPyth(recipient=_recipient, amount=balance)
     return True
 
 

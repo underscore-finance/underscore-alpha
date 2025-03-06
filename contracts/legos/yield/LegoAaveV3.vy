@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: LegoYield
 implements: LegoCommon
@@ -61,7 +61,7 @@ event AaveV3Withdrawal:
 event AaveV3FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
-    balance: uint256
+    amount: uint256
 
 event AaveV3LegoIdSet:
     legoId: uint256
@@ -298,7 +298,7 @@ def depositTokens(
         depositAmount -= refundAssetAmount
 
     usdValue: uint256 = self._getUsdValue(_asset, depositAmount, _oracleRegistry)
-    log AaveV3Deposit(msg.sender, _asset, vaultToken, depositAmount, usdValue, vaultTokenAmountReceived, _recipient)
+    log AaveV3Deposit(sender=msg.sender, asset=_asset, vaultToken=vaultToken, assetAmountDeposited=depositAmount, usdValue=usdValue, vaultTokenAmountReceived=vaultTokenAmountReceived, recipient=_recipient)
     return depositAmount, vaultToken, vaultTokenAmountReceived, refundAssetAmount, usdValue
 
 
@@ -354,7 +354,7 @@ def withdrawTokens(
         vaultTokenAmount -= refundVaultTokenAmount
 
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
-    log AaveV3Withdrawal(msg.sender, _asset, vaultToken, assetAmountReceived, usdValue, vaultTokenAmount, _recipient)
+    log AaveV3Withdrawal(sender=msg.sender, asset=_asset, vaultToken=vaultToken, assetAmountReceived=assetAmountReceived, usdValue=usdValue, vaultTokenAmountBurned=vaultTokenAmount, recipient=_recipient)
     return assetAmountReceived, vaultTokenAmount, refundVaultTokenAmount, usdValue
 
 
@@ -425,7 +425,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log AaveV3FundsRecovered(_asset, _recipient, balance)
+    log AaveV3FundsRecovered(asset=_asset, recipient=_recipient, amount=balance)
     return True
 
 
@@ -440,7 +440,7 @@ def setLegoId(_legoId: uint256) -> bool:
     prevLegoId: uint256 = self.legoId
     assert prevLegoId == 0 or prevLegoId == _legoId # dev: invalid lego id
     self.legoId = _legoId
-    log AaveV3LegoIdSet(_legoId)
+    log AaveV3LegoIdSet(legoId=_legoId)
     return True
 
 
@@ -448,4 +448,4 @@ def setLegoId(_legoId: uint256) -> bool:
 def activate(_shouldActivate: bool):
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
-    log AaveV3Activated(_shouldActivate)
+    log AaveV3Activated(isActivated=_shouldActivate)

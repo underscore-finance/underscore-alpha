@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 initializes: gov
 exports: gov.__interface__
@@ -347,7 +347,7 @@ def setAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _tria
     # set pending price change
     effectiveBlock: uint256 = block.number + priceChangeDelay
     self.pendingAgentSubPrices[_agent] = PendingSubPrice(subInfo=subInfo, effectiveBlock=effectiveBlock)
-    log PendingAgentSubPriceSet(_agent, _asset, _usdValue, _trialPeriod, _payPeriod, effectiveBlock)
+    log PendingAgentSubPriceSet(agent=_agent, asset=_asset, usdValue=_usdValue, trialPeriod=_trialPeriod, payPeriod=_payPeriod, effectiveBlock=effectiveBlock)
 
     return True
 
@@ -377,7 +377,7 @@ def finalizePendingAgentSubPrice(_agent: address) -> bool:
 @internal
 def _setAgentSubPrice(_agent: address, _subInfo: SubscriptionInfo):
     self.agentSubPriceData[_agent] = _subInfo
-    log AgentSubPriceSet(_agent, _subInfo.asset, _subInfo.usdValue, _subInfo.trialPeriod, _subInfo.payPeriod)
+    log AgentSubPriceSet(agent=_agent, asset=_subInfo.asset, usdValue=_subInfo.usdValue, trialPeriod=_subInfo.trialPeriod, payPeriod=_subInfo.payPeriod)
 
 
 # removing agent sub price
@@ -399,7 +399,7 @@ def removeAgentSubPrice(_agent: address) -> bool:
         return False
 
     self.agentSubPriceData[_agent] = empty(SubscriptionInfo)
-    log AgentSubPriceRemoved(_agent, prevInfo.asset, prevInfo.usdValue, prevInfo.trialPeriod, prevInfo.payPeriod)
+    log AgentSubPriceRemoved(agent=_agent, asset=prevInfo.asset, usdValue=prevInfo.usdValue, trialPeriod=prevInfo.trialPeriod, payPeriod=prevInfo.payPeriod)
     return True
 
 
@@ -418,7 +418,7 @@ def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
 
     assert _isEnabled != self.isAgentSubPricingEnabled # dev: no change
     self.isAgentSubPricingEnabled = _isEnabled
-    log AgentSubPricingEnabled(_isEnabled)
+    log AgentSubPricingEnabled(isEnabled=_isEnabled)
     return True
 
 
@@ -455,7 +455,7 @@ def setProtocolSubPrice(_asset: address, _usdValue: uint256, _trialPeriod: uint2
         payPeriod=_payPeriod,
     )
 
-    log ProtocolSubPriceSet(_asset, _usdValue, _trialPeriod, _payPeriod)
+    log ProtocolSubPriceSet(asset=_asset, usdValue=_usdValue, trialPeriod=_trialPeriod, payPeriod=_payPeriod)
     return True
 
 
@@ -476,7 +476,7 @@ def removeProtocolSubPrice() -> bool:
         return False
 
     self.protocolSubPriceData = empty(SubscriptionInfo)
-    log ProtocolSubPriceRemoved(prevInfo.asset, prevInfo.usdValue, prevInfo.trialPeriod, prevInfo.payPeriod)
+    log ProtocolSubPriceRemoved(asset=prevInfo.asset, usdValue=prevInfo.usdValue, trialPeriod=prevInfo.trialPeriod, payPeriod=prevInfo.payPeriod)
     return True
 
 
@@ -630,7 +630,7 @@ def setProtocolTxPriceSheet(
         repayFee=_repayFee,
     )
 
-    log ProtocolTxPriceSheetSet(_depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, _claimRewardsFee, _borrowFee, _repayFee)
+    log ProtocolTxPriceSheetSet(depositFee=_depositFee, withdrawalFee=_withdrawalFee, rebalanceFee=_rebalanceFee, transferFee=_transferFee, swapFee=_swapFee, addLiqFee=_addLiqFee, removeLiqFee=_removeLiqFee, claimRewardsFee=_claimRewardsFee, borrowFee=_borrowFee, repayFee=_repayFee)
     return True
 
 
@@ -648,7 +648,7 @@ def removeProtocolTxPriceSheet() -> bool:
 
     prevInfo: TxPriceSheet = self.protocolTxPriceData
     self.protocolTxPriceData = empty(TxPriceSheet)
-    log ProtocolTxPriceSheetRemoved(prevInfo.depositFee, prevInfo.withdrawalFee, prevInfo.rebalanceFee, prevInfo.transferFee, prevInfo.swapFee, prevInfo.addLiqFee, prevInfo.removeLiqFee, prevInfo.claimRewardsFee, prevInfo.borrowFee, prevInfo.repayFee)
+    log ProtocolTxPriceSheetRemoved(depositFee=prevInfo.depositFee, withdrawalFee=prevInfo.withdrawalFee, rebalanceFee=prevInfo.rebalanceFee, transferFee=prevInfo.transferFee, swapFee=prevInfo.swapFee, addLiqFee=prevInfo.addLiqFee, removeLiqFee=prevInfo.removeLiqFee, claimRewardsFee=prevInfo.claimRewardsFee, borrowFee=prevInfo.borrowFee, repayFee=prevInfo.repayFee)
     return True
 
 
@@ -668,7 +668,7 @@ def setProtocolRecipient(_recipient: address) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
     assert _recipient != empty(address) # dev: invalid recipient
     self.protocolRecipient = _recipient
-    log ProtocolRecipientSet(_recipient)
+    log ProtocolRecipientSet(recipient=_recipient)
     return True
 
 
@@ -687,7 +687,7 @@ def setPriceChangeDelay(_delayBlocks: uint256) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
     assert _delayBlocks == 0 or _delayBlocks >= MIN_PRICE_CHANGE_BUFFER # dev: invalid delay
     self.priceChangeDelay = _delayBlocks
-    log PriceChangeDelaySet(_delayBlocks)
+    log PriceChangeDelaySet(delayBlocks=_delayBlocks)
     return True
 
 
@@ -705,4 +705,4 @@ def activate(_shouldActivate: bool):
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
-    log PriceSheetsActivated(_shouldActivate)
+    log PriceSheetsActivated(isActivated=_shouldActivate)

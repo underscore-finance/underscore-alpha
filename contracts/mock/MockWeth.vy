@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: IERC20
 implements: IERC20Detailed
@@ -67,7 +67,7 @@ def totalSupply() -> uint256:
 @external
 def deposit():
     self.balanceOf[msg.sender] += msg.value
-    log Deposit(msg.sender, msg.value)
+    log Deposit(user=msg.sender, amount=msg.value)
 
 
 @external
@@ -75,14 +75,14 @@ def withdraw(_amount: uint256):
     assert self.balanceOf[msg.sender] >= _amount # dev: not enough balance
     self.balanceOf[msg.sender] -= _amount
     send(msg.sender, _amount)
-    log Withdrawal(msg.sender, _amount)
+    log Withdrawal(user=msg.sender, amount=_amount)
 
 
 @external
 def transfer(_recipient: address, _amount: uint256) -> bool:
     self.balanceOf[msg.sender] -= _amount
     self.balanceOf[_recipient] += _amount
-    log Transfer(msg.sender, _recipient, _amount)
+    log Transfer(sender=msg.sender, receiver=_recipient, amount=_amount)
     return True
 
 
@@ -91,12 +91,12 @@ def transferFrom(_sender: address, _recipient: address, _amount: uint256) -> boo
     self.allowance[_sender][msg.sender] -= _amount
     self.balanceOf[_sender] -= _amount
     self.balanceOf[_recipient] += _amount
-    log Transfer(_sender, _recipient, _amount)
+    log Transfer(sender=_sender, receiver=_recipient, amount=_amount)
     return True
 
 
 @external
 def approve(_spender: address, _amount: uint256) -> bool:
     self.allowance[msg.sender][_spender] = _amount
-    log Approval(msg.sender, _spender, _amount)
+    log Approval(owner=msg.sender, spender=_spender, amount=_amount)
     return True

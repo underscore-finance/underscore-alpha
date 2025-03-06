@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 from ethereum.ercs import IERC20
 
@@ -66,7 +66,7 @@ def totalAssets() -> uint256:
 def transfer(_to: address, _value: uint256) -> bool:
     self.balanceOf[msg.sender] -= _value
     self.balanceOf[_to] += _value
-    log Transfer(msg.sender, _to, _value)
+    log Transfer(sender=msg.sender, receiver=_to, value=_value)
     return True
 
 
@@ -75,12 +75,12 @@ def transferFrom(_from: address, _to: address, _value: uint256) -> bool:
     self.balanceOf[_from] -= _value
     self.balanceOf[_to] += _value
     self.allowance[_from][msg.sender] -= _value
-    log Transfer(_from, _to, _value)
+    log Transfer(sender=_from, receiver=_to, value=_value)
     return True
 
 
 @external
 def approve(_spender: address, _value: uint256) -> bool:
     self.allowance[msg.sender][_spender] = _value
-    log Approval(msg.sender, _spender, _value)
+    log Approval(owner=msg.sender, spender=_spender, value=_value)
     return True

@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 initializes: gov
 exports: gov.__interface__
@@ -286,7 +286,7 @@ def registerNewOraclePartner(_addr: address, _description: String[64]) -> uint25
     self.oraclePartnerInfo[oraclePartnerId] = data
     assert extcall OraclePartner(_addr).setOraclePartnerId(oraclePartnerId) # dev: set id failed
 
-    log NewOraclePartnerRegistered(_addr, oraclePartnerId, _description)
+    log NewOraclePartnerRegistered(addr=_addr, oraclePartnerId=oraclePartnerId, description=_description)
     return oraclePartnerId
 
 
@@ -347,7 +347,7 @@ def updateOraclePartnerAddr(_oracleId: uint256, _newAddr: address) -> bool:
     if prevAddr != empty(address):
         self.oraclePartnerAddrToId[prevAddr] = 0
 
-    log OraclePartnerAddrUpdated(_newAddr, prevAddr, _oracleId, data.version, data.description)
+    log OraclePartnerAddrUpdated(newAddr=_newAddr, prevAddr=prevAddr, oraclePartnerId=_oracleId, version=data.version, description=data.description)
     return True
 
 
@@ -399,7 +399,7 @@ def disableOraclePartnerAddr(_oracleId: uint256) -> bool:
     self.oraclePartnerInfo[_oracleId] = data
     self.oraclePartnerAddrToId[prevAddr] = 0
 
-    log OraclePartnerAddrDisabled(prevAddr, _oracleId, data.version, data.description)
+    log OraclePartnerAddrDisabled(prevAddr=prevAddr, oraclePartnerId=_oracleId, version=data.version, description=data.description)
     return True
 
 
@@ -467,7 +467,7 @@ def setPriorityOraclePartnerIds(_priorityIds: DynArray[uint256, MAX_PRIORITY_PAR
         return False
 
     self.priorityOraclePartnerIds = priorityIds
-    log PriorityOraclePartnerIdsModified(len(priorityIds))
+    log PriorityOraclePartnerIdsModified(numIds=len(priorityIds))
     return True
 
 
@@ -508,7 +508,7 @@ def setStaleTime(_staleTime: uint256) -> bool:
         return False
 
     self.staleTime = _staleTime
-    log StaleTimeSet(_staleTime)
+    log StaleTimeSet(staleTime=_staleTime)
     return True
 
 

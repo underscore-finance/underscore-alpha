@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: OraclePartner
 initializes: gov
@@ -131,7 +131,7 @@ def updateStorkPrices(_payloads: DynArray[Bytes[2048], MAX_PRICE_UPDATES]):
         feeAmount: uint256 = staticcall StorkNetwork(STORK).getUpdateFeeV1(p)
         assert self.balance >= feeAmount # dev: insufficient balance
         extcall StorkNetwork(STORK).updateTemporalNumericValuesV1(p, value=feeAmount)
-        log StorkPriceUpdated(p, feeAmount, msg.sender)
+        log StorkPriceUpdated(payload=p, feeAmount=feeAmount, caller=msg.sender)
 
 
 #####################
@@ -164,7 +164,7 @@ def setStorkFeed(_asset: address, _feedId: bytes32) -> bool:
         return False
     self.feedConfig[_asset] = _feedId
     oad._addAsset(_asset)
-    log StorkFeedAdded(_asset, _feedId)
+    log StorkFeedAdded(asset=_asset, feedId=_feedId)
     return True
 
 
@@ -178,7 +178,7 @@ def disableStorkPriceFeed(_asset: address) -> bool:
         return False
     self.feedConfig[_asset] = empty(bytes32)
     oad._removeAsset(_asset)
-    log StorkFeedDisabled(_asset)
+    log StorkFeedDisabled(asset=_asset)
     return True
 
 
@@ -206,7 +206,7 @@ def recoverEthBalance(_recipient: address) -> bool:
     if not self._isValidEthRecovery(_recipient, balance):
         return False
     send(_recipient, balance)
-    log EthRecoveredFromStork(_recipient, balance)
+    log EthRecoveredFromStork(recipient=_recipient, amount=balance)
     return True
 
 

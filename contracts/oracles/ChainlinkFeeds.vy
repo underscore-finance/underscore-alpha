@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: OraclePartner
 initializes: gov
@@ -244,7 +244,7 @@ def _setChainlinkFeed(
         needsBtcToUsd=_needsBtcToUsd,
     )
     oad._addAsset(_asset)
-    log ChainlinkFeedAdded(_asset, _feed, _needsEthToUsd, _needsBtcToUsd)
+    log ChainlinkFeedAdded(asset=_asset, chainlinkFeed=_feed, needsEthToUsd=_needsEthToUsd, needsBtcToUsd=_needsBtcToUsd)
     return True
 
 
@@ -259,7 +259,7 @@ def disableChainlinkPriceFeed(_asset: address) -> bool:
         return False
     self.feedConfig[_asset] = empty(ChainlinkConfig)
     oad._removeAsset(_asset)
-    log ChainlinkFeedDisabled(_asset)
+    log ChainlinkFeedDisabled(asset=_asset)
     return True
 
 

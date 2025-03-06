@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 initializes: gov
 exports: gov.__interface__
@@ -235,7 +235,7 @@ def createUserWallet(_owner: address = msg.sender, _agent: address = empty(addre
     self.isUserWallet[mainWalletAddr] = True
     self.numUserWallets += 1
 
-    log UserWalletCreated(mainWalletAddr, walletConfigAddr, _owner, _agent, msg.sender)
+    log UserWalletCreated(mainAddr=mainWalletAddr, configAddr=walletConfigAddr, owner=_owner, agent=_agent, creator=msg.sender)
     return mainWalletAddr
 
 
@@ -291,7 +291,7 @@ def _setUserWalletTemplate(_addr: address) -> bool:
         lastModified=block.timestamp,
     )
     self.userWalletTemplate = newData
-    log UserWalletTemplateSet(_addr, newData.version)
+    log UserWalletTemplateSet(template=_addr, version=newData.version)
     return True
 
 
@@ -342,7 +342,7 @@ def _setUserWalletConfigTemplate(_addr: address) -> bool:
         lastModified=block.timestamp,
     )
     self.userWalletConfig = newData
-    log UserWalletConfigTemplateSet(_addr, newData.version)
+    log UserWalletConfigTemplateSet(template=_addr, version=newData.version)
     return True
 
 
@@ -399,7 +399,7 @@ def createAgent(_owner: address = msg.sender) -> address:
     self.isAgent[agentAddr] = True
     self.numAgents += 1
 
-    log AgentCreated(agentAddr, _owner, msg.sender)
+    log AgentCreated(agent=agentAddr, owner=_owner, creator=msg.sender)
     return agentAddr
 
 
@@ -450,7 +450,7 @@ def _setAgentTemplate(_addr: address) -> bool:
         lastModified=block.timestamp,
     )
     self.agentTemplateInfo = newData
-    log AgentTemplateSet(_addr, newData.version)
+    log AgentTemplateSet(template=_addr, version=newData.version)
     return True
 
 
@@ -498,7 +498,7 @@ def setTrialFundsData(_asset: address, _amount: uint256) -> bool:
         asset=_asset,
         amount=_amount,
     )
-    log TrialFundsDataSet(_asset, _amount)
+    log TrialFundsDataSet(asset=_asset, amount=_amount)
     return True
 
 
@@ -519,7 +519,7 @@ def setWhitelist(_addr: address, _shouldWhitelist: bool) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     self.whitelist[_addr] = _shouldWhitelist
-    log WhitelistSet(_addr, _shouldWhitelist)
+    log WhitelistSet(addr=_addr, shouldWhitelist=_shouldWhitelist)
     return True
 
 
@@ -534,7 +534,7 @@ def setShouldEnforceWhitelist(_shouldEnforce: bool) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     self.shouldEnforceWhitelist = _shouldEnforce
-    log ShouldEnforceWhitelistSet(_shouldEnforce)
+    log ShouldEnforceWhitelistSet(shouldEnforce=_shouldEnforce)
     return True
 
 
@@ -549,7 +549,7 @@ def setNumUserWalletsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     self.numUserWalletsAllowed = _numAllowed
-    log NumUserWalletsAllowedSet(_numAllowed)
+    log NumUserWalletsAllowedSet(numAllowed=_numAllowed)
     return True
 
 
@@ -564,7 +564,7 @@ def setNumAgentsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     self.numAgentsAllowed = _numAllowed
-    log NumAgentsAllowedSet(_numAllowed)
+    log NumAgentsAllowedSet(numAllowed=_numAllowed)
     return True
 
 
@@ -585,7 +585,7 @@ def setAgentBlacklist(_agentAddr: address, _shouldBlacklist: bool) -> bool:
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     self.agentBlacklist[_agentAddr] = _shouldBlacklist
-    log AgentBlacklistSet(_agentAddr, _shouldBlacklist)
+    log AgentBlacklistSet(agentAddr=_agentAddr, shouldBlacklist=_shouldBlacklist)
     return True
 
 
@@ -610,7 +610,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(_recipient, balance, default_return_value=True) # dev: recovery failed
-    log AgentFactoryFundsRecovered(_asset, _recipient, balance)
+    log AgentFactoryFundsRecovered(asset=_asset, recipient=_recipient, balance=balance)
     return True
 
 
@@ -642,4 +642,4 @@ def activate(_shouldActivate: bool):
     assert gov._isGovernor(msg.sender) # dev: no perms
 
     self.isActivated = _shouldActivate
-    log AgentFactoryActivated(_shouldActivate)
+    log AgentFactoryActivated(isActivated=_shouldActivate)

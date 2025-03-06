@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 interface AddyRegistry:
     def governor() -> address: view
@@ -62,5 +62,5 @@ def setLocalGovernor(_newGovernor: address) -> bool:
     if not self._isValidLocalGovernor(_newGovernor, mainGovernor):
         return False
     self.localGovernor = _newGovernor
-    log LocalGovernorSet(_newGovernor)
+    log LocalGovernorSet(addr=_newGovernor)
     return True

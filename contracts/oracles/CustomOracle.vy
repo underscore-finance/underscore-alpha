@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 implements: OraclePartner
 initializes: gov
@@ -93,7 +93,7 @@ def setPrice(_asset: address, _price: uint256):
         publishTime=block.timestamp,
     )
     oad._addAsset(_asset)
-    log CustomPriceSet(_asset, _price)
+    log CustomPriceSet(asset=_asset, price=_price)
 
 
 # disable price feed
@@ -106,7 +106,7 @@ def disablePriceFeed(_asset: address) -> bool:
         return False
     self.priceData[_asset] = empty(CustomOracleData)
     oad._removeAsset(_asset)
-    log CustomPriceDisabled(_asset)
+    log CustomPriceDisabled(asset=_asset)
     return True
 
 

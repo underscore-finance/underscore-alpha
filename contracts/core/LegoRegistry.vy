@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 
 initializes: gov
 exports: gov.__interface__
@@ -121,7 +121,7 @@ def registerNewLego(_addr: address, _description: String[64], _legoType: LegoTyp
     self.legoInfo[legoId] = data
     assert extcall LegoCommon(_addr).setLegoId(legoId) # dev: set id failed
 
-    log NewLegoRegistered(_addr, legoId, _description, _legoType)
+    log NewLegoRegistered(addr=_addr, legoId=legoId, description=_description, legoType=_legoType)
     return legoId
 
 
@@ -182,7 +182,7 @@ def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     if prevAddr != empty(address):
         self.legoAddrToId[prevAddr] = 0
 
-    log LegoAddrUpdated(_newAddr, prevAddr, _legoId, data.version, data.description, data.legoType)
+    log LegoAddrUpdated(newAddr=_newAddr, prevAddr=prevAddr, legoId=_legoId, version=data.version, description=data.description, legoType=data.legoType)
     return True
 
 
@@ -234,7 +234,7 @@ def disableLegoAddr(_legoId: uint256) -> bool:
     self.legoInfo[_legoId] = data
     self.legoAddrToId[prevAddr] = 0
 
-    log LegoAddrDisabled(prevAddr, _legoId, data.version, data.description, data.legoType)
+    log LegoAddrDisabled(prevAddr=prevAddr, legoId=_legoId, version=data.version, description=data.description, legoType=data.legoType)
     return True
 
 
@@ -463,6 +463,6 @@ def setLegoHelper(_helperAddr: address) -> bool:
     if not self._isValidLegoHelper(_helperAddr):
         return False
     self.legoHelper = _helperAddr
-    log LegoHelperSet(_helperAddr)
+    log LegoHelperSet(helperAddr=_helperAddr)
     return True
 

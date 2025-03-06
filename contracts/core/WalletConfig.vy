@@ -1,4 +1,4 @@
-# @version 0.4.0
+# @version 0.4.1
 # pragma optimize codesize
 
 from ethereum.ercs import IERC20
@@ -272,7 +272,7 @@ def initialize(
             allowedLegoIds=[],
             allowedActions=empty(AllowedActions),
         )
-        log AgentAdded(_initialAgent, 0, 0)
+        log AgentAdded(agent=_initialAgent, allowedAssets=0, allowedLegoIds=0)
 
     # protocol subscription
     protocolSub: ProtocolSub = empty(ProtocolSub)
@@ -648,9 +648,9 @@ def addOrModifyAgent(
 
     # log event
     if isNewAgent:
-        log AgentAdded(_agent, len(agentInfo.allowedAssets), len(agentInfo.allowedLegoIds))
+        log AgentAdded(agent=_agent, allowedAssets=len(agentInfo.allowedAssets), allowedLegoIds=len(agentInfo.allowedLegoIds))
     else:
-        log AgentModified(_agent, len(agentInfo.allowedAssets), len(agentInfo.allowedLegoIds))
+        log AgentModified(agent=_agent, allowedAssets=len(agentInfo.allowedAssets), allowedLegoIds=len(agentInfo.allowedLegoIds))
     return True
 
 
@@ -707,7 +707,7 @@ def disableAgent(_agent: address) -> bool:
     agentInfo.isActive = False
     self.agentSettings[_agent] = agentInfo
 
-    log AgentDisabled(_agent, len(agentInfo.allowedAssets), len(agentInfo.allowedLegoIds))
+    log AgentDisabled(agent=_agent, prevAllowedAssets=len(agentInfo.allowedAssets), prevAllowedLegoIds=len(agentInfo.allowedLegoIds))
     return True
 
 
@@ -738,7 +738,7 @@ def addLegoIdForAgent(_agent: address, _legoId: uint256) -> bool:
     self.agentSettings[_agent] = agentInfo
 
     # log event
-    log LegoIdAddedToAgent(_agent, _legoId)
+    log LegoIdAddedToAgent(agent=_agent, legoId=_legoId)
     return True
 
 
@@ -768,7 +768,7 @@ def addAssetForAgent(_agent: address, _asset: address) -> bool:
     self.agentSettings[_agent] = agentInfo
 
     # log event
-    log AssetAddedToAgent(_agent, _asset)
+    log AssetAddedToAgent(agent=_agent, asset=_asset)
     return True
 
 
@@ -787,7 +787,7 @@ def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empt
     agentInfo.allowedActions.isSet = self._hasAllowedActionsSet(_allowedActions)
     self.agentSettings[_agent] = agentInfo
 
-    log AllowedActionsModified(_agent, _allowedActions.canDeposit, _allowedActions.canWithdraw, _allowedActions.canRebalance, _allowedActions.canTransfer, _allowedActions.canSwap, _allowedActions.canConvert, _allowedActions.canAddLiq, _allowedActions.canRemoveLiq, _allowedActions.canClaimRewards, _allowedActions.canBorrow, _allowedActions.canRepay)
+    log AllowedActionsModified(agent=_agent, canDeposit=_allowedActions.canDeposit, canWithdraw=_allowedActions.canWithdraw, canRebalance=_allowedActions.canRebalance, canTransfer=_allowedActions.canTransfer, canSwap=_allowedActions.canSwap, canConvert=_allowedActions.canConvert, canAddLiq=_allowedActions.canAddLiq, canRemoveLiq=_allowedActions.canRemoveLiq, canClaimRewards=_allowedActions.canClaimRewards, canBorrow=_allowedActions.canBorrow, canRepay=_allowedActions.canRepay)
     return True
 
 
@@ -841,7 +841,7 @@ def addWhitelistAddr(_addr: address):
         initiatedBlock = block.number,
         confirmBlock = confirmBlock,
     )
-    log WhitelistAddrPending(_addr, confirmBlock)
+    log WhitelistAddrPending(addr=_addr, confirmBlock=confirmBlock)
 
 
 @nonreentrant
@@ -855,7 +855,7 @@ def confirmWhitelistAddr(_addr: address):
 
     self.pendingWhitelist[_addr] = empty(PendingWhitelist)
     self.isRecipientAllowed[_addr] = True
-    log WhitelistAddrConfirmed(_addr, data.initiatedBlock, data.confirmBlock)
+    log WhitelistAddrConfirmed(addr=_addr, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @nonreentrant
@@ -865,7 +865,7 @@ def cancelPendingWhitelistAddr(_addr: address):
     data: PendingWhitelist = self.pendingWhitelist[_addr]
     assert data.initiatedBlock != 0 # dev: no pending whitelist
     self.pendingWhitelist[_addr] = empty(PendingWhitelist)
-    log WhitelistAddrCancelled(_addr, data.initiatedBlock, data.confirmBlock)
+    log WhitelistAddrCancelled(addr=_addr, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @nonreentrant
@@ -875,7 +875,7 @@ def removeWhitelistAddr(_addr: address):
     assert self.isRecipientAllowed[_addr] # dev: not on whitelist
 
     self.isRecipientAllowed[_addr] = False
-    log WhitelistAddrRemoved(_addr)
+    log WhitelistAddrRemoved(addr=_addr)
 
 
 ##################
@@ -889,7 +889,7 @@ def setReserveAsset(_asset: address, _amount: uint256) -> bool:
     assert msg.sender == self.owner # dev: no perms
     assert _asset != empty(address) # dev: invalid asset
     self.reserveAssets[_asset] = _amount
-    log ReserveAssetSet(_asset, _amount)
+    log ReserveAssetSet(asset=_asset, amount=_amount)
     return True
 
 
@@ -903,7 +903,7 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
         amount: uint256 = _assets[i].amount
         assert asset != empty(address) # dev: invalid asset
         self.reserveAssets[asset] = amount
-        log ReserveAssetSet(asset, amount)
+        log ReserveAssetSet(asset=asset, amount=amount)
 
     return True
 
@@ -936,7 +936,7 @@ def changeOwnership(_newOwner: address):
         initiatedBlock= block.number,
         confirmBlock= confirmBlock,
     )
-    log OwnershipChangeInitiated(currentOwner, _newOwner, confirmBlock)
+    log OwnershipChangeInitiated(prevOwner=currentOwner, newOwner=_newOwner, confirmBlock=confirmBlock)
 
 
 @external
@@ -953,7 +953,7 @@ def confirmOwnershipChange():
     prevOwner: address = self.owner
     self.owner = data.newOwner
     self.pendingOwner = empty(PendingOwner)
-    log OwnershipChangeConfirmed(prevOwner, data.newOwner, data.initiatedBlock, data.confirmBlock)
+    log OwnershipChangeConfirmed(prevOwner=prevOwner, newOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @external
@@ -966,7 +966,7 @@ def cancelOwnershipChange():
     data: PendingOwner = self.pendingOwner
     assert data.confirmBlock != 0 # dev: no pending change
     self.pendingOwner = empty(PendingOwner)
-    log OwnershipChangeCancelled(data.newOwner, data.initiatedBlock, data.confirmBlock)
+    log OwnershipChangeCancelled(cancelledOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @external
@@ -979,7 +979,7 @@ def setOwnershipChangeDelay(_numBlocks: uint256):
     assert msg.sender == self.owner # dev: no perms
     assert _numBlocks >= MIN_OWNER_CHANGE_DELAY and _numBlocks <= MAX_OWNER_CHANGE_DELAY # dev: invalid delay
     self.ownershipChangeDelay = _numBlocks
-    log OwnershipChangeDelaySet(_numBlocks)
+    log OwnershipChangeDelaySet(delayBlocks=_numBlocks)
 
 
 #################
@@ -1001,5 +1001,5 @@ def recoverFunds(_asset: address) -> bool:
         return False
 
     assert extcall IERC20(_asset).transfer(wallet, balance, default_return_value=True) # dev: recovery failed
-    log FundsRecovered(_asset, wallet, balance)
+    log FundsRecovered(asset=_asset, recipient=wallet, balance=balance)
     return True
