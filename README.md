@@ -36,7 +36,7 @@ Underscore is onchain infrastructure that enables AI agents to operate in DeFi w
 
 ### Developer Guides
 
-- [**Getting Started**](docs/guides/GETTING_STARTED.md): Create your first Agentic Wallet
+- [**Getting Started**](docs/guides/GETTING_STARTED.md): Create your first User AI Wallet
 - [**Deployment Guide**](docs/guides/DEPLOYMENT.md): Deploy the Underscore system
 - [**Testing Guide**](docs/guides/TESTING.md): Test the Underscore system
 
