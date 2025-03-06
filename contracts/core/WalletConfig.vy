@@ -778,6 +778,13 @@ def addAssetForAgent(_agent: address, _asset: address) -> bool:
 @nonreentrant
 @external
 def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empty(AllowedActions)) -> bool:
+    """
+    @notice Modifies the allowed actions for an agent
+    @dev Can only be called by the owner
+    @param _agent The address of the agent to modify
+    @param _allowedActions The new allowed actions
+    @return bool True if the allowed actions were successfully modified
+    """
     assert msg.sender == self.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
@@ -805,6 +812,11 @@ def _hasAllowedActionsSet(_actions: AllowedActions) -> bool:
 @view
 @external
 def canTransferToRecipient(_recipient: address) -> bool:
+    """
+    @notice Checks if a transfer to a recipient is allowed
+    @param _recipient The address of the recipient
+    @return bool True if the transfer is allowed, false otherwise
+    """
     isAllowed: bool = self.isRecipientAllowed[_recipient]
     if isAllowed:
         return True
@@ -826,6 +838,11 @@ def canTransferToRecipient(_recipient: address) -> bool:
 @nonreentrant
 @external
 def addWhitelistAddr(_addr: address):
+    """
+    @notice Adds an address to the whitelist
+    @dev Can only be called by the owner
+    @param _addr The address to add to the whitelist
+    """
     owner: address = self.owner
     assert msg.sender == owner # dev: only owner can add whitelist
 
@@ -847,6 +864,11 @@ def addWhitelistAddr(_addr: address):
 @nonreentrant
 @external
 def confirmWhitelistAddr(_addr: address):
+    """
+    @notice Confirms a whitelist address
+    @dev Can only be called by the owner
+    @param _addr The address to confirm
+    """
     assert msg.sender == self.owner # dev: only owner can confirm
 
     data: PendingWhitelist = self.pendingWhitelist[_addr]
@@ -861,6 +883,11 @@ def confirmWhitelistAddr(_addr: address):
 @nonreentrant
 @external
 def cancelPendingWhitelistAddr(_addr: address):
+    """
+    @notice Cancels a pending whitelist address
+    @dev Can only be called by the owner
+    @param _addr The address to cancel
+    """
     assert msg.sender == self.owner # dev: only owner can cancel
     data: PendingWhitelist = self.pendingWhitelist[_addr]
     assert data.initiatedBlock != 0 # dev: no pending whitelist
@@ -871,6 +898,11 @@ def cancelPendingWhitelistAddr(_addr: address):
 @nonreentrant
 @external
 def removeWhitelistAddr(_addr: address):
+    """
+    @notice Removes an address from the whitelist
+    @dev Can only be called by the owner
+    @param _addr The address to remove from the whitelist
+    """
     assert msg.sender == self.owner # dev: only owner can remove whitelist
     assert self.isRecipientAllowed[_addr] # dev: not on whitelist
 
@@ -886,6 +918,13 @@ def removeWhitelistAddr(_addr: address):
 @nonreentrant
 @external
 def setReserveAsset(_asset: address, _amount: uint256) -> bool:
+    """
+    @notice Sets a reserve asset
+    @dev Can only be called by the owner
+    @param _asset The address of the asset to set
+    @param _amount The amount of the asset to set
+    @return bool True if the reserve asset was successfully set
+    """
     assert msg.sender == self.owner # dev: no perms
     assert _asset != empty(address) # dev: invalid asset
     self.reserveAssets[_asset] = _amount
@@ -896,6 +935,12 @@ def setReserveAsset(_asset: address, _amount: uint256) -> bool:
 @nonreentrant
 @external
 def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
+    """
+    @notice Sets multiple reserve assets
+    @dev Can only be called by the owner
+    @param _assets The array of reserve assets to set
+    @return bool True if the reserve assets were successfully set
+    """
     assert msg.sender == self.owner # dev: no perms
     assert len(_assets) != 0 # dev: invalid array length
     for i: uint256 in range(len(_assets), bound=MAX_ASSETS):
@@ -916,6 +961,10 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
 @view
 @external
 def hasPendingOwnerChange() -> bool:
+    """
+    @notice Checks if there is a pending ownership change
+    @return bool True if there is a pending ownership change, false otherwise
+    """
     return self.pendingOwner.initiatedBlock != 0
 
 
