@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Underscore Protocol License: https://github.com/underscore-finance/underscore/blob/main/licenses/BUSL_LICENSE
+# Underscore Protocol (C) 2025 Hightop Financial, Inc.
 # @version 0.4.1
 
 initializes: gov
