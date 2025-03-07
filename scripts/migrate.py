@@ -1,3 +1,4 @@
+import boa.deployments
 import click
 import boa
 
@@ -239,6 +240,7 @@ def cli(
         vyper_files
     )
 
+    boa.deployments.set_deployments_db(boa.deployments.DeploymentsDB(":memory:"))
     if final_rpc == 'boa':
         with boa.set_env(Env()) as env:
             total_gas = migrations.run(

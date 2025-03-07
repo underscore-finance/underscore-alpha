@@ -102,10 +102,6 @@ def get_vyper_abi(file_path):
     return execute_vyper_json_command(file_path, "abi")
 
 
-def get_vyper_solc_json(file_path):
-    return execute_vyper_json_command(file_path, "solc_json")
-
-
 def get_contract_abi(contract_name, contract, files):
     if (contract != '' and contract.abi):
         return contract.abi
@@ -164,7 +160,7 @@ def deployed_contracts_manifest(contracts: dict, args: dict, files: dict):
         manifest[contract_name] = {
             "address": contracts[contract_name].address,
             "abi": get_vyper_abi(files[contract_name]),
-            "solc_json": get_vyper_solc_json(files[contract_name]),
+            "solc_json": contracts[contract_name].deployer.solc_json,
             "args": encode_constructor_args(get_vyper_abi(files[contract_name]), args[contract_name])
         }
 

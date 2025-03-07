@@ -4,6 +4,7 @@ import boa.contracts
 import boa.contracts.abi
 from mergedeep import merge
 import boa
+from boa.deployments import get_deployments_db
 from scripts.utils import log
 from scripts.utils import json_file
 from scripts.utils.deploy_args import DeployArgs
@@ -53,6 +54,10 @@ class Migration:
         Returns the deployed contract.
         """
         contract = self._run(name, boa.load, self._files[name], *args, name=name, **kwargs)
+
+        # db = get_deployments_db()
+        # deployment = next(db.get_deployments())
+        # print(deployment)
         self._contracts[name] = contract
         self._args[name] = args
         self._save_log_file()
