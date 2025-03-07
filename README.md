@@ -1,30 +1,83 @@
-# Underscore: Trustless AI Agents for DeFi
+# Underscore Protocol: Trustless AI Agents for DeFi
 
-## Overview
-
-Underscore is onchain infrastructure that enables AI agents to operate in DeFi within user-defined boundaries. It creates a **User AI Wallet** - a personal smart contract that connects to DeFi protocols with AI assistance while maintaining security and control.
-
-## Key Features
-
-- **Non-Custodial**: Only you can transfer/withdraw funds out of the wallet
-- **Granular Control**: Define which assets and protocols AI agents can interact with
-- **Rule-Based Actions**: Agents operate strictly within specified parameters
-- **Extensible**: Underscore can add new DeFi integrations without you needing to move funds or upgrading your wallet
+Underscore is an open-source, onchain infrastructure that allows AI agents to operate on your behalf in DeFi—securely, transparently, and within boundaries you define.
 
 ## Why Underscore?
 
-```
-┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
-│                   │     │                   │     │                   │
-│   AI Assistance   │────▶│  Onchain Rules   │────▶│   User Control    │
-│                   │     │                   │     │                   │
-└───────────────────┘     └───────────────────┘     └───────────────────┘
+- **Non-Custodial**: Retain full control of your assets; only you can transfer or withdraw funds.
+- **Granular Control**: Define which assets, protocols, and actions your AI agent can manage—no hidden moves.
+- **Rule-Based Autonomy**: Smart contracts strictly enforce your boundaries, ensuring the AI agent never oversteps.
+- **Minimal Trust**: Rely on open-source, immutable code instead of opaque server-side wallets.
+- **Extensible**: Integrate new DeFi protocols (“legos”) without migrating your wallet—stay future-proof.
+- **Auditability**: Transparent, reviewable code that anyone can inspect or verify for security.
+
+## How It Works (High-Level)
+
+1. **Deploy your AI Wallet**: A personal smart contract that you—and your chosen AI agent—control.
+2. **Set Permissions & Rules**: Decide exactly which assets, protocols, or operations your agent can handle.
+3. **AI Autonomy Within Limits**: The agent can lend, swap, or rebalance your DeFi holdings—but only within your specified parameters.
+
+## Build with Underscore
+
+Deploy your AI Wallet in minutes. Here’s how:
+
+### Create a User AI Wallet
+
+```python
+owner = "0xYourOwnerAddress"  # Your wallet address
+
+user_ai_wallet = agent_factory.createUserWallet(
+    owner,  # You are the ultimate owner
+    agent   # Your AI agent's address
+)
+
 ```
 
-- **Minimized Trust**: Rely on immutable smart contracts instead of server-side AI wallets
-- **Auditability**: Open-source logic means transparent, reviewable code
-- **Security**: Combine AI capabilities with onchain rule enforcement
-- **User Sovereignty**: Retain ultimate control over your assets
+### Configure Agent Permissions
+
+
+```python
+# Allowed assets (e.g., WETH, USDC)
+allowed_assets = [
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # WETH
+    "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"   # USDC
+]
+for asset in allowed_assets:
+    user_wallet_config.addAssetForAgent(agent, asset, sender=owner)
+
+# Allowed protocols (e.g., Aave, Uniswap)
+allowed_protocols = [1, 2]  # Lego IDs
+for protocol_id in allowed_protocols:
+    user_wallet_config.addLegoIdForAgent(agent, protocol_id, sender=owner)
+
+```
+
+### AI-Driven DeFi Actions
+
+```python
+# Example: Swap WETH → USDC on Uniswap (legoId = 2)
+swap = {"legoId": 2, "amountIn": weth_amount, "tokenPath": [weth, usdc]}
+user_ai_wallet.swapTokens([swap], sender=agent)
+
+# Example: Deposit into Aave (legoId = 1)
+user_ai_wallet.depositTokens(1, usdc, usdc_amount, sender=agent)
+```
+
+For a complete walkthrough, see our [Getting Started Guide](docs/guides/GETTING_STARTED.md).
+
+## Use Cases
+
+- **Autonomous Yield Farming**: your AI agent could monitor lending rates on Aave and Compound, shifting funds to whichever yields the best APY -- all within your specified risk tolerance.
+- **Portfolio Rebalancing**: your AI agent could dynamically rebalance your holdings (e.g., 50% stablecoins, 50% ETH). If the price of ETH spikes, the agent swaps just enough to maintain your target ratios.
+- **Proactive Risk Monitoring**: your agent could watch onchain data for liquidity drops or major volatility. If a threshold is hit, it automatically unwinds high-risk positions -- limited only to the protocols you’ve authorized.
+
+## Why It Matters
+
+AI agents in DeFi are powerful but can be risky—server-side AI wallets can be compromised, leaving your funds vulnerable. Underscore takes a trust-minimized approach:
+
+- **Smart Contracts Govern the Rules**: No black-box infrastructure or opaque custodians.
+- **No Blind Trust**: Full transparency in code and onchain operations.
+- **Security by Design**: Even if the AI logic goes astray, it can’t exceed your smart contract’s strict parameters.
 
 ## Quick Navigation
 
@@ -52,80 +105,22 @@ Underscore is onchain infrastructure that enables AI agents to operate in DeFi w
 - [**PriceSheets**](docs/api/PriceSheets.md): Handles price data and calculations
 - [**LegoHelper**](docs/api/LegoHelper.md): Helper functions for lego operations
 
-## Example Usage
+## Frequently Asked Questions
 
+**Q: Is Underscore custodial?**  
+A: No, only you can withdraw funds from your AI Wallet.
 
-### Create a User AI Wallet
+**Q: Can I use Underscore without AI?**  
+A: Absolutely. You can use manual agents or other automation solutions.
 
-A User AI Wallet is a smart contract wallet that the user owns, and that AI agents can interact with on the user's behalf. The User AI wallet interacts with DeFi. Here's how to create one:
+**Q: Which blockchains are supported?**  
+A: Currently Base L2, with plans for additional EVM-compatible chains.
 
-```python
-owner = "0xYourOwnerAddress", # your wallet address (i.e. Ledger hardware wallet)
+**Q: Can I upgrade my AI Wallet?**  
+A: The core wallet is immutable. However, you can add new DeFi integrations (“legos”) as they become available, without migrating funds.
 
-user_ai_wallet = agent_factory.createUserWallet(
-    owner, # owner of the User AI Wallet
-    agent, # agent address
-)
-```
-
-### Configure AI Agent Permissions
-
-Set boundaries and permissions with what the agent is allowed to do:
-
-```python
-user_wallet_config = user_ai_wallet.walletConfig()
-
-# assets the agent can interact with
-allowed_assets = ["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # WETH
-                  "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"]  # USDC
-for asset in allowed_assets:
-    user_wallet_config.addAssetForAgent(agent, asset, sender=owner)
-
-# protocols agent can interact with
-allowed_protocols = [1, 2]  # lego ids (i.e. aave, uniswap)
-for protocol_id in allowed_protocols:
-    user_wallet_config.addLegoIdForAgent(agent, protocol_id, sender=owner)
-
-# actions the agent can perform
-allowed_actions = {
-    "canDeposit": True,
-    "canWithdraw": True,
-    "canSwap": False,
-    ...
-}
-wallet_config.modifyAllowedActions(
-    agent,
-    allowed_actions,
-    sender=owner
-)
-```
-
-### Agent can perform actions
-
-Once funds are in the User's AI Wallet, the agent can perform DeFi actions within the boundaries that the user has set:
-
-```python
-# perform a swap with uniswap
-swap = {
-    "legoId": 2, # uniswap
-    "amountIn": weth_amount, # amount to swap from
-    "tokenPath": [weth, usdc], # swapping from weth to usdc
-    ...
-}
-user_ai_wallet.swapTokens([swap], sender=agent)
-
-# deposit into aave
-user_ai_wallet.depositTokens(
-    1, # aave lego id
-    usdc, # asset to deposit into aave
-    usdcAToken, # aave aToken
-    usdc_amount, # amount to deposit into aave
-    sender=agent
-)
-```
-
-For a complete walkthrough, see our [Getting Started Guide](docs/guides/GETTING_STARTED.md).
-
+**Q: Who manages the AI logic?**  
+A: That’s up to you. Underscore provides the infrastructure to constrain AI agents within onchain rules, but the agent’s code or service can be yours or a third party’s.
 
 ## Glossary
 
@@ -142,27 +137,15 @@ For a complete walkthrough, see our [Getting Started Guide](docs/guides/GETTING_
 | **Rule** | A condition-action pair that defines automated behavior for an agent |
 | **Whitelist** | A list of approved addresses, assets, or protocols |
 
-## Frequently Asked Questions
+## Get Involved
 
-### General Questions
+Underscore bridges AI and DeFi without compromising security or sovereignty. Ready to scale trustless finance?
 
-**Q: Is Underscore custodial?**  
-A: No, Underscore is non-custodial. Only the wallet owner can withdraw funds.
+- [GitHub Repo](https://github.com/underscore-finance) – Dive into the code and open issues or PRs.
+- [Discord](https://discord.gg/Y6PWmndNaC) - Join our community for support, discussions, and real-time updates.
+- [Twitter/X](https://x.com/underscore_hq) – Follow for announcements, roadmap highlights, and more.
 
-**Q: Can I use Underscore without AI?**  
-A: Yes, Underscore can be used with manual agents or other automation systems.
-
-**Q: Which blockchains are supported?**  
-A: Currently only Base L2, with plans to expand to other EVM-compatible chains.
-
-### Technical Questions
-
-**Q: How are funds secured?**  
-A: Funds are secured through smart contract permissions, with only the wallet owner able to withdraw funds.
-
-**Q: Can I upgrade my User AI Wallet?**  
-A: The core wallet cannot be upgraded, but new protocol integrations (legos) can be added without moving funds.
-
+Built by the team at [Hightop](http://hightop.com) + [Ripe](http://ripe.finance)
 
 ## License
 
