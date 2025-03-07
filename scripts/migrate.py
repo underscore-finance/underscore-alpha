@@ -56,8 +56,8 @@ CLICK_PROMPTS = {
     },
     "account": {
         "prompt": "Deployer account name",
-        "default": "RIPE_DEPLOYER",
-        "help": "Account name for deployment. Defaults to `RIPE_DEPLOYER`"
+        "default": "DEPLOYER",
+        "help": "Account name for deployment. Defaults to `DEPLOYER`"
     },
     "ignore_logs": {
         "prompt": "Ignore current logs (always run transactions)?",

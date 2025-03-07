@@ -5,11 +5,16 @@ from scripts.utils import log
 from eth_account import Account
 import subprocess
 from eth_abi.abi import encode
+import dotenv
 
+dotenv.load_dotenv()
 
 # Define constants for directories
 CONTRACTS_DIR = "./contracts"
 INTERFACES_DIR = "./interfaces"
+
+
+TEST_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 
 
 def load_vyper_files(directories=[CONTRACTS_DIR, INTERFACES_DIR]):
@@ -40,7 +45,7 @@ def get_account(accountName):
 
     accountKey = os.environ.get(f'{accountName}_PRIVATE_KEY')
     account = Account.from_key(
-        accountKey if accountKey else '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+        accountKey if accountKey else TEST_PRIVATE_KEY)
     log.h2(f'Deployer account {accountName} connected')
 
     return account
