@@ -89,7 +89,6 @@ AI agents in DeFi are powerful but can be risky—server-side AI wallets can be 
 ### Developer Guides
 
 - [**Getting Started**](docs/guides/GETTING_STARTED.md): Create your first User AI Wallet
-- [**Deployment Guide**](docs/guides/DEPLOYMENT.md): Deploy the Underscore system
 - [**Testing Guide**](docs/guides/TESTING.md): Test the Underscore system
 
 ### API Reference

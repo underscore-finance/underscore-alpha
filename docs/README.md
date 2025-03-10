@@ -23,7 +23,6 @@ These documents explain the core concepts and architecture of the Underscore pro
 These guides provide step-by-step instructions for common tasks:
 
 - [**Getting Started**](guides/GETTING_STARTED.md): Create your first User AI Wallet
-- [**Deployment Guide**](guides/DEPLOYMENT.md): Deploy the Underscore system
 - [**Testing Guide**](guides/TESTING.md): Test the Underscore system
 
 ## API Reference
