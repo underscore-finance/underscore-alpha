@@ -24,11 +24,12 @@ interface WalletConfig:
     def hasPendingOwnerChange() -> bool: view
     def owner() -> address: view
 
-interface AgentFactory:
-    def isUserWallet(_wallet: address) -> bool: view
-
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
+    def governor() -> address: view
+
+interface AgentFactory:
+    def isUserWallet(_wallet: address) -> bool: view
 
 flag ActionType:
     DEPOSIT
@@ -888,10 +889,10 @@ def confirmWhitelistAddr(_addr: address):
 def cancelPendingWhitelistAddr(_addr: address):
     """
     @notice Cancels a pending whitelist address
-    @dev Can only be called by the owner
+    @dev Can only be called by the owner or governor
     @param _addr The address to cancel
     """
-    assert msg.sender == self.owner # dev: only owner can cancel
+    assert msg.sender in [self.owner, staticcall AddyRegistry(self.addyRegistry).governor()] # dev: no perms (only owner or governor)
     data: PendingWhitelist = self.pendingWhitelist[_addr]
     assert data.initiatedBlock != 0 # dev: no pending whitelist
     self.pendingWhitelist[_addr] = empty(PendingWhitelist)
@@ -1012,9 +1013,9 @@ def confirmOwnershipChange():
 def cancelOwnershipChange():
     """
     @notice Cancels the ownership change
-    @dev Can only be called by the current owner
+    @dev Can only be called by the current owner or governor
     """
-    assert msg.sender == self.owner # dev: no perms
+    assert msg.sender in [self.owner, staticcall AddyRegistry(self.addyRegistry).governor()] # dev: no perms (only owner or governor)
     data: PendingOwner = self.pendingOwner
     assert data.confirmBlock != 0 # dev: no pending change
     self.pendingOwner = empty(PendingOwner)
