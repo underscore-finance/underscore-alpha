@@ -31,6 +31,10 @@ struct TrialFundsOpp:
     legoId: uint256
     vaultToken: address
 
+struct TrialFundsRecovery:
+    wallet: address
+    opportunities: DynArray[TrialFundsOpp, MAX_LEGOS]
+
 event UserWalletCreated:
     mainAddr: indexed(address)
     configAddr: indexed(address)
@@ -109,6 +113,7 @@ isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
 WETH_ADDR: public(immutable(address))
 
+MAX_RECOVERIES: constant(uint256) = 100
 MAX_LEGOS: constant(uint256) = 20
 
 
@@ -628,6 +633,20 @@ def recoverTrialFunds(_wallet: address, _opportunities: DynArray[TrialFundsOpp, 
     """
     assert gov._isGovernor(msg.sender) # dev: no perms
     return extcall MainWallet(_wallet).recoverTrialFunds(_opportunities)
+
+
+@external
+def recoverTrialFundsMany(_recoveries: DynArray[TrialFundsRecovery, MAX_RECOVERIES]) -> bool:
+    """
+    @notice Recover trial funds from a list of wallets
+    @dev Only callable by the governor, transfers funds back here
+    @param _recoveries The list of wallets and opportunities to recover funds for
+    @return True if the funds were successfully recovered, False otherwise
+    """
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    for r: TrialFundsRecovery in _recoveries:
+        assert extcall MainWallet(r.wallet).recoverTrialFunds(r.opportunities) # dev: recovery failed
+    return True
 
 
 ############

@@ -307,6 +307,47 @@ def test_trial_funds_recovery_complex(new_ai_wallet, agent_factory, alpha_token,
     assert new_ai_wallet.trialFundsInitialAmount() == 0
 
 
+def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, agent, governor, alpha_token_whale, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
+    """Test trial funds recovery from multiple wallets in a single transaction"""
+
+    # Transfer additional funds to factory for second wallet
+    alpha_token.transfer(agent_factory, TRIAL_AMOUNT, sender=alpha_token_whale)
+
+    # Create two wallets
+    wallet1 = agent_factory.createUserWallet(owner, agent)
+    wallet2 = agent_factory.createUserWallet(owner, agent)
+    wallet1_contract = WalletFunds.at(wallet1)
+    wallet2_contract = WalletFunds.at(wallet2)
+
+    # Verify initial trial funds
+    assert alpha_token.balanceOf(wallet1) == TRIAL_AMOUNT
+    assert alpha_token.balanceOf(wallet2) == TRIAL_AMOUNT
+
+    # Deposit trial funds from both wallets
+    wallet1_contract.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+    wallet2_contract.depositTokens(mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, TRIAL_AMOUNT, sender=agent)
+
+    # Prepare recovery data for both wallets
+    recoveries = [
+        (wallet1, [(mock_lego_alpha.legoId(), alpha_token_erc4626_vault)]),
+        (wallet2, [(mock_lego_alpha_another.legoId(), alpha_token_erc4626_vault_another)])
+    ]
+
+    # Recover trial funds from both wallets in a single transaction
+    assert agent_factory.recoverTrialFundsMany(recoveries, sender=governor)
+
+    # Verify all funds were recovered to the factory
+    assert alpha_token.balanceOf(agent_factory) == 2 * TRIAL_AMOUNT
+    assert alpha_token.balanceOf(wallet1) == 0
+    assert alpha_token.balanceOf(wallet2) == 0
+
+    # Verify trial funds data was cleared in both wallets
+    assert wallet1_contract.trialFundsAsset() == ZERO_ADDRESS
+    assert wallet1_contract.trialFundsInitialAmount() == 0
+    assert wallet2_contract.trialFundsAsset() == ZERO_ADDRESS
+    assert wallet2_contract.trialFundsInitialAmount() == 0
+
+
 def test_trial_funds_vault_token_transfer_restrictions(new_ai_wallet, alpha_token, agent, mock_lego_alpha, alpha_token_erc4626_vault, owner):
     """Test restrictions on transferring vault tokens that represent trial funds"""
 
@@ -375,67 +416,3 @@ def test_trial_funds_vault_token_transfer_different_vault(new_ai_wallet, alpha_t
     # Try to transfer vault tokens from second vault - should also fail
     with boa.reverts("cannot transfer trial funds vault token"):
         new_ai_wallet.transferFunds(owner, vault2_tokens, alpha_token_erc4626_vault_another, sender=owner)
-
-
-# @pytest.base
-# def test_batch_actions_deposit_usdc_in_many_legos_trial_funds(owner, agent, getTokenAndWhale, lego_morpho, lego_fluid, agent_factory, governor):
-#     usdc, usdc_whale = getTokenAndWhale("usdc")
-#     amount = 10_000_000
-
-#     # Setup trial funds
-#     usdc.transfer(agent_factory, amount * 10, sender=usdc_whale)
-
-#     assert agent_factory.setTrialFundsData(usdc, amount, sender=governor)
-
-#     # create fresh wallet
-#     fresh_wallet = WalletFunds.at(agent_factory.createUserWallet(owner, agent, sender=owner))
-
-#     # check trial funds
-#     assert usdc.balanceOf(fresh_wallet) == amount
-
-#     # Morpho
-#     morpho_vault_token = boa.from_etherscan("0xc1256ae5ff1cf2719d4937adb3bbccab2e00a2ca", name="morpho_vault_token")
-#     assert lego_morpho.addAssetOpportunity(usdc.address, morpho_vault_token, sender=governor)
-#     assert morpho_vault_token.balanceOf(fresh_wallet) == 0
-
-#     # Fluid
-#     fluid_vault_token = boa.from_etherscan("0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169", name="fluid_vault_token")
-#     assert lego_fluid.addAssetOpportunity(usdc.address, fluid_vault_token, sender=governor)
-#     assert fluid_vault_token.balanceOf(fresh_wallet) == 0
-
-#     # Create batch instructions
-#     instructions = [
-#         (
-#             DEPOSIT_UINT256,
-#             lego_morpho.legoId(),
-#             usdc.address,
-#             morpho_vault_token.address,
-#             2_000_000,
-#             ZERO_ADDRESS,
-#             0,
-#             ZERO_ADDRESS,
-#             ZERO_ADDRESS,
-#             0,
-#             ZERO_ADDRESS,
-#         ),
-#         (
-#             DEPOSIT_UINT256,
-#             lego_fluid.legoId(),
-#             usdc.address,
-#             fluid_vault_token.address,
-#             2_000_000,
-#             ZERO_ADDRESS,
-#             0,
-#             ZERO_ADDRESS,
-#             ZERO_ADDRESS,
-#             0,
-#             ZERO_ADDRESS,
-#         ),
-#     ]
-
-#     # Test batch actions by owner
-#     assert fresh_wallet.performManyActions(instructions, sender=agent)
-#     assert usdc.balanceOf(fresh_wallet) != amount
-
-#     assert morpho_vault_token.balanceOf(fresh_wallet) != 0
-#     assert fluid_vault_token.balanceOf(fresh_wallet) != 0
