@@ -131,7 +131,7 @@ def test_ownership_change_cancellation(ai_wallet_config, owner, new_owner, sally
     pending_owner = ai_wallet_config.pendingOwner()
 
     # Test cancelling by non-owner
-    with boa.reverts("no perms (only owner or governor)"):
+    with boa.reverts("no perms (only owner or governance)"):
         ai_wallet_config.cancelOwnershipChange(sender=sally)
 
     # Cancel ownership change

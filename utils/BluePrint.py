@@ -54,6 +54,9 @@ ADDYS = {
 
 PARAMS = {
     "base": {
+        # addy book gov (blocks)
+        "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,  # 1 day on Base
+        "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,  # 7 days on Base
         # user wallet config (blocks)
         "USER_MIN_OWNER_CHANGE_DELAY": 21_600,  # 12 hours on Base
         "USER_MAX_OWNER_CHANGE_DELAY": 302_400,  # 7 days on Base
@@ -71,6 +74,9 @@ PARAMS = {
         "ORACLE_REGISTRY_MAX_STALE_TIME": 60 * 60 * 24 * 3,  # 3 days
     },
     "local": {
+        # addy book gov (blocks)
+        "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,
+        "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,
         # user wallet config (blocks)
         "USER_MIN_OWNER_CHANGE_DELAY": 21_600,
         "USER_MAX_OWNER_CHANGE_DELAY": 302_400,

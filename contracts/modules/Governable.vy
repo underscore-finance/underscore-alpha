@@ -4,7 +4,7 @@
 # @version 0.4.1
 
 interface AddyRegistry:
-    def governor() -> address: view
+    def governance() -> address: view
 
 event LocalGovernorSet:
     addr: indexed(address)
@@ -33,7 +33,7 @@ def isGovernor(_address: address) -> bool:
 @view
 @internal
 def _isGovernor(_address: address) -> bool:
-    return _address in [self.localGovernor, staticcall AddyRegistry(ADDY_REGISTRY).governor()]
+    return _address in [self.localGovernor, staticcall AddyRegistry(ADDY_REGISTRY).governance()]
 
 
 ################
@@ -44,7 +44,7 @@ def _isGovernor(_address: address) -> bool:
 @view
 @external 
 def isValidLocalGovernor(_newGovernor: address) -> bool:
-    mainGovernor: address = staticcall AddyRegistry(ADDY_REGISTRY).governor()
+    mainGovernor: address = staticcall AddyRegistry(ADDY_REGISTRY).governance()
     return self._isValidLocalGovernor(_newGovernor, mainGovernor)
 
 
@@ -60,7 +60,7 @@ def _isValidLocalGovernor(_newGovernor: address, _mainGovernor: address) -> bool
 
 @external
 def setLocalGovernor(_newGovernor: address) -> bool:
-    mainGovernor: address = staticcall AddyRegistry(ADDY_REGISTRY).governor()
+    mainGovernor: address = staticcall AddyRegistry(ADDY_REGISTRY).governance()
     assert msg.sender == mainGovernor # dev: no perms
     if not self._isValidLocalGovernor(_newGovernor, mainGovernor):
         return False

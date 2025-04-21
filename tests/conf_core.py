@@ -9,8 +9,10 @@ from utils.BluePrint import PARAMS, ADDYS, CORE_TOKENS
 
 
 @pytest.fixture(scope="session")
-def addy_registry_deploy(governor):
-    return boa.load("contracts/core/AddyRegistry.vy", governor, name="addy_registry")
+def addy_registry_deploy(governor, fork):
+    min_delay = PARAMS[fork]["ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY"]
+    max_delay = PARAMS[fork]["ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY"]
+    return boa.load("contracts/core/AddyRegistry.vy", governor, min_delay, max_delay, name="addy_registry")
 
 
 @pytest.fixture(scope="session", autouse=True)

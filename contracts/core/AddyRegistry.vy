@@ -9,6 +9,11 @@ struct AddyInfo:
     lastModified: uint256
     description: String[64]
 
+struct PendingGovernance:
+    newGov: address
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
 event NewAddyRegistered:
     addr: indexed(address)
     addyId: uint256
@@ -27,22 +32,48 @@ event AddyIdDisabled:
     version: uint256
     description: String[64]
 
-event AddyRegistryGovernorSet:
-    governor: indexed(address)
+event GovChangeInitiated:
+    prevGov: indexed(address)
+    newGov: indexed(address)
+    confirmBlock: uint256
+
+event GovChangeConfirmed:
+    prevGov: indexed(address)
+    newGov: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event GovChangeCancelled:
+    cancelledGov: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event GovChangeDelaySet:
+    delayBlocks: uint256
 
 # core
 addyInfo: public(HashMap[uint256, AddyInfo])
 addyToId: public(HashMap[address, uint256])
 numAddys: public(uint256)
 
-# config
-governor: public(address)
+# governance
+governance: public(address)
+pendingGov: public(PendingGovernance) # pending governance change
+govChangeDelay: public(uint256) # num blocks to wait before governance can be changed
+
+MIN_GOV_CHANGE_DELAY: public(immutable(uint256))
+MAX_GOV_CHANGE_DELAY: public(immutable(uint256))
 
 
 @deploy
-def __init__(_governor: address):
-    assert _governor != empty(address) # dev: invalid governor
-    self.governor = _governor
+def __init__(_initialGov: address, _minGovChangeDelay: uint256, _maxGovChangeDelay: uint256):
+    assert _initialGov != empty(address) # dev: invalid governance
+    self.governance = _initialGov
+
+    assert _minGovChangeDelay < _maxGovChangeDelay # dev: invalid delay
+    MIN_GOV_CHANGE_DELAY = _minGovChangeDelay
+    MAX_GOV_CHANGE_DELAY = _maxGovChangeDelay
+    self.govChangeDelay = _minGovChangeDelay
 
     # start at 1 index
     self.numAddys = 1
@@ -82,7 +113,7 @@ def registerNewAddy(_addy: address, _description: String[64]) -> uint256:
     @param _description A brief description of the contract's functionality
     @return The assigned ID if registration successful, 0 if failed
     """
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == self.governance # dev: no perms
 
     if not self._isValidNewAddy(_addy):
         return 0
@@ -140,7 +171,7 @@ def updateAddy(_addyId: uint256, _newAddy: address) -> bool:
     @param _newAddy The new address for the contract
     @return True if update successful, False otherwise
     """
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == self.governance # dev: no perms
 
     data: AddyInfo = self.addyInfo[_addyId]
     prevAddy: address = data.addr # needed for later
@@ -196,7 +227,7 @@ def disableAddy(_addyId: uint256) -> bool:
     @param _addyId The ID of the contract to disable
     @return True if disable successful, False otherwise
     """
-    assert msg.sender == self.governor # dev: no perms
+    assert msg.sender == self.governance # dev: no perms
 
     data: AddyInfo = self.addyInfo[_addyId]
     prevAddy: address = data.addr # needed for later
@@ -341,42 +372,80 @@ def getLastAddyId() -> uint256:
     return self.numAddys - 1
 
 
-################
-# Set Governor #
-################
+##############
+# Governance #
+##############
 
 
 @view
-@external 
-def isValidGovernor(_newGovernor: address) -> bool:
+@external
+def hasPendingGovChange() -> bool:
     """
-    @notice Check if an address can be set as the new governor
-    @dev Address must be a contract and different from current governor
-    @param _newGovernor The address to validate
-    @return True if address can be set as governor, False otherwise
+    @notice Checks if there is a pending governance change
+    @return bool True if there is a pending governance change, false otherwise
     """
-    return self._isValidGovernor(_newGovernor)
-
-
-@view
-@internal 
-def _isValidGovernor(_newGovernor: address) -> bool:
-    if not _newGovernor.is_contract or _newGovernor == empty(address):
-        return False
-    return _newGovernor != self.governor
+    return self.pendingGov.confirmBlock != 0
 
 
 @external
-def setGovernor(_newGovernor: address) -> bool:
+def changeGovernance(_newGov: address):
     """
-    @notice Set a new governor address
-    @dev Only callable by current governor
-    @param _newGovernor The address to set as governor
-    @return True if governor was set successfully, False otherwise
+    @notice Initiates a new governance change
+    @dev Can only be called by current governance
+    @param _newGov The address of new governance
     """
-    assert msg.sender == self.governor # dev: no perms
-    if not self._isValidGovernor(_newGovernor):
-        return False
-    self.governor = _newGovernor
-    log AddyRegistryGovernorSet(governor=_newGovernor)
-    return True
+    currentGov: address = self.governance
+    assert msg.sender == currentGov # dev: no perms
+    assert _newGov not in [empty(address), currentGov] # dev: invalid new governance
+    assert _newGov.is_contract # dev: new governance must be a contract
+
+    confirmBlock: uint256 = block.number + self.govChangeDelay
+    self.pendingGov = PendingGovernance(
+        newGov= _newGov,
+        initiatedBlock= block.number,
+        confirmBlock= confirmBlock,
+    )
+    log GovChangeInitiated(prevGov=currentGov, newGov=_newGov, confirmBlock=confirmBlock)
+
+
+@external
+def confirmGovernanceChange():
+    """
+    @notice Confirms the governance change
+    @dev Can only be called by the new governance
+    """
+    data: PendingGovernance = self.pendingGov
+    assert data.newGov != empty(address) # dev: no pending governance
+    assert data.confirmBlock != 0 and block.number >= data.confirmBlock # dev: time delay not reached
+    assert msg.sender == data.newGov # dev: only new governance can confirm
+
+    prevGov: address = self.governance
+    self.governance = data.newGov
+    self.pendingGov = empty(PendingGovernance)
+    log GovChangeConfirmed(prevGov=prevGov, newGov=data.newGov, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
+
+
+@external
+def cancelGovernanceChange():
+    """
+    @notice Cancels the governance change
+    @dev Can only be called by the current governance
+    """
+    assert msg.sender == self.governance # dev: no perms
+    data: PendingGovernance = self.pendingGov
+    assert data.confirmBlock != 0 # dev: no pending change
+    self.pendingGov = empty(PendingGovernance)
+    log GovChangeCancelled(cancelledGov=data.newGov, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
+
+
+@external
+def setGovernanceChangeDelay(_numBlocks: uint256):
+    """
+    @notice Sets the governance change delay
+    @dev Can only be called by current governance
+    @param _numBlocks The number of blocks to wait before governance can be changed
+    """
+    assert msg.sender == self.governance # dev: no perms
+    assert _numBlocks >= MIN_GOV_CHANGE_DELAY and _numBlocks <= MAX_GOV_CHANGE_DELAY # dev: invalid delay
+    self.govChangeDelay = _numBlocks
+    log GovChangeDelaySet(delayBlocks=_numBlocks)

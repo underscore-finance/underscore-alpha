@@ -9,7 +9,7 @@ import contracts.modules.Governable as gov
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governor() -> address: view
+    def governance() -> address: view
 
 interface OracleRegistry:
     def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -173,7 +173,7 @@ def __init__(
 ):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
     gov.__init__(_addyRegistry)
-    self.protocolRecipient = staticcall AddyRegistry(_addyRegistry).governor()
+    self.protocolRecipient = staticcall AddyRegistry(_addyRegistry).governance()
     self.isActivated = True
 
     ADDY_REGISTRY = _addyRegistry
