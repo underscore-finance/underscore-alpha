@@ -85,10 +85,15 @@ event AgentFactoryFundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
+event RecoveryCallerSet:
+    caller: indexed(address)
+
 event AgentFactoryActivated:
     isActivated: bool
 
+# trial funds
 trialFundsData: public(TrialFundsData)
+recoveryCaller: public(address)
 
 # user wallets
 userWalletTemplate: public(TemplateInfo)
@@ -626,12 +631,12 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
 def recoverTrialFunds(_wallet: address, _opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
     """
     @notice Recover trial funds from a wallet
-    @dev Only callable by the governor, transfers funds back here
+    @dev Only callable by the governor or recovery caller, transfers funds back here
     @param _wallet The address of the wallet to recover funds from
     @param _opportunities The list of opportunities to recover funds for
     @return True if the funds were successfully recovered, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._isGovernor(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
     return extcall MainWallet(_wallet).recoverTrialFunds(_opportunities)
 
 
@@ -639,13 +644,30 @@ def recoverTrialFunds(_wallet: address, _opportunities: DynArray[TrialFundsOpp, 
 def recoverTrialFundsMany(_recoveries: DynArray[TrialFundsRecovery, MAX_RECOVERIES]) -> bool:
     """
     @notice Recover trial funds from a list of wallets
-    @dev Only callable by the governor, transfers funds back here
+    @dev Only callable by the governor or recovery caller, transfers funds back here
     @param _recoveries The list of wallets and opportunities to recover funds for
     @return True if the funds were successfully recovered, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._isGovernor(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
     for r: TrialFundsRecovery in _recoveries:
         assert extcall MainWallet(r.wallet).recoverTrialFunds(r.opportunities) # dev: recovery failed
+    return True
+
+
+@external
+def setRecoveryCaller(_caller: address) -> bool:
+    """
+    @notice Set the caller address for recovery operations
+    @dev Only callable by the governor, updates the recovery caller
+    @param _caller The address to set as the recovery caller
+    @return True if the recovery caller was successfully updated, False otherwise
+    """
+    assert gov._isGovernor(msg.sender) # dev: no perms
+    if _caller == empty(address):
+        return False
+
+    self.recoveryCaller = _caller
+    log RecoveryCallerSet(caller=_caller)
     return True
 
 

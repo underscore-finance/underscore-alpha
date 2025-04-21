@@ -58,6 +58,7 @@ struct ActionInstruction:
     liqToRemove: uint256
     recipient: address
     isWethToEthConversion: bool
+    swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]
 
 struct PendingOwner:
     newOwner: address
@@ -113,7 +114,7 @@ CLAIM_REWARDS_TYPE_HASH: constant(bytes32) = keccak256('ClaimRewards(address use
 BORROW_TYPE_HASH: constant(bytes32) = keccak256('Borrow(address userWallet,uint256 legoId,address borrowAsset,uint256 amount,uint256 expiration)')
 REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(address userWallet,uint256 legoId,address paymentAsset,uint256 paymentAmount,uint256 expiration)')
 BATCH_ACTIONS_TYPE_HASH: constant(bytes32) =  keccak256('BatchActions(address userWallet,ActionInstruction[] instructions,uint256 expiration)')
-ACTION_INSTRUCTION_TYPE_HASH: constant(bytes32) = keccak256('ActionInstruction(bool usePrevAmountOut,uint256 action,uint256 legoId,address asset,address vault,uint256 amount,uint256 altLegoId,address altAsset,address altVault,uint256 altAmount,uint256 minAmountOut,address pool,bytes32 proof,address nftAddr,uint256 nftTokenId,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 liqToRemove,address recipient,bool isWethToEthConversion)')
+ACTION_INSTRUCTION_TYPE_HASH: constant(bytes32) = keccak256('ActionInstruction(bool usePrevAmountOut,uint256 action,uint256 legoId,address asset,address vault,uint256 amount,uint256 altLegoId,address altAsset,address altVault,uint256 altAmount,uint256 minAmountOut,address pool,bytes32 proof,address nftAddr,uint256 nftTokenId,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 liqToRemove,address recipient,bool isWethToEthConversion,SwapInstruction[] swapInstructions)')
 
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
@@ -121,7 +122,7 @@ MAX_INSTRUCTIONS: constant(uint256) = 20
 MAX_SWAP_INSTRUCTIONS: constant(uint256) = 5
 MAX_TOKEN_PATH: constant(uint256) = 5
 
-API_VERSION: constant(String[28]) = "0.0.1"
+API_VERSION: constant(String[28]) = "0.0.2"
 
 
 @deploy
@@ -558,6 +559,12 @@ def performBatchActions(
                 amount = prevAmountReceived
             naValueA, naAddyA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).rebalance(i.legoId, i.asset, i.vault, i.altLegoId, i.altVault, amount)
 
+        # swap
+        elif i.action == ActionType.SWAP:
+            if i.usePrevAmountOut and prevAmountReceived != 0:
+                i.swapInstructions[0].amountIn = prevAmountReceived
+            naValueA, prevAmountReceived, naValueB = extcall UserWalletCustom(_userWallet).swapTokens(i.swapInstructions)
+
         # borrow
         elif i.action == ActionType.BORROW:
             naAddyA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).borrow(i.legoId, i.asset, i.amount)
@@ -615,7 +622,9 @@ def performBatchActions(
 
 @view
 @internal
-def _encodeBatchActionInstruction(_instr: ActionInstruction) -> Bytes[768]:
+def _encodeBatchActionInstruction(_instr: ActionInstruction) -> Bytes[3552]:
+    encodedSwapInstructions: Bytes[2720] = self._encodeSwapInstructions(_instr.swapInstructions)
+
     # Just encode, no hash
     return abi_encode(
         ACTION_INSTRUCTION_TYPE_HASH,
@@ -641,7 +650,8 @@ def _encodeBatchActionInstruction(_instr: ActionInstruction) -> Bytes[768]:
         _instr.minLpAmount,
         _instr.liqToRemove,
         _instr.recipient,
-        _instr.isWethToEthConversion
+        _instr.isWethToEthConversion,
+        encodedSwapInstructions
     )
 
 
@@ -732,7 +742,7 @@ def _domainSeparator() -> bytes32:
 
 
 @internal
-def _isValidSignature(_encodedValue: Bytes[736], _sig: Signature):
+def _isValidSignature(_encodedValue: Bytes[512], _sig: Signature):
     assert not self.usedSignatures[_sig.signature] # dev: signature already used
     assert _sig.expiration >= block.timestamp # dev: signature expired
     

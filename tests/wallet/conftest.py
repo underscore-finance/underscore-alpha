@@ -3,7 +3,7 @@ import boa
 
 from eth_account import Account
 from contracts.core import WalletFunds, WalletConfig, AgentTemplate
-from constants import ZERO_ADDRESS, MAX_UINT256
+from constants import ZERO_ADDRESS, MAX_UINT256, SWAP_UINT256
 from eth_account.messages import encode_defunct
 
 
@@ -24,10 +24,10 @@ def ai_wallet_config(ai_wallet):
 def createActionInstruction():
     def createActionInstruction(
         _action,
-        _legoId,
-        _asset,
-        _vault,
-        _amount,
+        _legoId=0,
+        _asset=ZERO_ADDRESS,
+        _vault=ZERO_ADDRESS,
+        _amount=0,
         _usePrevAmountOut=False,
         _altLegoId=0,
         _altAsset=ZERO_ADDRESS,
@@ -46,6 +46,7 @@ def createActionInstruction():
         _liqToRemove=0,
         _recipient=ZERO_ADDRESS,
         _isWethToEthConversion=False,
+        _swapInstructions=[],
     ):
         return (
             _usePrevAmountOut,
@@ -71,9 +72,23 @@ def createActionInstruction():
             _liqToRemove,
             _recipient,
             _isWethToEthConversion,
+            _swapInstructions,
         )
 
     yield createActionInstruction
+
+
+@pytest.fixture(scope="package")
+def createSwapActionInstruction(createActionInstruction):
+    def createSwapActionInstruction(
+        swap_instructions,
+    ):
+        return createActionInstruction(
+            _action=SWAP_UINT256,
+            _swapInstructions=swap_instructions,
+        )
+
+    yield createSwapActionInstruction
 
 
 # signature stuff

@@ -125,10 +125,10 @@ def test_whitelist_permissions(ai_wallet_config, owner, agent, sally, bob):
     ai_wallet_config.addWhitelistAddr(sally, sender=owner)
     
     # Only owner can cancel pending whitelist
-    with boa.reverts("only owner can cancel"):
+    with boa.reverts("no perms (only owner or governor)"):
         ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=agent)
     
-    with boa.reverts("only owner can cancel"):
+    with boa.reverts("no perms (only owner or governor)"):
         ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=bob)
     
     # Cancel as owner

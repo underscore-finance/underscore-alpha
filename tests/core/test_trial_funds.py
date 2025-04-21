@@ -309,9 +309,11 @@ def test_trial_funds_recovery_complex(new_ai_wallet, agent_factory, alpha_token,
 
 def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, agent, governor, alpha_token_whale, mock_lego_alpha, mock_lego_alpha_another, alpha_token_erc4626_vault, alpha_token_erc4626_vault_another):
     """Test trial funds recovery from multiple wallets in a single transaction"""
+    pre_agent_factory = alpha_token.balanceOf(agent_factory)
 
     # Transfer additional funds to factory for second wallet
-    alpha_token.transfer(agent_factory, TRIAL_AMOUNT, sender=alpha_token_whale)
+    new_trial_funds = TRIAL_AMOUNT * 2
+    alpha_token.transfer(agent_factory, new_trial_funds, sender=alpha_token_whale)
 
     # Create two wallets
     wallet1 = agent_factory.createUserWallet(owner, agent)
@@ -327,6 +329,12 @@ def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, ag
     wallet1_contract.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
     wallet2_contract.depositTokens(mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, TRIAL_AMOUNT, sender=agent)
 
+    # Verify trial funds are in vaults
+    assert alpha_token.balanceOf(wallet1) == 0
+    assert alpha_token_erc4626_vault.balanceOf(wallet1) != 0
+    assert alpha_token.balanceOf(wallet2) == 0
+    assert alpha_token_erc4626_vault_another.balanceOf(wallet2) != 0
+
     # Prepare recovery data for both wallets
     recoveries = [
         (wallet1, [(mock_lego_alpha.legoId(), alpha_token_erc4626_vault)]),
@@ -336,8 +344,14 @@ def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, ag
     # Recover trial funds from both wallets in a single transaction
     assert agent_factory.recoverTrialFundsMany(recoveries, sender=governor)
 
+    # Verify trial funds are gone
+    assert alpha_token_erc4626_vault.balanceOf(wallet1) == 0
+    assert alpha_token.balanceOf(wallet1) == 0
+    assert alpha_token_erc4626_vault_another.balanceOf(wallet2) == 0
+    assert alpha_token.balanceOf(wallet2) == 0
+
     # Verify all funds were recovered to the factory
-    assert alpha_token.balanceOf(agent_factory) == 2 * TRIAL_AMOUNT
+    assert alpha_token.balanceOf(agent_factory) == pre_agent_factory + new_trial_funds
     assert alpha_token.balanceOf(wallet1) == 0
     assert alpha_token.balanceOf(wallet2) == 0
 
