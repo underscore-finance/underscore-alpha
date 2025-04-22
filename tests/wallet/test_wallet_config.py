@@ -172,3 +172,85 @@ def test_reserve_assets(ai_wallet, ai_wallet_config, owner, agent, alpha_token, 
     with boa.reverts("no perms"):
         ai_wallet_config.setReserveAsset(alpha_token, reserve_amount, sender=agent)
 
+
+def test_cancel_pending_whitelist_critical(ai_wallet_config, owner, agent_factory, governor, sally, bob):
+    """Test canceling pending whitelist with critical cancel permissions"""
+    # Add sally to pending whitelist
+    ai_wallet_config.addWhitelistAddr(sally, sender=owner)
+    
+    # Set sally as critical canceler
+    agent_factory.setCanCriticalCancel(bob, True, sender=governor)
+    
+    # Sally can cancel pending whitelist
+    ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=bob)
+    log = filter_logs(ai_wallet_config, "WhitelistAddrCancelled")[0]
+    assert log.addr == sally
+    assert log.initiatedBlock != 0
+    assert log.confirmBlock != 0
+    assert log.cancelledBy == bob
+
+
+def test_cancel_ownership_change_critical(ai_wallet_config, owner, agent_factory, governor, sally, bob):
+    """Test canceling ownership change with critical cancel permissions"""
+    # Initiate ownership change
+    ai_wallet_config.changeOwnership(sally, sender=owner)
+    
+    # Set sally as critical canceler
+    agent_factory.setCanCriticalCancel(bob, True, sender=governor)
+    
+    # Sally can cancel ownership change
+    ai_wallet_config.cancelOwnershipChange(sender=bob)
+    log = filter_logs(ai_wallet_config, "OwnershipChangeCancelled")[0]
+    assert log.cancelledOwner == sally
+    assert log.initiatedBlock != 0
+    assert log.confirmBlock != 0
+    assert log.cancelledBy == bob
+
+
+def test_cancel_pending_whitelist_no_perms(ai_wallet_config, owner, sally):
+    """Test canceling pending whitelist without permissions"""
+    # Add sally to pending whitelist
+    ai_wallet_config.addWhitelistAddr(sally, sender=owner)
+    
+    # Sally cannot cancel without permissions
+    with boa.reverts("no perms (only owner or governance)"):
+        ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=sally)
+
+
+def test_cancel_ownership_change_no_perms(ai_wallet_config, owner, sally):
+    """Test canceling ownership change without permissions"""
+    # Initiate ownership change
+    ai_wallet_config.changeOwnership(sally, sender=owner)
+    
+    # Sally cannot cancel without permissions
+    with boa.reverts("no perms (only owner or governance)"):
+        ai_wallet_config.cancelOwnershipChange(sender=sally)
+
+
+def test_cancel_pending_whitelist_owner(ai_wallet_config, owner, sally):
+    """Test canceling pending whitelist as owner"""
+    # Add sally to pending whitelist
+    ai_wallet_config.addWhitelistAddr(sally, sender=owner)
+    
+    # Owner can cancel pending whitelist
+    ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=owner)
+    log = filter_logs(ai_wallet_config, "WhitelistAddrCancelled")[0]
+    assert log.addr == sally
+    assert log.initiatedBlock != 0
+    assert log.confirmBlock != 0
+    assert log.cancelledBy == owner
+
+
+def test_cancel_ownership_change_owner(ai_wallet_config, owner, sally):
+    """Test canceling ownership change as owner"""
+    # Initiate ownership change
+    ai_wallet_config.changeOwnership(sally, sender=owner)
+    
+    # Owner can cancel ownership change
+    ai_wallet_config.cancelOwnershipChange(sender=owner)
+    log = filter_logs(ai_wallet_config, "OwnershipChangeCancelled")[0]
+    assert log.cancelledOwner == sally
+    assert log.initiatedBlock != 0
+    assert log.confirmBlock != 0
+    assert log.cancelledBy == owner
+

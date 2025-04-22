@@ -11,14 +11,18 @@ interface PriceSheets:
     def getAgentSubPriceData(_agent: address) -> SubscriptionInfo: view
     def protocolSubPriceData() -> SubscriptionInfo: view
 
-interface LegoRegistry:
-    def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
-    def isValidLegoId(_legoId: uint256) -> bool: view
-
 interface UserWallet:
     def trialFundsInitialAmount() -> uint256: view
     def trialFundsAsset() -> address: view
     def walletConfig() -> address: view
+
+interface LegoRegistry:
+    def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
+    def isValidLegoId(_legoId: uint256) -> bool: view
+
+interface AgentFactory:
+    def canCancelCriticalAction(_addr: address) -> bool: view
+    def isUserWallet(_wallet: address) -> bool: view
 
 interface WalletConfig:
     def hasPendingOwnerChange() -> bool: view
@@ -26,10 +30,6 @@ interface WalletConfig:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def governance() -> address: view
-
-interface AgentFactory:
-    def isUserWallet(_wallet: address) -> bool: view
 
 flag ActionType:
     DEPOSIT
@@ -158,6 +158,7 @@ event WhitelistAddrCancelled:
     addr: indexed(address)
     initiatedBlock: uint256
     confirmBlock: uint256
+    cancelledBy: indexed(address)
 
 event WhitelistAddrRemoved:
     addr: indexed(address)
@@ -179,6 +180,7 @@ event OwnershipChangeConfirmed:
 
 event OwnershipChangeCancelled:
     cancelledOwner: indexed(address)
+    cancelledBy: indexed(address)
     initiatedBlock: uint256
     confirmBlock: uint256
 
@@ -892,11 +894,13 @@ def cancelPendingWhitelistAddr(_addr: address):
     @dev Can only be called by the owner or governance
     @param _addr The address to cancel
     """
-    assert msg.sender in [self.owner, staticcall AddyRegistry(self.addyRegistry).governance()] # dev: no perms (only owner or governance)
+    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
+    assert msg.sender == self.owner or staticcall AgentFactory(agentFactory).canCancelCriticalAction(msg.sender) # dev: no perms (only owner or governance)
+
     data: PendingWhitelist = self.pendingWhitelist[_addr]
     assert data.initiatedBlock != 0 # dev: no pending whitelist
     self.pendingWhitelist[_addr] = empty(PendingWhitelist)
-    log WhitelistAddrCancelled(addr=_addr, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
+    log WhitelistAddrCancelled(addr=_addr, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock, cancelledBy=msg.sender)
 
 
 @nonreentrant
@@ -1015,11 +1019,13 @@ def cancelOwnershipChange():
     @notice Cancels the ownership change
     @dev Can only be called by the current owner or governance
     """
-    assert msg.sender in [self.owner, staticcall AddyRegistry(self.addyRegistry).governance()] # dev: no perms (only owner or governance)
+    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
+    assert msg.sender == self.owner or staticcall AgentFactory(agentFactory).canCancelCriticalAction(msg.sender) # dev: no perms (only owner or governance)
+
     data: PendingOwner = self.pendingOwner
     assert data.confirmBlock != 0 # dev: no pending change
     self.pendingOwner = empty(PendingOwner)
-    log OwnershipChangeCancelled(cancelledOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
+    log OwnershipChangeCancelled(cancelledOwner=data.newOwner, cancelledBy=msg.sender, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @external

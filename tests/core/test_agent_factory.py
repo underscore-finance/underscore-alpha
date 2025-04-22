@@ -327,3 +327,51 @@ def test_agent_blacklist_control(agent_factory, governor, bob):
     with boa.reverts("no perms"):
         agent_factory.setAgentBlacklist(bob, True, sender=bob)
 
+
+def test_critical_cancel_control(agent_factory, governor, bob):
+    """Test setting critical cancel permissions"""
+    # Test setting by governor
+    assert agent_factory.setCanCriticalCancel(bob, True, sender=governor)
+    
+    log = filter_logs(agent_factory, "CanCriticalCancelSet")[0]
+    assert log.addr == bob
+    assert log.canCancel == True
+
+    assert agent_factory.canCriticalCancel(bob)
+
+    # Test removing permissions
+    assert agent_factory.setCanCriticalCancel(bob, False, sender=governor)
+    assert not agent_factory.canCriticalCancel(bob)
+    
+    # Test setting by non-governor
+    with boa.reverts("no perms"):
+        agent_factory.setCanCriticalCancel(bob, True, sender=bob)
+
+
+def test_critical_cancel_validation(agent_factory, governor, bob):
+    """Test critical cancel validation"""
+    # Test with zero address
+    assert not agent_factory.setCanCriticalCancel(ZERO_ADDRESS, True, sender=governor)
+    
+    # Test with governor address
+    assert not agent_factory.setCanCriticalCancel(governor, True, sender=governor)
+    
+    # Test with same value
+    agent_factory.setCanCriticalCancel(bob, True, sender=governor)
+    assert not agent_factory.setCanCriticalCancel(bob, True, sender=governor)
+
+
+def test_critical_cancel_permissions(agent_factory, governor, bob, sally):
+    """Test critical cancel permissions in action"""
+    # Set bob as critical canceler
+    agent_factory.setCanCriticalCancel(bob, True, sender=governor)
+    
+    # Bob can cancel critical actions
+    assert agent_factory.canCancelCriticalAction(bob)
+    
+    # Sally cannot cancel critical actions
+    assert not agent_factory.canCancelCriticalAction(sally)
+    
+    # Governor can always cancel critical actions
+    assert agent_factory.canCancelCriticalAction(governor)
+

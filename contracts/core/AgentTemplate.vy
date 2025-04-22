@@ -9,6 +9,12 @@ from ethereum.ercs import IERC20
 interface UserWalletCustom:
     def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]) -> (uint256, uint256, uint256): nonpayable
 
+interface AgentFactory:
+    def canCancelCriticalAction(_addr: address) -> bool: view
+
+interface AddyRegistry:
+    def getAddy(_addyId: uint256) -> address: view
+
 flag ActionType:
     DEPOSIT
     WITHDRAWAL
@@ -78,6 +84,7 @@ event AgentOwnershipChangeConfirmed:
 
 event AgentOwnershipChangeCancelled:
     cancelledOwner: indexed(address)
+    cancelledBy: indexed(address)
     initiatedBlock: uint256
     confirmBlock: uint256
 
@@ -91,6 +98,7 @@ event AgentFundsRecovered:
 
 initialized: public(bool)
 usedSignatures: public(HashMap[Bytes[65], bool])
+addyRegistry: public(address)
 
 # owner
 owner: public(address) # owner of the wallet
@@ -121,6 +129,7 @@ MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_INSTRUCTIONS: constant(uint256) = 20
 MAX_SWAP_INSTRUCTIONS: constant(uint256) = 5
 MAX_TOKEN_PATH: constant(uint256) = 5
+AGENT_FACTORY_ID: constant(uint256) = 1
 
 API_VERSION: constant(String[28]) = "0.0.2"
 
@@ -135,13 +144,14 @@ def __init__(_minOwnerChangeDelay: uint256, _maxOwnerChangeDelay: uint256):
 
 
 @external
-def initialize(_owner: address) -> bool:
+def initialize(_owner: address, _addyRegistry: address) -> bool:
     assert not self.initialized # dev: can only initialize once
     self.initialized = True
 
-    assert empty(address) not in [_owner] # dev: invalid addr
+    assert empty(address) not in [_owner, _addyRegistry] # dev: invalid addrs
     self.owner = _owner
     self.ownershipChangeDelay = MIN_OWNER_CHANGE_DELAY
+    self.addyRegistry = _addyRegistry
 
     return True
 
@@ -811,13 +821,15 @@ def confirmOwnershipChange():
 def cancelOwnershipChange():
     """
     @notice Cancels the ownership change
-    @dev Can only be called by the current owner
+    @dev Can only be called by the current owner or governance
     """
-    assert msg.sender == self.owner # dev: no perms
+    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
+    assert msg.sender == self.owner or staticcall AgentFactory(agentFactory).canCancelCriticalAction(msg.sender) # dev: no perms (only owner or governance)
+
     data: PendingOwner = self.pendingOwner
     assert data.confirmBlock != 0 # dev: no pending change
     self.pendingOwner = empty(PendingOwner)
-    log AgentOwnershipChangeCancelled(cancelledOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
+    log AgentOwnershipChangeCancelled(cancelledOwner=data.newOwner, cancelledBy=msg.sender, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
 
 
 @external

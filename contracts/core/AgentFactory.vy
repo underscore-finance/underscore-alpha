@@ -16,7 +16,7 @@ interface WalletConfig:
     def initialize(_wallet: address, _addyRegistry: address, _owner: address, _initialAgent: address) -> bool: nonpayable
 
 interface Agent:
-    def initialize(_owner: address) -> bool: nonpayable
+    def initialize(_owner: address, _addyRegistry: address) -> bool: nonpayable
 
 struct TemplateInfo:
     addr: address
@@ -88,6 +88,10 @@ event AgentFactoryFundsRecovered:
 event RecoveryCallerSet:
     caller: indexed(address)
 
+event CanCriticalCancelSet:
+    addr: indexed(address)
+    canCancel: bool
+
 event AgentFactoryActivated:
     isActivated: bool
 
@@ -112,6 +116,9 @@ numUserWalletsAllowed: public(uint256)
 numAgentsAllowed: public(uint256)
 whitelist: public(HashMap[address, bool])
 shouldEnforceWhitelist: public(bool)
+
+# safety
+canCriticalCancel: public(HashMap[address, bool])
 
 # config
 isActivated: public(bool)
@@ -408,7 +415,7 @@ def createAgent(_owner: address = msg.sender) -> address:
 
     # create agent contract
     agentAddr: address = create_minimal_proxy_to(agentTemplateInfo)
-    assert extcall Agent(agentAddr).initialize(_owner) # dev: could not initialize agent
+    assert extcall Agent(agentAddr).initialize(_owner, ADDY_REGISTRY) # dev: could not initialize agent
 
     # update data
     self.isAgent[agentAddr] = True
@@ -514,6 +521,50 @@ def setTrialFundsData(_asset: address, _amount: uint256) -> bool:
         amount=_amount,
     )
     log TrialFundsDataSet(asset=_asset, amount=_amount)
+    return True
+
+
+@external
+def recoverTrialFunds(_wallet: address, _opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
+    """
+    @notice Recover trial funds from a wallet
+    @dev Only callable by the governor or recovery caller, transfers funds back here
+    @param _wallet The address of the wallet to recover funds from
+    @param _opportunities The list of opportunities to recover funds for
+    @return True if the funds were successfully recovered, False otherwise
+    """
+    assert gov._canGovern(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
+    return extcall MainWallet(_wallet).recoverTrialFunds(_opportunities)
+
+
+@external
+def recoverTrialFundsMany(_recoveries: DynArray[TrialFundsRecovery, MAX_RECOVERIES]) -> bool:
+    """
+    @notice Recover trial funds from a list of wallets
+    @dev Only callable by the governor or recovery caller, transfers funds back here
+    @param _recoveries The list of wallets and opportunities to recover funds for
+    @return True if the funds were successfully recovered, False otherwise
+    """
+    assert gov._canGovern(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
+    for r: TrialFundsRecovery in _recoveries:
+        assert extcall MainWallet(r.wallet).recoverTrialFunds(r.opportunities) # dev: recovery failed
+    return True
+
+
+@external
+def setRecoveryCaller(_caller: address) -> bool:
+    """
+    @notice Set the caller address for recovery operations
+    @dev Only callable by the governor, updates the recovery caller
+    @param _caller The address to set as the recovery caller
+    @return True if the recovery caller was successfully updated, False otherwise
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    if _caller == empty(address):
+        return False
+
+    self.recoveryCaller = _caller
+    log RecoveryCallerSet(caller=_caller)
     return True
 
 
@@ -629,47 +680,35 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
     return True
 
 
-@external
-def recoverTrialFunds(_wallet: address, _opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
-    """
-    @notice Recover trial funds from a wallet
-    @dev Only callable by the governor or recovery caller, transfers funds back here
-    @param _wallet The address of the wallet to recover funds from
-    @param _opportunities The list of opportunities to recover funds for
-    @return True if the funds were successfully recovered, False otherwise
-    """
-    assert gov._canGovern(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
-    return extcall MainWallet(_wallet).recoverTrialFunds(_opportunities)
+###################
+# Critical Cancel #
+###################
 
 
+@view
 @external
-def recoverTrialFundsMany(_recoveries: DynArray[TrialFundsRecovery, MAX_RECOVERIES]) -> bool:
+def canCancelCriticalAction(_addr: address) -> bool:
     """
-    @notice Recover trial funds from a list of wallets
-    @dev Only callable by the governor or recovery caller, transfers funds back here
-    @param _recoveries The list of wallets and opportunities to recover funds for
-    @return True if the funds were successfully recovered, False otherwise
+    @notice Check if an address can perform critical cancellations
+    @dev Returns true if the address is whitelisted or the governor
     """
-    assert gov._canGovern(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
-    for r: TrialFundsRecovery in _recoveries:
-        assert extcall MainWallet(r.wallet).recoverTrialFunds(r.opportunities) # dev: recovery failed
-    return True
+    return self.canCriticalCancel[_addr] or gov._canGovern(_addr)
 
 
 @external
-def setRecoveryCaller(_caller: address) -> bool:
+def setCanCriticalCancel(_addr: address, _canCancel: bool) -> bool:
     """
-    @notice Set the caller address for recovery operations
-    @dev Only callable by the governor, updates the recovery caller
-    @param _caller The address to set as the recovery caller
-    @return True if the recovery caller was successfully updated, False otherwise
+    @notice Set whether an address can perform critical cancellations
+    @dev Only callable by the governor, updates the critical cancel state
+    @param _addr The address to set the critical cancel state for
+    @param _canCancel True to allow permissions for critical cancel, False to disallow
     """
     assert gov._canGovern(msg.sender) # dev: no perms
-    if _caller == empty(address):
+    if _addr == empty(address) or self.canCriticalCancel[_addr] == _canCancel or gov._canGovern(_addr):
         return False
 
-    self.recoveryCaller = _caller
-    log RecoveryCallerSet(caller=_caller)
+    self.canCriticalCancel[_addr] = _canCancel
+    log CanCriticalCancelSet(addr=_addr, canCancel=_canCancel)
     return True
 
 
