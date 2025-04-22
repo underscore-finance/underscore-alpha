@@ -9,7 +9,7 @@ initializes: oad
 exports: gov.__interface__
 exports: oad.__interface__
 
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 import contracts.modules.OracleAssetData as oad
 import interfaces.OraclePartnerInterface as OraclePartner
 
@@ -68,7 +68,7 @@ def __init__(
 ):
     assert empty(address) not in [_wethAddr, _ethAddr, _btcAddr, _addyRegistry] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
     oad.__init__()
 
     # set default assets
@@ -225,7 +225,7 @@ def setChainlinkFeed(
     _needsEthToUsd: bool = False,
     _needsBtcToUsd: bool = False,
 ) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     return self._setChainlinkFeed(_asset, _feed, _needsEthToUsd, _needsBtcToUsd)
 
 
@@ -256,7 +256,7 @@ def _setChainlinkFeed(
 
 @external
 def disableChainlinkPriceFeed(_asset: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     assert _asset not in [ETH, WETH, BTC] # dev: cannot disable default feeds
     if not self._hasPriceFeed(_asset):
         return False

@@ -9,8 +9,6 @@ import contracts.modules.LocalGov as gov
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-    def MIN_GOV_CHANGE_DELAY() -> uint256: view
-    def MAX_GOV_CHANGE_DELAY() -> uint256: view
     def governance() -> address: view
 
 interface OracleRegistry:
@@ -176,11 +174,8 @@ def __init__(
     assert _addyRegistry != empty(address) # dev: invalid addy registry
     self.protocolRecipient = staticcall AddyRegistry(_addyRegistry).governance()
     self.isActivated = True
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
 
-    # local gov
-    minDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MIN_GOV_CHANGE_DELAY()
-    maxDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MAX_GOV_CHANGE_DELAY()
-    gov.__init__(empty(address), minDelay, maxDelay, _addyRegistry)
 
     ADDY_REGISTRY = _addyRegistry
     MIN_TRIAL_PERIOD = _minTrialPeriod

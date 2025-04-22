@@ -8,7 +8,7 @@ implements: LegoCommon
 initializes: gov
 exports: gov.__interface__
 
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
@@ -114,7 +114,7 @@ def __init__(
     ADDY_REGISTRY = _addyRegistry
     self.coreRouterPool = _coreRouterPool
     self.isActivated = True
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
 
 
 @view
@@ -713,7 +713,7 @@ def _getAmountIn(_pool: address, _zeroForOne: bool, _amountOut: uint256) -> uint
 
 @external
 def setCoreRouterPool(_addr: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.coreRouterPool = _addr
     log UniV2WethCoreRouterPoolSet(pool=_addr)
     return True
@@ -726,7 +726,7 @@ def setCoreRouterPool(_addr: address) -> bool:
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -754,6 +754,6 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log UniswapV2Activated(isActivated=_shouldActivate)

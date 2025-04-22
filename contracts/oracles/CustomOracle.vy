@@ -9,7 +9,7 @@ initializes: oad
 exports: gov.__interface__
 exports: oad.__interface__
 
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 import contracts.modules.OracleAssetData as oad
 import interfaces.OraclePartnerInterface as OraclePartner
 
@@ -39,7 +39,7 @@ ADDY_REGISTRY: public(immutable(address))
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
     ADDY_REGISTRY = _addyRegistry
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
     oad.__init__()
 
 
@@ -90,7 +90,7 @@ def hasPriceFeed(_asset: address) -> bool:
 
 @external
 def setPrice(_asset: address, _price: uint256):
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.priceData[_asset] = CustomOracleData(
         price=_price,
         publishTime=block.timestamp,
@@ -104,7 +104,7 @@ def setPrice(_asset: address, _price: uint256):
 
 @external
 def disablePriceFeed(_asset: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     if self.priceData[_asset].price == 0:
         return False
     self.priceData[_asset] = empty(CustomOracleData)

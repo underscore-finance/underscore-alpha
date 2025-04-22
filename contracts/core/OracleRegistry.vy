@@ -10,10 +10,6 @@ from ethereum.ercs import IERC20Detailed
 import interfaces.OraclePartnerInterface as OraclePartner
 import contracts.modules.LocalGov as gov
 
-interface AddyRegistry:
-    def MIN_GOV_CHANGE_DELAY() -> uint256: view
-    def MAX_GOV_CHANGE_DELAY() -> uint256: view
-
 struct OraclePartnerInfo:
     addr: address
     version: uint256
@@ -66,11 +62,8 @@ MAX_PRIORITY_PARTNERS: constant(uint256) = 10
 @deploy
 def __init__(_ethAddr: address, _minStaleTime: uint256, _maxStaleTime: uint256, _addyRegistry: address):
     assert empty(address) not in [_ethAddr, _addyRegistry] # dev: invalid addy registry
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
 
-    # local gov
-    minDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MIN_GOV_CHANGE_DELAY()
-    maxDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MAX_GOV_CHANGE_DELAY()
-    gov.__init__(empty(address), minDelay, maxDelay, _addyRegistry)
 
     ETH = _ethAddr
     MIN_STALE_TIME = _minStaleTime

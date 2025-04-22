@@ -9,7 +9,7 @@ initializes: oad
 exports: gov.__interface__
 exports: oad.__interface__
 
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 import contracts.modules.OracleAssetData as oad
 import interfaces.OraclePartnerInterface as OraclePartner
 
@@ -58,7 +58,7 @@ def __init__(_stork: address, _addyRegistry: address):
     assert empty(address) not in [_stork, _addyRegistry] # dev: invalid addrs
     STORK = _stork
     ADDY_REGISTRY = _addyRegistry
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
     oad.__init__()
 
 
@@ -162,7 +162,7 @@ def _isValidStorkFeed(_asset: address, _feedId: bytes32) -> bool:
 
 @external
 def setStorkFeed(_asset: address, _feedId: bytes32) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     if not self._isValidStorkFeed(_asset, _feedId):
         return False
     self.feedConfig[_asset] = _feedId
@@ -176,7 +176,7 @@ def setStorkFeed(_asset: address, _feedId: bytes32) -> bool:
 
 @external
 def disableStorkPriceFeed(_asset: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     if not self._hasPriceFeed(_asset):
         return False
     self.feedConfig[_asset] = empty(bytes32)
@@ -204,7 +204,7 @@ def _isValidEthRecovery(_recipient: address, _balance: uint256) -> bool:
 
 @external
 def recoverEthBalance(_recipient: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     balance: uint256 = self.balance
     if not self._isValidEthRecovery(_recipient, balance):
         return False

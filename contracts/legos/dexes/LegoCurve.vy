@@ -9,7 +9,7 @@ implements: LegoCommon
 initializes: gov
 exports: gov.__interface__
 
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC20Detailed
 from interfaces import LegoDex
@@ -217,7 +217,7 @@ def __init__(_curveAddressProvider: address, _addyRegistry: address):
     assert empty(address) not in [_curveAddressProvider, _addyRegistry] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
 
     CURVE_META_REGISTRY = staticcall CurveAddressProvider(_curveAddressProvider).get_address(META_REGISTRY_ID)
     CURVE_REGISTRIES = CurveRegistries(
@@ -1445,7 +1445,7 @@ def _quote(_amountA: uint256, _reserveA: uint256, _reserveB: uint256) -> uint256
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -1473,6 +1473,6 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log CurveActivated(isActivated=_shouldActivate)

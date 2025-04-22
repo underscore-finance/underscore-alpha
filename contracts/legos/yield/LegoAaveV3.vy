@@ -12,7 +12,7 @@ exports: yld.__interface__
 exports: gov.__interface__
 
 import contracts.modules.YieldLegoData as yld
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
 from interfaces import LegoCommon
@@ -91,7 +91,7 @@ def __init__(_aaveV3: address, _addressProvider: address, _addyRegistry: address
     AAVE_V3_ADDRESS_PROVIDER = _addressProvider
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
     yld.__init__()
 
 
@@ -392,7 +392,7 @@ def hasClaimableRewards(_user: address) -> bool:
 
 @external
 def addAssetOpportunity(_asset: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     # specific to lego
     dataProvider: address = self._getPoolDataProvider()
@@ -406,7 +406,7 @@ def addAssetOpportunity(_asset: address) -> bool:
 
 @external
 def removeAssetOpportunity(_asset: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     vaultToken: address = yld.assetOpportunities[_asset][1] # only one opportunity for aave v3
     yld._removeAssetOpportunity(_asset, vaultToken)
@@ -421,7 +421,7 @@ def removeAssetOpportunity(_asset: address) -> bool:
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -449,6 +449,6 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log AaveV3Activated(isActivated=_shouldActivate)

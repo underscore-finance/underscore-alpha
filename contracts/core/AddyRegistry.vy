@@ -44,7 +44,7 @@ numAddys: public(uint256)
 
 @deploy
 def __init__(_initialGov: address, _minGovChangeDelay: uint256, _maxGovChangeDelay: uint256):
-    gov.__init__(_initialGov, _minGovChangeDelay, _maxGovChangeDelay, empty(address))
+    gov.__init__(_initialGov, empty(address), _minGovChangeDelay, _maxGovChangeDelay)
 
     # start at 1 index
     self.numAddys = 1

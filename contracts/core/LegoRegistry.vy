@@ -6,10 +6,6 @@
 initializes: gov
 exports: gov.__interface__
 
-interface AddyRegistry:
-    def MIN_GOV_CHANGE_DELAY() -> uint256: view
-    def MAX_GOV_CHANGE_DELAY() -> uint256: view
-
 from ethereum.ercs import IERC20
 import contracts.modules.LocalGov as gov
 from interfaces import LegoYield
@@ -68,11 +64,7 @@ MAX_VAULTS: constant(uint256) = 15
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
     ADDY_REGISTRY = _addyRegistry
-
-    # local gov
-    minDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MIN_GOV_CHANGE_DELAY()
-    maxDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MAX_GOV_CHANGE_DELAY()
-    gov.__init__(empty(address), minDelay, maxDelay, _addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
 
     # start at 1 index
     self.numLegos = 1

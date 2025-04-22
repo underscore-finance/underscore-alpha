@@ -8,7 +8,7 @@ implements: LegoCommon
 initializes: gov
 exports: gov.__interface__
 
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
 from interfaces import LegoCommon
@@ -88,7 +88,7 @@ def __init__(_skyPsm: address, _addyRegistry: address):
     SKY_PSM = _skyPsm
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
 
     # sky assets
     usdc: address = staticcall SkyPsm(_skyPsm).usdc()
@@ -394,7 +394,7 @@ def hasClaimableRewards(_user: address) -> bool:
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -422,6 +422,6 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log SkyActivated(isActivated=_shouldActivate)

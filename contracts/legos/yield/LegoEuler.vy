@@ -12,7 +12,7 @@ exports: yld.__interface__
 exports: gov.__interface__
 
 import contracts.modules.YieldLegoData as yld
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 from ethereum.ercs import IERC20
 from interfaces import LegoYield
 from interfaces import LegoCommon
@@ -96,7 +96,7 @@ def __init__(_evaultFactory: address, _earnFactory: address, _addyRegistry: addr
     EULER_EARN_FACTORY = _earnFactory
     ADDY_REGISTRY = _addyRegistry
     self.isActivated = True
-    gov.__init__(_addyRegistry)
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
     yld.__init__()
 
 
@@ -369,7 +369,7 @@ def hasClaimableRewards(_user: address) -> bool:
 
 @external
 def setEulerRewardsAddr(_addr: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     assert _addr != empty(address) # dev: invalid addr
     self.eulerRewards = _addr
     log EulerRewardsAddrSet(addr=_addr)
@@ -383,7 +383,7 @@ def setEulerRewardsAddr(_addr: address) -> bool:
 
 @external
 def addAssetOpportunity(_asset: address, _vault: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     # specific to lego
     assert self._getUnderlyingAsset(_vault) == _asset # dev: invalid asset or vault
@@ -395,7 +395,7 @@ def addAssetOpportunity(_asset: address, _vault: address) -> bool:
 
 @external
 def removeAssetOpportunity(_asset: address, _vault: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     yld._removeAssetOpportunity(_asset, _vault)
     assert extcall IERC20(_asset).approve(_vault, 0, default_return_value=True) # dev: approval failed
@@ -409,7 +409,7 @@ def removeAssetOpportunity(_asset: address, _vault: address) -> bool:
 
 @external
 def recoverFunds(_asset: address, _recipient: address) -> bool:
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -437,6 +437,6 @@ def setLegoId(_legoId: uint256) -> bool:
 
 @external
 def activate(_shouldActivate: bool):
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log EulerActivated(isActivated=_shouldActivate)
