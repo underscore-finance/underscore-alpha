@@ -6,8 +6,12 @@
 initializes: gov
 exports: gov.__interface__
 
+interface AddyRegistry:
+    def MIN_GOV_CHANGE_DELAY() -> uint256: view
+    def MAX_GOV_CHANGE_DELAY() -> uint256: view
+
 from ethereum.ercs import IERC20
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 from interfaces import LegoYield
 from interfaces import LegoCommon
 
@@ -63,8 +67,12 @@ MAX_VAULTS: constant(uint256) = 15
 @deploy
 def __init__(_addyRegistry: address):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
-    gov.__init__(_addyRegistry)
     ADDY_REGISTRY = _addyRegistry
+
+    # local gov
+    minDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MIN_GOV_CHANGE_DELAY()
+    maxDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MAX_GOV_CHANGE_DELAY()
+    gov.__init__(empty(address), minDelay, maxDelay, _addyRegistry)
 
     # start at 1 index
     self.numLegos = 1
@@ -105,7 +113,7 @@ def registerNewLego(_addr: address, _description: String[64], _legoType: LegoTyp
     @param _legoType The type of Lego integration
     @return The assigned Lego ID if registration successful, 0 if failed
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidNewLegoAddr(_addr):
         return 0
@@ -165,7 +173,7 @@ def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     @param _newAddr The new address for the Lego
     @return True if update successful, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     data: LegoInfo = self.legoInfo[_legoId]
     prevAddr: address = data.addr # needed for later
@@ -222,7 +230,7 @@ def disableLegoAddr(_legoId: uint256) -> bool:
     @param _legoId The ID of the Lego to disable
     @return True if disable successful, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     data: LegoInfo = self.legoInfo[_legoId]
     prevAddr: address = data.addr # needed for later
@@ -461,7 +469,7 @@ def setLegoHelper(_helperAddr: address) -> bool:
     @param _helperAddr The address to set as helper
     @return True if helper was set successfully, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidLegoHelper(_helperAddr):
         return False

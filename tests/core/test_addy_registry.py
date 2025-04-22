@@ -321,7 +321,7 @@ def test_governance_change_restrictions(addy_registry, governor, new_governor, b
         addy_registry.changeGovernance(new_governor.address, sender=bob)
 
     # Test invalid new governance addresses
-    with boa.reverts("invalid new governance"):
+    with boa.reverts("new governance must be a contract"):
         addy_registry.changeGovernance(ZERO_ADDRESS, sender=governor)
     with boa.reverts("invalid new governance"):
         addy_registry.changeGovernance(governor, sender=governor)

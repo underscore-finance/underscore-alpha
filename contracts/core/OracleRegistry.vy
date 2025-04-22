@@ -8,7 +8,11 @@ exports: gov.__interface__
 
 from ethereum.ercs import IERC20Detailed
 import interfaces.OraclePartnerInterface as OraclePartner
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
+
+interface AddyRegistry:
+    def MIN_GOV_CHANGE_DELAY() -> uint256: view
+    def MAX_GOV_CHANGE_DELAY() -> uint256: view
 
 struct OraclePartnerInfo:
     addr: address
@@ -62,7 +66,11 @@ MAX_PRIORITY_PARTNERS: constant(uint256) = 10
 @deploy
 def __init__(_ethAddr: address, _minStaleTime: uint256, _maxStaleTime: uint256, _addyRegistry: address):
     assert empty(address) not in [_ethAddr, _addyRegistry] # dev: invalid addy registry
-    gov.__init__(_addyRegistry)
+
+    # local gov
+    minDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MIN_GOV_CHANGE_DELAY()
+    maxDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MAX_GOV_CHANGE_DELAY()
+    gov.__init__(empty(address), minDelay, maxDelay, _addyRegistry)
 
     ETH = _ethAddr
     MIN_STALE_TIME = _minStaleTime
@@ -271,7 +279,7 @@ def registerNewOraclePartner(_addr: address, _description: String[64]) -> uint25
     @param _description A brief description of the oracle partner's functionality
     @return The assigned oracle partner ID if registration successful, 0 if failed
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidNewOraclePartnerAddr(_addr):
         return 0
@@ -330,7 +338,7 @@ def updateOraclePartnerAddr(_oracleId: uint256, _newAddr: address) -> bool:
     @param _newAddr The new address for the oracle partner
     @return True if update successful, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     data: OraclePartnerInfo = self.oraclePartnerInfo[_oracleId]
     prevAddr: address = data.addr # needed for later
@@ -387,7 +395,7 @@ def disableOraclePartnerAddr(_oracleId: uint256) -> bool:
     @param _oracleId The ID of the oracle partner to disable
     @return True if disable successful, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     data: OraclePartnerInfo = self.oraclePartnerInfo[_oracleId]
     prevAddr: address = data.addr # needed for later
@@ -463,7 +471,7 @@ def setPriorityOraclePartnerIds(_priorityIds: DynArray[uint256, MAX_PRIORITY_PAR
     @param _priorityIds Array of oracle partner IDs in desired priority order
     @return True if priority list was set successfully, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     priorityIds: DynArray[uint256, MAX_PRIORITY_PARTNERS] = self._sanitizePriorityOraclePartnerIds(_priorityIds)
     if not self._areValidPriorityOraclePartnerIds(priorityIds):
@@ -505,7 +513,7 @@ def setStaleTime(_staleTime: uint256) -> bool:
     @param _staleTime The stale time in seconds
     @return True if stale time was set successfully, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidStaleTime(_staleTime):
         return False

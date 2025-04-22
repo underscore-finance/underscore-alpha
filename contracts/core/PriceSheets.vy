@@ -5,10 +5,12 @@
 
 initializes: gov
 exports: gov.__interface__
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
+    def MIN_GOV_CHANGE_DELAY() -> uint256: view
+    def MAX_GOV_CHANGE_DELAY() -> uint256: view
     def governance() -> address: view
 
 interface OracleRegistry:
@@ -172,9 +174,13 @@ def __init__(
     _addyRegistry: address,
 ):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
-    gov.__init__(_addyRegistry)
     self.protocolRecipient = staticcall AddyRegistry(_addyRegistry).governance()
     self.isActivated = True
+
+    # local gov
+    minDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MIN_GOV_CHANGE_DELAY()
+    maxDelay: uint256 = staticcall AddyRegistry(_addyRegistry).MAX_GOV_CHANGE_DELAY()
+    gov.__init__(empty(address), minDelay, maxDelay, _addyRegistry)
 
     ADDY_REGISTRY = _addyRegistry
     MIN_TRIAL_PERIOD = _minTrialPeriod
@@ -323,7 +329,7 @@ def setAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _tria
     """
     assert self._isRegisteredAgent(_agent) # dev: agent not registered
     isAgentOwner: bool = staticcall Agent(_agent).owner() == msg.sender
-    assert isAgentOwner or gov._isGovernor(msg.sender) # dev: no perms
+    assert isAgentOwner or gov._canGovern(msg.sender) # dev: no perms
 
     if isAgentOwner:
         assert self.isActivated # dev: not active
@@ -394,7 +400,7 @@ def removeAgentSubPrice(_agent: address) -> bool:
     @param _agent The address of the agent
     @return bool True if agent subscription price was removed successfully
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     assert self._isRegisteredAgent(_agent) # dev: agent not registered
 
     prevInfo: SubscriptionInfo = self.agentSubPriceData[_agent]
@@ -417,7 +423,7 @@ def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
     @param _isEnabled True to enable, False to disable
     @return bool True if agent subscription pricing state was changed successfully
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     assert _isEnabled != self.isAgentSubPricingEnabled # dev: no change
     self.isAgentSubPricingEnabled = _isEnabled
@@ -444,7 +450,7 @@ def setProtocolSubPrice(_asset: address, _usdValue: uint256, _trialPeriod: uint2
     @param _payPeriod The payment period in blocks
     @return bool True if protocol subscription price was set successfully
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     # validation
     if not self._isValidSubPrice(_asset, _usdValue, _trialPeriod, _payPeriod):
@@ -472,7 +478,7 @@ def removeProtocolSubPrice() -> bool:
     @dev Only callable by governor
     @return bool True if protocol subscription price was removed successfully
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     prevInfo: SubscriptionInfo = self.protocolSubPriceData
     if prevInfo.asset == empty(address):
@@ -613,7 +619,7 @@ def setProtocolTxPriceSheet(
     @param _repayFee The fee percentage for repaying
     @return bool True if protocol price sheet was set successfully
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     # validation
     if not self._isValidTxPriceSheet(_depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, _claimRewardsFee, _borrowFee, _repayFee):
@@ -647,7 +653,7 @@ def removeProtocolTxPriceSheet() -> bool:
     @dev Only callable by governor
     @return bool True if protocol price sheet was removed successfully
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     prevInfo: TxPriceSheet = self.protocolTxPriceData
     self.protocolTxPriceData = empty(TxPriceSheet)
@@ -668,7 +674,7 @@ def setProtocolRecipient(_recipient: address) -> bool:
     @param _recipient The address to receive protocol fees
     @return bool True if protocol recipient was set successfully
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     assert _recipient != empty(address) # dev: invalid recipient
     self.protocolRecipient = _recipient
     log ProtocolRecipientSet(recipient=_recipient)
@@ -687,7 +693,7 @@ def setPriceChangeDelay(_delayBlocks: uint256) -> bool:
     @dev Only callable by governor
     @param _delayBlocks The number of blocks to wait before price changes take effect
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     assert _delayBlocks == 0 or _delayBlocks >= MIN_PRICE_CHANGE_BUFFER # dev: invalid delay
     self.priceChangeDelay = _delayBlocks
     log PriceChangeDelaySet(delayBlocks=_delayBlocks)
@@ -706,6 +712,6 @@ def activate(_shouldActivate: bool):
     @dev Only callable by governor. When deactivated, most functions cannot be called.
     @param _shouldActivate True to activate, False to deactivate
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log PriceSheetsActivated(isActivated=_shouldActivate)

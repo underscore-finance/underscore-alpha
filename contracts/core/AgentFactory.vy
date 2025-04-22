@@ -5,7 +5,7 @@
 
 initializes: gov
 exports: gov.__interface__
-import contracts.modules.Governable as gov
+import contracts.modules.LocalGov as gov
 from ethereum.ercs import IERC20
 
 interface MainWallet:
@@ -133,7 +133,6 @@ def __init__(
     assert empty(address) not in [_addyRegistry, _wethAddr] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
     WETH_ADDR = _wethAddr
-    gov.__init__(_addyRegistry)
     self.isActivated = True
 
     # set agent template
@@ -144,6 +143,9 @@ def __init__(
     # set agent template
     if self._isValidAgentTemplate(_agentTemplate):
         self._setAgentTemplate(_agentTemplate)
+
+    # local gov
+    gov.__init__(empty(address), _addyRegistry, 0, 0)
 
 
 @view
@@ -227,14 +229,14 @@ def createUserWallet(_owner: address = msg.sender, _agent: address = empty(addre
     if self.numUserWallets >= self.numUserWalletsAllowed:
         return empty(address)
 
-    # create both contracts (main wallet and wallet config)
-    mainWalletAddr: address = create_minimal_proxy_to(mainWalletTemplate)
-    walletConfigAddr: address = create_minimal_proxy_to(walletConfigTemplate)
-
     # initial trial funds asset + amount
     trialFundsData: TrialFundsData = self.trialFundsData
     if trialFundsData.asset != empty(address):
         trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
+
+    # create both contracts (main wallet and wallet config)
+    mainWalletAddr: address = create_minimal_proxy_to(mainWalletTemplate)
+    walletConfigAddr: address = create_minimal_proxy_to(walletConfigTemplate)
 
     # initalize main wallet and wallet config
     assert extcall MainWallet(mainWalletAddr).initialize(walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount) # dev: could not initialize main wallet
@@ -288,7 +290,7 @@ def setUserWalletTemplate(_addr: address) -> bool:
     @param _addr The address of the new template to use
     @return True if template was successfully updated, False if invalid address
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidUserWalletTemplate(_addr):
         return False
@@ -339,7 +341,7 @@ def setUserWalletConfigTemplate(_addr: address) -> bool:
     @param _addr The address of the new template to use
     @return True if template was successfully updated, False if invalid address
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidUserWalletConfigTemplate(_addr):
         return False
@@ -447,7 +449,7 @@ def setAgentTemplate(_addr: address) -> bool:
     @param _addr The address of the new template to use
     @return True if template was successfully updated, False if invalid address
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidAgentTemplate(_addr):
         return False
@@ -502,7 +504,7 @@ def setTrialFundsData(_asset: address, _amount: uint256) -> bool:
     @param _amount The amount of the asset to set
     @return True if the data was successfully updated, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     if not self._isValidTrialFundsData(_asset, _amount):
         return False
@@ -529,7 +531,7 @@ def setWhitelist(_addr: address, _shouldWhitelist: bool) -> bool:
     @param _shouldWhitelist True to whitelist, False to unwhitelist
     @return True if the whitelist status was successfully updated, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     self.whitelist[_addr] = _shouldWhitelist
     log WhitelistSet(addr=_addr, shouldWhitelist=_shouldWhitelist)
@@ -544,7 +546,7 @@ def setShouldEnforceWhitelist(_shouldEnforce: bool) -> bool:
     @param _shouldEnforce True to enforce whitelist, False to disable
     @return True if the whitelist enforcement state was successfully updated, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     self.shouldEnforceWhitelist = _shouldEnforce
     log ShouldEnforceWhitelistSet(shouldEnforce=_shouldEnforce)
@@ -559,7 +561,7 @@ def setNumUserWalletsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bool:
     @param _numAllowed The new maximum number of user wallets allowed
     @return True if the maximum number was successfully updated, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     self.numUserWalletsAllowed = _numAllowed
     log NumUserWalletsAllowedSet(numAllowed=_numAllowed)
@@ -574,7 +576,7 @@ def setNumAgentsAllowed(_numAllowed: uint256 = max_value(uint256)) -> bool:
     @param _numAllowed The new maximum number of agents allowed
     @return True if the maximum number was successfully updated, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     self.numAgentsAllowed = _numAllowed
     log NumAgentsAllowedSet(numAllowed=_numAllowed)
@@ -595,7 +597,7 @@ def setAgentBlacklist(_agentAddr: address, _shouldBlacklist: bool) -> bool:
     @param _shouldBlacklist True to blacklist, False to unblacklist
     @return True if the blacklist status was successfully updated, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     self.agentBlacklist[_agentAddr] = _shouldBlacklist
     log AgentBlacklistSet(agentAddr=_agentAddr, shouldBlacklist=_shouldBlacklist)
@@ -616,7 +618,7 @@ def recoverFunds(_asset: address, _recipient: address) -> bool:
     @param _recipient The address to send the funds to
     @return True if the funds were successfully recovered, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [_recipient, _asset] or balance == 0:
@@ -636,7 +638,7 @@ def recoverTrialFunds(_wallet: address, _opportunities: DynArray[TrialFundsOpp, 
     @param _opportunities The list of opportunities to recover funds for
     @return True if the funds were successfully recovered, False otherwise
     """
-    assert gov._isGovernor(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
+    assert gov._canGovern(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
     return extcall MainWallet(_wallet).recoverTrialFunds(_opportunities)
 
 
@@ -648,7 +650,7 @@ def recoverTrialFundsMany(_recoveries: DynArray[TrialFundsRecovery, MAX_RECOVERI
     @param _recoveries The list of wallets and opportunities to recover funds for
     @return True if the funds were successfully recovered, False otherwise
     """
-    assert gov._isGovernor(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
+    assert gov._canGovern(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
     for r: TrialFundsRecovery in _recoveries:
         assert extcall MainWallet(r.wallet).recoverTrialFunds(r.opportunities) # dev: recovery failed
     return True
@@ -662,7 +664,7 @@ def setRecoveryCaller(_caller: address) -> bool:
     @param _caller The address to set as the recovery caller
     @return True if the recovery caller was successfully updated, False otherwise
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
     if _caller == empty(address):
         return False
 
@@ -683,7 +685,7 @@ def activate(_shouldActivate: bool):
     @dev Only callable by the governor, toggles isActivated state
     @param _shouldActivate True to activate the factory, False to deactivate
     """
-    assert gov._isGovernor(msg.sender) # dev: no perms
+    assert gov._canGovern(msg.sender) # dev: no perms
 
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(isActivated=_shouldActivate)
