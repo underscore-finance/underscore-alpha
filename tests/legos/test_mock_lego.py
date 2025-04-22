@@ -8,7 +8,9 @@ from conf_utils import filter_logs
 @pytest.fixture(scope="module")
 def new_mock_lego(lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="lego_morpho")
-    assert lego_registry.registerNewLego(addr, "New Mock Lego", YIELD_OPP_UINT256, sender=governor) != 0 # dev: invalid lego id
+    lego_registry.registerNewLego(addr, "New Mock Lego", YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 
 

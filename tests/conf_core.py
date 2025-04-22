@@ -25,8 +25,10 @@ def addy_registry(addy_registry_deploy, lego_registry, agent_factory, price_shee
 
 
 @pytest.fixture(scope="session")
-def lego_registry(addy_registry_deploy):
-    return boa.load("contracts/core/LegoRegistry.vy", addy_registry_deploy, name="lego_registry")
+def lego_registry(addy_registry_deploy, fork):
+    min_delay = PARAMS[fork]["LEGO_REGISTRY_MIN_CHANGE_DELAY"]
+    max_delay = PARAMS[fork]["LEGO_REGISTRY_MAX_CHANGE_DELAY"]
+    return boa.load("contracts/core/LegoRegistry.vy", addy_registry_deploy, min_delay, max_delay, name="lego_registry")
 
 
 @pytest.fixture(scope="session")

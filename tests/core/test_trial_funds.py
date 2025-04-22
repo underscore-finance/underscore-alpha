@@ -25,8 +25,9 @@ def new_ai_wallet_config(new_ai_wallet):
 def mock_lego_alpha_third(alpha_token, alpha_token_erc4626_vault_third, lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_alpha_another")
     assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault_third, sender=governor)
-    legoId = lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", YIELD_OPP_UINT256, sender=governor)
-    assert legoId != 0  # dev: invalid lego id
+    lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 
 

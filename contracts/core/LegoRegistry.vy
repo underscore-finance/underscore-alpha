@@ -22,26 +22,91 @@ struct LegoInfo:
     description: String[64]
     legoType: LegoType
 
+struct PendingNewLego:
+    description: String[64]
+    legoType: LegoType
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+struct PendingLegoUpdate:
+    newAddr: address
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+struct PendingLegoDisable:
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event NewLegoPending:
+    addr: indexed(address)
+    description: String[64]
+    legoType: LegoType
+    confirmBlock: uint256
+
 event NewLegoRegistered:
     addr: indexed(address)
     legoId: uint256
     description: String[64]
     legoType: LegoType
 
-event LegoAddrUpdated:
+event NewPendingLegoCancelled:
+    description: String[64]
+    legoType: LegoType
+    addr: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event LegoAddrUpdatePending:
+    legoId: uint256
+    description: String[64]
+    legoType: LegoType
     newAddr: indexed(address)
     prevAddr: indexed(address)
-    legoId: uint256
     version: uint256
+    confirmBlock: uint256
+
+event LegoAddrUpdated:
+    legoId: uint256
     description: String[64]
     legoType: LegoType
+    newAddr: indexed(address)
+    prevAddr: indexed(address)
+    version: uint256
+
+event LegoAddrUpdateCancelled:
+    legoId: uint256
+    description: String[64]
+    legoType: LegoType
+    newAddr: indexed(address)
+    prevAddr: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event LegoAddrDisablePending:
+    legoId: uint256
+    description: String[64]
+    legoType: LegoType
+    addr: indexed(address)
+    version: uint256
+    confirmBlock: uint256
 
 event LegoAddrDisabled:
-    prevAddr: indexed(address)
     legoId: uint256
-    version: uint256
     description: String[64]
     legoType: LegoType
+    addr: indexed(address)
+    version: uint256
+
+event LegoAddrDisableCancelled:
+    legoId: uint256
+    description: String[64]
+    legoType: LegoType
+    addr: indexed(address)
+    initiatedBlock: uint256
+    confirmBlock: uint256
+
+event LegoChangeDelaySet:
+    delayBlocks: uint256
 
 event LegoHelperSet:
     helperAddr: indexed(address)
@@ -54,16 +119,32 @@ legoInfo: public(HashMap[uint256, LegoInfo])
 legoAddrToId: public(HashMap[address, uint256])
 numLegos: public(uint256)
 
+# pending lego changes
+legoChangeDelay: public(uint256)
+pendingNewLego: public(HashMap[address, PendingNewLego]) # addr -> pending new lego
+pendingLegoUpdate: public(HashMap[uint256, PendingLegoUpdate]) # legoId -> pending lego update
+pendingLegoDisable: public(HashMap[uint256, PendingLegoDisable]) # legoId -> pending lego disable
+
 # config
 ADDY_REGISTRY: public(immutable(address))
+MIN_LEGO_CHANGE_DELAY: public(immutable(uint256))
+MAX_LEGO_CHANGE_DELAY: public(immutable(uint256))
 
 MAX_VAULTS: constant(uint256) = 15
 
 
 @deploy
-def __init__(_addyRegistry: address):
+def __init__(_addyRegistry: address, _minLegoChangeDelay: uint256, _maxLegoChangeDelay: uint256):
     assert _addyRegistry != empty(address) # dev: invalid addy registry
     ADDY_REGISTRY = _addyRegistry
+
+    # time delays on lego changes
+    assert _minLegoChangeDelay < _maxLegoChangeDelay # dev: invalid delay
+    MIN_LEGO_CHANGE_DELAY = _minLegoChangeDelay
+    MAX_LEGO_CHANGE_DELAY = _maxLegoChangeDelay
+    self.legoChangeDelay = _minLegoChangeDelay
+
+    # local gov
     gov.__init__(empty(address), _addyRegistry, 0, 0)
 
     # start at 1 index
@@ -96,36 +177,85 @@ def _isValidNewLegoAddr(_addr: address) -> bool:
 
 
 @external
-def registerNewLego(_addr: address, _description: String[64], _legoType: LegoType) -> uint256:
+def registerNewLego(_addr: address, _description: String[64], _legoType: LegoType) -> bool:
     """
-    @notice Register a new Lego integration contract in the registry
-    @dev Only callable by governor. Sets Lego ID on the contract.
+    @notice Initiate registration of a new Lego integration contract in the registry
+    @dev Only callable by governor. Creates a pending registration that must be confirmed after delay.
     @param _addr The address of the Lego contract to register
     @param _description A brief description of the Lego integration's functionality
     @param _legoType The type of Lego integration
-    @return The assigned Lego ID if registration successful, 0 if failed
+    @return True if pending registration was initiated successfully, False otherwise
     """
     assert gov._canGovern(msg.sender) # dev: no perms
 
+    # validation
     if not self._isValidNewLegoAddr(_addr):
-        return 0
+        return False
 
-    data: LegoInfo = LegoInfo(
-        addr=_addr,
-        version=1,
-        lastModified=block.timestamp,
+    # set pending
+    confirmBlock: uint256 = block.number + self.legoChangeDelay
+    self.pendingNewLego[_addr] = PendingNewLego(
         description=_description,
         legoType=_legoType,
+        initiatedBlock=block.number,
+        confirmBlock=confirmBlock,
     )
 
+    log NewLegoPending(addr=_addr, description=_description, legoType=_legoType, confirmBlock=confirmBlock)
+    return True
+
+
+@external
+def confirmNewLegoRegistration(_addr: address) -> uint256:
+    """
+    @notice Confirm a pending Lego registration after the delay period
+    @dev Only callable by governor. Sets Lego ID on the contract.
+    @param _addr The address of the pending Lego registration to confirm
+    @return The assigned Lego ID if confirmation successful, 0 if failed
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+
+    # validation
+    data: PendingNewLego = self.pendingNewLego[_addr]
+    assert data.confirmBlock != 0 and block.number >= data.confirmBlock # dev: time delay not reached
+    if not self._isValidNewLegoAddr(_addr):
+        self.pendingNewLego[_addr] = empty(PendingNewLego) # clear pending
+        return 0
+
+    # register new lego
     legoId: uint256 = self.numLegos
     self.legoAddrToId[_addr] = legoId
     self.numLegos = legoId + 1
-    self.legoInfo[legoId] = data
+    self.legoInfo[legoId] = LegoInfo(
+        addr=_addr,
+        version=1,
+        lastModified=block.timestamp,
+        description=data.description,
+        legoType=data.legoType,
+    )
     assert extcall LegoCommon(_addr).setLegoId(legoId) # dev: set id failed
 
-    log NewLegoRegistered(addr=_addr, legoId=legoId, description=_description, legoType=_legoType)
+    # clear pending
+    self.pendingNewLego[_addr] = empty(PendingNewLego)
+
+    log NewLegoRegistered(addr=_addr, legoId=legoId, description=data.description, legoType=data.legoType)
     return legoId
+
+
+@external
+def cancelPendingNewLego(_addr: address) -> bool:
+    """
+    @notice Cancel a pending Lego registration
+    @dev Only callable by governor
+    @param _addr The address of the pending Lego registration to cancel
+    @return True if cancellation was successful, False otherwise
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    data: PendingNewLego = self.pendingNewLego[_addr]
+    assert data.confirmBlock != 0 # dev: no pending
+    self.pendingNewLego[_addr] = empty(PendingNewLego)
+    log NewPendingLegoCancelled(description=data.description, legoType=data.legoType, addr=_addr, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
+    return True
 
 
 ###############
@@ -159,33 +289,83 @@ def _isValidLegoUpdate(_legoId: uint256, _newAddr: address, _prevAddr: address) 
 @external
 def updateLegoAddr(_legoId: uint256, _newAddr: address) -> bool:
     """
-    @notice Update the address of an existing Lego
-    @dev Only callable by governor. Updates version and timestamp.
+    @notice Initiate an update to the address of an existing Lego
+    @dev Only callable by governor. Creates a pending update that must be confirmed after delay.
     @param _legoId The ID of the Lego to update
     @param _newAddr The new address for the Lego
-    @return True if update successful, False otherwise
+    @return True if pending update was initiated successfully, False otherwise
     """
     assert gov._canGovern(msg.sender) # dev: no perms
 
+    # validation
     data: LegoInfo = self.legoInfo[_legoId]
-    prevAddr: address = data.addr # needed for later
-
-    if not self._isValidLegoUpdate(_legoId, _newAddr, prevAddr):
+    if not self._isValidLegoUpdate(_legoId, _newAddr, data.addr):
         return False
 
-    # save new data
-    data.addr = _newAddr
+    # set pending
+    confirmBlock: uint256 = block.number + self.legoChangeDelay
+    self.pendingLegoUpdate[_legoId] = PendingLegoUpdate(
+        newAddr=_newAddr,
+        initiatedBlock=block.number,
+        confirmBlock=confirmBlock,
+    )
+
+    log LegoAddrUpdatePending(legoId=_legoId, description=data.description, legoType=data.legoType, newAddr=_newAddr, prevAddr=data.addr, version=data.version, confirmBlock=confirmBlock)
+    return True
+
+
+@external
+def confirmLegoUpdate(_legoId: uint256) -> bool:
+    """
+    @notice Confirm a pending Lego address update after the delay period
+    @dev Only callable by governor. Updates version and timestamp.
+    @param _legoId The ID of the Lego with pending update to confirm
+    @return True if confirmation was successful, False otherwise
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+
+    # validation
+    pendingData: PendingLegoUpdate = self.pendingLegoUpdate[_legoId]
+    assert pendingData.confirmBlock != 0 and block.number >= pendingData.confirmBlock # dev: time delay not reached
+    data: LegoInfo = self.legoInfo[_legoId]
+    prevAddr: address = data.addr # needed for later
+    if not self._isValidLegoUpdate(_legoId, pendingData.newAddr, prevAddr):
+        self.pendingLegoUpdate[_legoId] = empty(PendingLegoUpdate) # clear pending
+        return False
+
+    # update lego data
+    data.addr = pendingData.newAddr
     data.lastModified = block.timestamp
     data.version += 1
     self.legoInfo[_legoId] = data
-    self.legoAddrToId[_newAddr] = _legoId
-    assert extcall LegoCommon(_newAddr).setLegoId(_legoId) # dev: set id failed
+    self.legoAddrToId[pendingData.newAddr] = _legoId
+    assert extcall LegoCommon(pendingData.newAddr).setLegoId(_legoId) # dev: set id failed
 
     # handle previous addr
     if prevAddr != empty(address):
         self.legoAddrToId[prevAddr] = 0
 
-    log LegoAddrUpdated(newAddr=_newAddr, prevAddr=prevAddr, legoId=_legoId, version=data.version, description=data.description, legoType=data.legoType)
+    # clear pending
+    self.pendingLegoUpdate[_legoId] = empty(PendingLegoUpdate)
+
+    log LegoAddrUpdated(legoId=_legoId, description=data.description, legoType=data.legoType, newAddr=pendingData.newAddr, prevAddr=prevAddr, version=data.version)
+    return True
+
+
+@external
+def cancelPendingLegoUpdate(_legoId: uint256) -> bool:
+    """
+    @notice Cancel a pending Lego address update
+    @dev Only callable by governor
+    @param _legoId The ID of the Lego with pending update to cancel
+    @return True if cancellation was successful, False otherwise
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    pendingData: PendingLegoUpdate = self.pendingLegoUpdate[_legoId]
+    assert pendingData.confirmBlock != 0 # dev: no pending
+    self.pendingLegoUpdate[_legoId] = empty(PendingLegoUpdate)
+    prevData: LegoInfo = self.legoInfo[_legoId]
+    log LegoAddrUpdateCancelled(legoId=_legoId, description=prevData.description, legoType=prevData.legoType, newAddr=pendingData.newAddr, prevAddr=prevData.addr, initiatedBlock=pendingData.initiatedBlock, confirmBlock=pendingData.confirmBlock)
     return True
 
 
@@ -217,28 +397,94 @@ def _isValidLegoDisable(_legoId: uint256, _prevAddr: address) -> bool:
 @external
 def disableLegoAddr(_legoId: uint256) -> bool:
     """
-    @notice Disable a Lego by setting its address to empty
-    @dev Only callable by governor. Updates version and timestamp.
+    @notice Initiate disabling a Lego by setting its address to empty
+    @dev Only callable by governor. Creates a pending disable that must be confirmed after delay.
     @param _legoId The ID of the Lego to disable
-    @return True if disable successful, False otherwise
+    @return True if pending disable was initiated successfully, False otherwise
     """
     assert gov._canGovern(msg.sender) # dev: no perms
 
+    # validation
     data: LegoInfo = self.legoInfo[_legoId]
-    prevAddr: address = data.addr # needed for later
-
-    if not self._isValidLegoDisable(_legoId, prevAddr):
+    if not self._isValidLegoDisable(_legoId, data.addr):
         return False
 
-    # save new data
+    confirmBlock: uint256 = block.number + self.legoChangeDelay
+    self.pendingLegoDisable[_legoId] = PendingLegoDisable(
+        initiatedBlock=block.number,
+        confirmBlock=confirmBlock,
+    )
+
+    log LegoAddrDisablePending(legoId=_legoId, description=data.description, legoType=data.legoType, addr=data.addr, version=data.version, confirmBlock=confirmBlock)
+    return True
+
+
+@external
+def confirmLegoDisable(_legoId: uint256) -> bool:
+    """
+    @notice Confirm a pending Lego disable after the delay period
+    @dev Only callable by governor. Updates version and timestamp.
+    @param _legoId The ID of the Lego with pending disable to confirm
+    @return True if confirmation was successful, False otherwise
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+
+    # validation
+    pendingData: PendingLegoDisable = self.pendingLegoDisable[_legoId]
+    assert pendingData.confirmBlock != 0 and block.number >= pendingData.confirmBlock # dev: time delay not reached
+    data: LegoInfo = self.legoInfo[_legoId]
+    prevAddr: address = data.addr # needed for later
+    if not self._isValidLegoDisable(_legoId, prevAddr):
+        self.pendingLegoDisable[_legoId] = empty(PendingLegoDisable) # clear pending
+        return False
+
+    # disable lego
     data.addr = empty(address)
     data.lastModified = block.timestamp
     data.version += 1
     self.legoInfo[_legoId] = data
     self.legoAddrToId[prevAddr] = 0
 
-    log LegoAddrDisabled(prevAddr=prevAddr, legoId=_legoId, version=data.version, description=data.description, legoType=data.legoType)
+    # clear pending
+    self.pendingLegoDisable[_legoId] = empty(PendingLegoDisable)
+
+    log LegoAddrDisabled(legoId=_legoId, description=data.description, legoType=data.legoType, addr=prevAddr, version=data.version)
     return True
+
+
+@external
+def cancelPendingLegoDisable(_legoId: uint256) -> bool:
+    """
+    @notice Cancel a pending Lego disable
+    @dev Only callable by governor
+    @param _legoId The ID of the Lego with pending disable to cancel
+    @return True if cancellation was successful, False otherwise
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    data: PendingLegoDisable = self.pendingLegoDisable[_legoId]
+    assert data.confirmBlock != 0 # dev: no pending
+    self.pendingLegoDisable[_legoId] = empty(PendingLegoDisable)
+    prevData: LegoInfo = self.legoInfo[_legoId]
+    log LegoAddrDisableCancelled(legoId=_legoId, description=prevData.description, legoType=prevData.legoType, addr=prevData.addr, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
+    return True
+
+
+#####################
+# Lego Change Delay #
+#####################
+
+
+@external
+def setLegoChangeDelay(_numBlocks: uint256):
+    """
+    @notice Sets the delay period for Lego changes
+    @dev Can only be called by current governance. Affects all pending operations.
+    @param _numBlocks The number of blocks to wait before Lego changes can be confirmed
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    assert _numBlocks >= MIN_LEGO_CHANGE_DELAY and _numBlocks <= MAX_LEGO_CHANGE_DELAY # dev: invalid delay
+    self.legoChangeDelay = _numBlocks
+    log LegoChangeDelaySet(delayBlocks=_numBlocks)
 
 
 #################
