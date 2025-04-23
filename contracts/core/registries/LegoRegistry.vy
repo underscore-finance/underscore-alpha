@@ -38,6 +38,8 @@ def __init__(
     _minLegoChangeDelay: uint256,
     _maxLegoChangeDelay: uint256,
 ):
+    assert _addyRegistry != empty(address) # dev: invalid addy registry
+
     # initialize gov
     gov.__init__(empty(address), _addyRegistry, 0, 0)
 
@@ -216,6 +218,12 @@ def cancelPendingLegoDisable(_legoId: uint256) -> bool:
 
 @external
 def setLegoChangeDelay(_numBlocks: uint256) -> bool:
+    """
+    @notice Sets the delay period required for Lego changes
+    @dev Only callable by governor. The delay must be between MIN_ADDY_CHANGE_DELAY and MAX_ADDY_CHANGE_DELAY
+    @param _numBlocks The number of blocks to set as the delay period
+    @return True if the delay was successfully set, reverts if delay is invalid
+    """
     assert gov._canGovern(msg.sender) # dev: no perms
     return registry._setAddyChangeDelay(_numBlocks)
 

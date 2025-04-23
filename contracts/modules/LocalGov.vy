@@ -126,7 +126,9 @@ def _getGovernors() -> DynArray[address, 2]:
     # addy registry governance
     addyRegistry: address = self._addyRegistry
     if addyRegistry != empty(address):
-        governors.append(staticcall AddyRegistry(addyRegistry).governance())
+        globalGovernance: address = staticcall AddyRegistry(addyRegistry).governance()
+        if globalGovernance != empty(address):
+            governors.append(globalGovernance)
 
     return governors
 

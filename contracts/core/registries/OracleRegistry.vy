@@ -4,35 +4,16 @@
 # @version 0.4.1
 
 initializes: gov
+initializes: registry
+
 exports: gov.__interface__
+exports: registry.__interface__
+
+import contracts.modules.LocalGov as gov
+import contracts.modules.Registry as registry
 
 from ethereum.ercs import IERC20Detailed
 import interfaces.OraclePartnerInterface as OraclePartner
-import contracts.modules.LocalGov as gov
-
-struct OraclePartnerInfo:
-    addr: address
-    version: uint256
-    lastModified: uint256
-    description: String[64]
-
-event NewOraclePartnerRegistered:
-    addr: indexed(address)
-    oraclePartnerId: uint256
-    description: String[64]
-
-event OraclePartnerAddrUpdated:
-    newAddr: indexed(address)
-    prevAddr: indexed(address)
-    oraclePartnerId: uint256
-    version: uint256
-    description: String[64]
-
-event OraclePartnerAddrDisabled:
-    prevAddr: indexed(address)
-    oraclePartnerId: uint256
-    version: uint256
-    description: String[64]
 
 event PriorityOraclePartnerIdsModified:
     numIds: uint256
@@ -40,17 +21,9 @@ event PriorityOraclePartnerIdsModified:
 event StaleTimeSet:
     staleTime: uint256
 
-# registry core
-oraclePartnerInfo: public(HashMap[uint256, OraclePartnerInfo])
-oraclePartnerAddrToId: public(HashMap[address, uint256])
-numOraclePartners: public(uint256)
-
 # custom config
 priorityOraclePartnerIds: public(DynArray[uint256, MAX_PRIORITY_PARTNERS])
 staleTime: public(uint256)
-
-# config
-ADDY_REGISTRY: public(immutable(address))
 
 ETH: public(immutable(address))
 MIN_STALE_TIME: public(immutable(uint256))
@@ -60,18 +33,25 @@ MAX_PRIORITY_PARTNERS: constant(uint256) = 10
 
 
 @deploy
-def __init__(_ethAddr: address, _minStaleTime: uint256, _maxStaleTime: uint256, _addyRegistry: address):
-    assert empty(address) not in [_ethAddr, _addyRegistry] # dev: invalid addy registry
+def __init__(
+    _addyRegistry: address,
+    _ethAddr: address,
+    _minStaleTime: uint256,
+    _maxStaleTime: uint256,
+    _minOracleChangeDelay: uint256,
+    _maxOracleChangeDelay: uint256,
+):
+    assert empty(address) not in [_addyRegistry, _ethAddr] # dev: invalid addrs
+
+    # initialize gov
     gov.__init__(empty(address), _addyRegistry, 0, 0)
 
+    # initialize registry
+    registry.__init__(_minOracleChangeDelay, _maxOracleChangeDelay, "OracleRegistry.vy")
 
     ETH = _ethAddr
     MIN_STALE_TIME = _minStaleTime
     MAX_STALE_TIME = _maxStaleTime
-    ADDY_REGISTRY = _addyRegistry
-
-    # start at 1 index
-    self.numOraclePartners = 1
 
 
 #########
@@ -116,7 +96,7 @@ def _getPrice(_asset: address, _shouldRaise: bool = False) -> uint256:
 
     # go thru rest of oracle partners
     if price == 0:
-        numSources: uint256 = self.numOraclePartners
+        numSources: uint256 = registry.numAddys
         for id: uint256 in range(1, numSources, bound=max_value(uint256)):
             if id in alreadyLooked:
                 continue
@@ -137,7 +117,7 @@ def _getPrice(_asset: address, _shouldRaise: bool = False) -> uint256:
 @view
 @internal
 def _getPriceFromOraclePartner(_pid: uint256, _asset: address, _staleTime: uint256) -> (uint256, bool):
-    oraclePartner: address = self.oraclePartnerInfo[_pid].addr
+    oraclePartner: address = registry._getAddy(_pid)
     if oraclePartner == empty(address):
         return 0, False
     return staticcall OraclePartner(oraclePartner).getPriceAndHasFeed(_asset, _staleTime, self)
@@ -195,9 +175,9 @@ def hasPriceFeed(_asset: address) -> bool:
     @param _asset The address of the asset to check
     @return True if a price feed exists, False otherwise
     """
-    numSources: uint256 = self.numOraclePartners
+    numSources: uint256 = registry.numAddys
     for id: uint256 in range(1, numSources, bound=max_value(uint256)):
-        oraclePartner: address = self.oraclePartnerInfo[id].addr
+        oraclePartner: address = registry._getAddy(id)
         if oraclePartner == empty(address):
             continue
         if staticcall OraclePartner(oraclePartner).hasPriceFeed(_asset):
@@ -247,51 +227,52 @@ def getEthAmount(_usdValue: uint256, _shouldRaise: bool = False) -> uint256:
 @external
 def isValidNewOraclePartnerAddr(_addr: address) -> bool:
     """
-    @notice Check if an address can be registered as a new oracle partner
-    @dev Validates address is non-zero, is a contract, and hasn't been registered before
+    @notice Checks if an address can be registered as a new Oracle Partner
+    @dev Validates that the address is a contract and not already registered
     @param _addr The address to validate
-    @return True if address can be registered as new oracle partner, False otherwise
+    @return True if the address can be registered, False otherwise
     """
-    return self._isValidNewOraclePartnerAddr(_addr)
-
-
-@view
-@internal
-def _isValidNewOraclePartnerAddr(_addr: address) -> bool:
-    if _addr == empty(address) or not _addr.is_contract:
-        return False
-    return self.oraclePartnerAddrToId[_addr] == 0
+    return registry._isValidNewAddy(_addr)
 
 
 @external
-def registerNewOraclePartner(_addr: address, _description: String[64]) -> uint256:
+def registerNewOraclePartner(_addr: address, _description: String[64]) -> bool:
     """
-    @notice Register a new oracle partner contract in the registry
-    @dev Sets oracle partner ID on the contract.
-    @param _addr The address of the oracle partner contract to register
-    @param _description A brief description of the oracle partner's functionality
-    @return The assigned oracle partner ID if registration successful, 0 if failed
+    @notice Initiates the registration process for a new Oracle Partner
+    @dev Only callable by governor. Sets up a pending registration that requires confirmation after a delay period
+    @param _addr The address of the Oracle Partner to register
+    @param _description A short description of the Oracle Partner (max 64 characters)
+    @return True if the registration was successfully initiated, False if the Oracle Partner is invalid
     """
     assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._registerNewAddy(_addr, _description)
 
-    if not self._isValidNewOraclePartnerAddr(_addr):
-        return 0
 
-    data: OraclePartnerInfo = OraclePartnerInfo(
-        addr=_addr,
-        version=1,
-        lastModified=block.timestamp,
-        description=_description,
-    )
-
-    oraclePartnerId: uint256 = self.numOraclePartners
-    self.oraclePartnerAddrToId[_addr] = oraclePartnerId
-    self.numOraclePartners = oraclePartnerId + 1
-    self.oraclePartnerInfo[oraclePartnerId] = data
-    assert extcall OraclePartner(_addr).setOraclePartnerId(oraclePartnerId) # dev: set id failed
-
-    log NewOraclePartnerRegistered(addr=_addr, oraclePartnerId=oraclePartnerId, description=_description)
+@external
+def confirmNewOraclePartnerRegistration(_addr: address) -> uint256:
+    """
+    @notice Confirms a pending Oracle Partner registration after the required delay period
+    @dev Only callable by governor. Finalizes the registration by assigning an ID and setting the Oracle Partner ID
+    @param _addr The address of the Oracle Partner to confirm registration for
+    @return The assigned ID for the registered Oracle Partner, or 0 if confirmation fails
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    oraclePartnerId: uint256 = registry._confirmNewAddy(_addr)
+    if oraclePartnerId != 0:
+        assert extcall OraclePartner(_addr).setOraclePartnerId(oraclePartnerId) # dev: set id failed
     return oraclePartnerId
+
+
+@external
+def cancelPendingNewOraclePartner(_addr: address) -> bool:
+    """
+    @notice Cancels a pending Oracle Partner registration
+    @dev Only callable by governor. Removes the pending registration and emits a cancellation event
+    @param _addr The address of the Oracle Partner whose pending registration should be cancelled
+    @return True if the cancellation was successful, reverts if no pending registration exists
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._cancelPendingNewAddy(_addr)
 
 
 #########################
@@ -303,56 +284,54 @@ def registerNewOraclePartner(_addr: address, _description: String[64]) -> uint25
 @external
 def isValidOraclePartnerUpdate(_oracleId: uint256, _newAddr: address) -> bool:
     """
-    @notice Check if an oracle partner update operation would be valid
-    @dev Validates oracle ID exists and new address is valid
-    @param _oracleId The ID of the oracle partner to update
-    @param _newAddr The proposed new address for the oracle partner
-    @return True if update would be valid, False otherwise
+    @notice Checks if an Oracle Partner address can be updated
+    @dev Validates that the Oracle Partner ID exists and the new address is valid
+    @param _oracleId The ID of the Oracle Partner to update
+    @param _newAddr The new address to set
+    @return True if the update is valid, False otherwise
     """
-    return self._isValidOraclePartnerUpdate(_oracleId, _newAddr, self.oraclePartnerInfo[_oracleId].addr)
-
-
-@view
-@internal
-def _isValidOraclePartnerUpdate(_oracleId: uint256, _newAddr: address, _prevAddr: address) -> bool:
-    if not self._isValidOraclePartnerId(_oracleId):
-        return False
-    if not self._isValidNewOraclePartnerAddr(_newAddr):
-        return False
-    return _newAddr != _prevAddr
+    return registry._isValidAddyUpdate(_oracleId, _newAddr, registry.addyInfo[_oracleId].addr)
 
 
 @external
 def updateOraclePartnerAddr(_oracleId: uint256, _newAddr: address) -> bool:
     """
-    @notice Update the address of an existing oracle partner
-    @dev Updates version and timestamp.
-    @param _oracleId The ID of the oracle partner to update
-    @param _newAddr The new address for the oracle partner
-    @return True if update successful, False otherwise
+    @notice Initiates an address update for an existing registered Oracle Partner
+    @dev Only callable by governor. Sets up a pending update that requires confirmation after a delay period
+    @param _oracleId The ID of the Oracle Partner to update
+    @param _newAddr The new address to set for the Oracle Partner
+    @return True if the update was successfully initiated, False if the update is invalid
     """
     assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._updateAddyAddr(_oracleId, _newAddr)
 
-    data: OraclePartnerInfo = self.oraclePartnerInfo[_oracleId]
-    prevAddr: address = data.addr # needed for later
 
-    if not self._isValidOraclePartnerUpdate(_oracleId, _newAddr, prevAddr):
-        return False
+@external
+def confirmOraclePartnerUpdate(_oracleId: uint256) -> bool:
+    """
+    @notice Confirms a pending Oracle Partner address update after the required delay period
+    @dev Only callable by governor. Finalizes the update by updating the address and setting the Oracle Partner ID
+    @param _oracleId The ID of the Oracle Partner to confirm update for
+    @return True if the update was successfully confirmed, False if confirmation fails
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    didUpdate: bool = registry._confirmAddyUpdate(_oracleId)
+    if didUpdate:
+        oraclePartnerAddr: address = registry.addyInfo[_oracleId].addr
+        assert extcall OraclePartner(oraclePartnerAddr).setOraclePartnerId(_oracleId) # dev: set id failed
+    return didUpdate
 
-    # save new data
-    data.addr = _newAddr
-    data.lastModified = block.timestamp
-    data.version += 1
-    self.oraclePartnerInfo[_oracleId] = data
-    self.oraclePartnerAddrToId[_newAddr] = _oracleId
-    assert extcall OraclePartner(_newAddr).setOraclePartnerId(_oracleId) # dev: set id failed
 
-    # handle previous addr
-    if prevAddr != empty(address):
-        self.oraclePartnerAddrToId[prevAddr] = 0
-
-    log OraclePartnerAddrUpdated(newAddr=_newAddr, prevAddr=prevAddr, oraclePartnerId=_oracleId, version=data.version, description=data.description)
-    return True
+@external
+def cancelPendingOraclePartnerUpdate(_oracleId: uint256) -> bool:
+    """
+    @notice Cancels a pending Oracle Partner address update
+    @dev Only callable by governor. Removes the pending update and emits a cancellation event
+    @param _oracleId The ID of the Oracle Partner whose pending update should be cancelled
+    @return True if the cancellation was successful, reverts if no pending update exists
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._cancelPendingAddyUpdate(_oracleId)
 
 
 ##########################
@@ -364,47 +343,65 @@ def updateOraclePartnerAddr(_oracleId: uint256, _newAddr: address) -> bool:
 @external
 def isValidOraclePartnerDisable(_oracleId: uint256) -> bool:
     """
-    @notice Check if an oracle partner can be disabled
-    @dev Validates oracle ID exists and has a non-empty address
-    @param _oracleId The ID of the oracle partner to check
-    @return True if oracle partner can be disabled, False otherwise
+    @notice Checks if an Oracle Partner can be disabled
+    @dev Validates that the Oracle Partner ID exists and is not already disabled
+    @param _oracleId The ID of the Oracle Partner to check
+    @return True if the Oracle Partner can be disabled, False otherwise
     """
-    return self._isValidOraclePartnerDisable(_oracleId, self.oraclePartnerInfo[_oracleId].addr)
-
-
-@view
-@internal
-def _isValidOraclePartnerDisable(_oracleId: uint256, _prevAddr: address) -> bool:
-    if not self._isValidOraclePartnerId(_oracleId):
-        return False
-    return _prevAddr != empty(address)
+    return registry._isValidAddyDisable(_oracleId, registry.addyInfo[_oracleId].addr)
 
 
 @external
 def disableOraclePartnerAddr(_oracleId: uint256) -> bool:
     """
-    @notice Disable an oracle partner by setting its address to empty
-    @dev Updates version and timestamp.
-    @param _oracleId The ID of the oracle partner to disable
-    @return True if disable successful, False otherwise
+    @notice Initiates the disable process for an existing registered Oracle Partner
+    @dev Only callable by governor. Sets up a pending disable that requires confirmation after a delay period
+    @param _oracleId The ID of the Oracle Partner to disable
+    @return True if the disable was successfully initiated, False if the disable is invalid
     """
     assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._disableAddyAddr(_oracleId)
 
-    data: OraclePartnerInfo = self.oraclePartnerInfo[_oracleId]
-    prevAddr: address = data.addr # needed for later
 
-    if not self._isValidOraclePartnerDisable(_oracleId, prevAddr):
-        return False
+@external
+def confirmOraclePartnerDisable(_oracleId: uint256) -> bool:
+    """
+    @notice Confirms a pending Oracle Partner disable after the required delay period
+    @dev Only callable by governor. Finalizes the disable by clearing the Oracle Partner address
+    @param _oracleId The ID of the Oracle Partner to confirm disable for
+    @return True if the disable was successfully confirmed, False if confirmation fails
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._confirmAddyDisable(_oracleId)
 
-    # save new data
-    data.addr = empty(address)
-    data.lastModified = block.timestamp
-    data.version += 1
-    self.oraclePartnerInfo[_oracleId] = data
-    self.oraclePartnerAddrToId[prevAddr] = 0
 
-    log OraclePartnerAddrDisabled(prevAddr=prevAddr, oraclePartnerId=_oracleId, version=data.version, description=data.description)
-    return True
+@external
+def cancelPendingOraclePartnerDisable(_oracleId: uint256) -> bool:
+    """
+    @notice Cancels a pending Oracle Partner disable
+    @dev Only callable by governor. Removes the pending disable and emits a cancellation event
+    @param _oracleId The ID of the Oracle Partner whose pending disable should be cancelled
+    @return True if the cancellation was successful, reverts if no pending disable exists
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._cancelPendingAddyDisable(_oracleId)
+
+
+#########################
+# Oracle Partner Change #
+#########################
+
+
+@external
+def setOraclePartnerChangeDelay(_numBlocks: uint256) -> bool:
+    """
+    @notice Sets the delay period required for Oracle Partner changes
+    @dev Only callable by governor. The delay must be between MIN_ADDY_CHANGE_DELAY and MAX_ADDY_CHANGE_DELAY
+    @param _numBlocks The number of blocks to set as the delay period
+    @return True if the delay was successfully set, reverts if delay is invalid
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._setAddyChangeDelay(_numBlocks)
 
 
 ############################
@@ -429,7 +426,7 @@ def _sanitizePriorityOraclePartnerIds(_priorityIds: DynArray[uint256, MAX_PRIORI
     sanitizedIds: DynArray[uint256, MAX_PRIORITY_PARTNERS] = []
     for i: uint256 in range(len(_priorityIds), bound=MAX_PRIORITY_PARTNERS):
         pid: uint256 = _priorityIds[i]
-        if not self._isValidOraclePartnerId(pid):
+        if not registry._isValidAddyId(pid):
             continue
         if pid in sanitizedIds:
             continue
@@ -533,7 +530,7 @@ def isValidOraclePartnerAddr(_addr: address) -> bool:
     @param _addr The address to check
     @return True if address is a registered oracle partner, False otherwise
     """
-    return self.oraclePartnerAddrToId[_addr] != 0
+    return registry._isValidAddyAddr(_addr)
 
 
 @view
@@ -545,13 +542,7 @@ def isValidOraclePartnerId(_oracleId: uint256) -> bool:
     @param _oracleId The ID to check
     @return True if ID is valid, False otherwise
     """
-    return self._isValidOraclePartnerId(_oracleId)
-
-
-@view
-@internal
-def _isValidOraclePartnerId(_oracleId: uint256) -> bool:
-    return _oracleId != 0 and _oracleId < self.numOraclePartners
+    return registry._isValidAddyId(_oracleId)
 
 
 # oracle partner getters
@@ -566,7 +557,7 @@ def getOraclePartnerId(_addr: address) -> uint256:
     @param _addr The address to query
     @return The oracle partner ID associated with the address
     """
-    return self.oraclePartnerAddrToId[_addr]
+    return registry._getAddyId(_addr)
 
 
 @view
@@ -578,19 +569,19 @@ def getOraclePartnerAddr(_oracleId: uint256) -> address:
     @param _oracleId The ID to query
     @return The address associated with the oracle partner ID
     """
-    return self.oraclePartnerInfo[_oracleId].addr
+    return registry._getAddy(_oracleId)
 
 
 @view
 @external
-def getOraclePartnerInfo(_oracleId: uint256) -> OraclePartnerInfo:
+def getOraclePartnerInfo(_oracleId: uint256) -> registry.AddyInfo:
     """
     @notice Get all information about an oracle partner
     @dev Returns complete OraclePartnerInfo struct including address, version, timestamp and description
     @param _oracleId The ID to query
     @return OraclePartnerInfo struct containing all oracle partner information
     """
-    return self.oraclePartnerInfo[_oracleId]
+    return registry.addyInfo[_oracleId]
 
 
 @view
@@ -602,7 +593,7 @@ def getOraclePartnerDescription(_oracleId: uint256) -> String[64]:
     @param _oracleId The ID to query
     @return The description associated with the oracle partner ID
     """
-    return self.oraclePartnerInfo[_oracleId].description
+    return registry.addyInfo[_oracleId].description
 
 
 # high level
@@ -616,7 +607,7 @@ def getNumOraclePartners() -> uint256:
     @dev Returns number of partners minus 1 since indexing starts at 1
     @return The total number of registered oracle partners
     """
-    return self.numOraclePartners - 1
+    return registry._getNumAddys()
 
 
 @view
@@ -627,8 +618,7 @@ def getLastOraclePartnerAddr() -> address:
     @dev Returns the address at index (numOraclePartners - 1)
     @return The address of the last registered oracle partner
     """
-    lastIndex: uint256 = self.numOraclePartners - 1
-    return self.oraclePartnerInfo[lastIndex].addr
+    return registry._getLastAddyAddr()
 
 
 @view
@@ -639,4 +629,4 @@ def getLastOraclePartnerId() -> uint256:
     @dev Returns numOraclePartners - 1 since indexing starts at 1
     @return The ID of the last registered oracle partner
     """
-    return self.numOraclePartners - 1
+    return registry._getLastAddyId()

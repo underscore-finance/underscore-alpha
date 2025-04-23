@@ -74,10 +74,12 @@ def oracle_registry(addy_registry_deploy, fork):
     ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" if fork == "local" else ADDYS[fork]["ETH"]
     return boa.load(
         "contracts/core/registries/OracleRegistry.vy",
+        addy_registry_deploy,
         ETH,
         PARAMS[fork]["ORACLE_REGISTRY_MIN_STALE_TIME"],
         PARAMS[fork]["ORACLE_REGISTRY_MAX_STALE_TIME"],
-        addy_registry_deploy,
+        PARAMS[fork]["ORACLE_REGISTRY_MIN_CHANGE_DELAY"],
+        PARAMS[fork]["ORACLE_REGISTRY_MAX_CHANGE_DELAY"],
         name="oracle_registry",
     )
 

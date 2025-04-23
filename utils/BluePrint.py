@@ -63,6 +63,9 @@ PARAMS = {
         # lego registry (blocks)
         "LEGO_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
         "LEGO_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
+        # oracle registry (blocks)
+        "ORACLE_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
+        "ORACLE_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
         # user wallet config (blocks)
         "USER_MIN_OWNER_CHANGE_DELAY": 21_600,  # 12 hours on Base
         "USER_MAX_OWNER_CHANGE_DELAY": 302_400,  # 7 days on Base
@@ -84,11 +87,14 @@ PARAMS = {
         "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,
         "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,
         # addy book - addy changes (blocks)
-        "ADDY_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
-        "ADDY_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
+        "ADDY_REGISTRY_MIN_CHANGE_DELAY": 21_600,
+        "ADDY_REGISTRY_MAX_CHANGE_DELAY": 302_400,
         # lego registry (blocks)
-        "LEGO_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
-        "LEGO_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
+        "LEGO_REGISTRY_MIN_CHANGE_DELAY": 21_600,
+        "LEGO_REGISTRY_MAX_CHANGE_DELAY": 302_400,
+        # oracle registry (blocks)
+        "ORACLE_REGISTRY_MIN_CHANGE_DELAY": 21_600,
+        "ORACLE_REGISTRY_MAX_CHANGE_DELAY": 302_400,
         # user wallet config (blocks)
         "USER_MIN_OWNER_CHANGE_DELAY": 21_600,
         "USER_MAX_OWNER_CHANGE_DELAY": 302_400,
