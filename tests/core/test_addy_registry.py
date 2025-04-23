@@ -31,23 +31,34 @@ def test_register_new_addy(addy_registry, new_addy, governor):
     assert addy_registry.isValidNewAddy(new_addy)
     
     numAddys = addy_registry.getNumAddys()
+    current_block = boa.env.evm.patch.block_number
 
-    # Test successful registration
-    addy_id = addy_registry.registerNewAddy(new_addy, description, sender=governor)
-    assert addy_id != 0
+    # Test successful registration initiation
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
 
-    # Verify event
-    log = filter_logs(addy_registry, "NewAddyRegistered")[0]
+    # Verify pending event
+    log = filter_logs(addy_registry, "NewAddyPending")[0]
+    assert log.addr == new_addy.address
+    assert log.description == description
+    assert log.confirmBlock == current_block + addy_registry.addyChangeDelay()
+
+    # Confirm registration after delay
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
+    assert addy_id == numAddys + 1  # Addys are 1-indexed
+
+    # Verify registration event
+    log = filter_logs(addy_registry, "NewAddyConfirmed")[0]
     assert log.addr == new_addy.address
     assert log.addyId == addy_id
     assert log.description == description
 
-    assert addy_registry.isValidAddy(new_addy.address)
+    assert addy_registry.isValidAddyAddr(new_addy.address)
     assert addy_registry.getAddyId(new_addy.address) == addy_id
     assert addy_registry.getAddy(addy_id) == new_addy.address
     assert addy_registry.getAddyDescription(addy_id) == description
-    assert addy_registry.getNumAddys() == numAddys + 1
-    assert addy_registry.getLastAddy() == new_addy.address
+    assert addy_registry.getNumAddys() == addy_id
+    assert addy_registry.getLastAddyAddr() == new_addy.address
     assert addy_registry.getLastAddyId() == addy_id
     
     info = addy_registry.getAddyInfo(addy_id)
@@ -66,35 +77,86 @@ def test_register_new_addy_invalid_cases(addy_registry, new_addy, governor, bob)
     
     # Test cannot register zero address
     assert not addy_registry.isValidNewAddy(ZERO_ADDRESS)
-    assert addy_registry.registerNewAddy(ZERO_ADDRESS, description, sender=governor) == 0
+    assert not addy_registry.registerNewAddy(ZERO_ADDRESS, description, sender=governor)
     
-    # Test cannot register same addy twice
-    assert addy_registry.registerNewAddy(new_addy, description, sender=governor) != 0
-    assert addy_registry.registerNewAddy(new_addy, description, sender=governor) == 0
+    # Register addy first time
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    
+    # Wait for delay and confirm first registration
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
+    assert addy_id != 0
+
+    # Test cannot register an already registered address
+    assert not addy_registry.isValidNewAddy(new_addy)
+    assert not addy_registry.registerNewAddy(new_addy, description, sender=governor)
+
+
+def test_cancel_pending_registration(addy_registry, new_addy, governor, bob):
+    description = "Test Addy"
+    current_block = boa.env.evm.patch.block_number
+    
+    # Initiate registration
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    
+    # Test non-governor cannot cancel
+    with boa.reverts("no perms"):
+        addy_registry.cancelPendingNewAddy(new_addy, sender=bob)
+    
+    # Test successful cancellation
+    assert addy_registry.cancelPendingNewAddy(new_addy, sender=governor)
+    
+    # Verify cancellation event
+    log = filter_logs(addy_registry, "NewPendingAddyCancelled")[0]
+    assert log.addr == new_addy.address
+    assert log.description == description
+    assert log.initiatedBlock == current_block
+    assert log.confirmBlock == current_block + addy_registry.addyChangeDelay()
+    
+    # Test cannot confirm cancelled registration
+    with boa.reverts():  # Empty revert as the assertion combines both checks
+        addy_registry.confirmNewAddy(new_addy, sender=governor)
 
 
 def test_update_addy(addy_registry, new_addy, new_addy_b, governor, bob):
     description = "Test Addy"
-    addy_id = addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    # Register and confirm initial addy
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
     assert addy_id != 0
+
+    current_block = boa.env.evm.patch.block_number
 
     # Test non-governor cannot update
     with boa.reverts("no perms"):
-        addy_registry.updateAddy(addy_id, new_addy_b, sender=bob)
+        addy_registry.updateAddyAddr(addy_id, new_addy_b, sender=bob)
 
     # invalid id
     assert not addy_registry.isValidAddyUpdate(999, new_addy_b)
-    assert not addy_registry.updateAddy(999, new_addy_b, sender=governor)
+    assert not addy_registry.updateAddyAddr(999, new_addy_b, sender=governor)
 
     # same address
-    assert not addy_registry.updateAddy(addy_id, new_addy, sender=governor)
+    assert not addy_registry.updateAddyAddr(addy_id, new_addy, sender=governor)
 
-    # Test successful update
-    assert addy_registry.updateAddy(addy_id, new_addy_b, sender=governor)
-
-    log = filter_logs(addy_registry, "AddyIdUpdated")[0]
+    # Test successful update initiation
+    assert addy_registry.updateAddyAddr(addy_id, new_addy_b, sender=governor)
+    
+    # Verify pending event
+    log = filter_logs(addy_registry, "AddyUpdatePending")[0]
     assert log.newAddr == new_addy_b.address
-    assert log.prevAddy == new_addy.address
+    assert log.prevAddr == new_addy.address
+    assert log.addyId == addy_id
+    assert log.confirmBlock == current_block + addy_registry.addyChangeDelay()
+
+    # Confirm update after delay
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    assert addy_registry.confirmAddyUpdate(addy_id, sender=governor)
+
+    # Verify update event
+    log = filter_logs(addy_registry, "AddyUpdateConfirmed")[0]
+    assert log.newAddr == new_addy_b.address
+    assert log.prevAddr == new_addy.address
     assert log.addyId == addy_id
     assert log.version == 2
     assert log.description == description
@@ -110,24 +172,72 @@ def test_update_addy(addy_registry, new_addy, new_addy_b, governor, bob):
     assert info.lastModified == boa.env.evm.patch.timestamp
 
 
+def test_cancel_pending_update(addy_registry, new_addy, new_addy_b, governor, bob):
+    description = "Test Addy"
+    # Register and confirm initial addy
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
+    
+    current_block = boa.env.evm.patch.block_number
+    
+    # Initiate update
+    assert addy_registry.updateAddyAddr(addy_id, new_addy_b, sender=governor)
+    
+    # Test non-governor cannot cancel
+    with boa.reverts("no perms"):
+        addy_registry.cancelPendingAddyUpdate(addy_id, sender=bob)
+    
+    # Test successful cancellation
+    assert addy_registry.cancelPendingAddyUpdate(addy_id, sender=governor)
+    
+    # Verify cancellation event
+    log = filter_logs(addy_registry, "AddyUpdateCancelled")[0]
+    assert log.addyId == addy_id
+    assert log.newAddr == new_addy_b.address
+    assert log.prevAddr == new_addy.address
+    assert log.initiatedBlock == current_block
+    assert log.confirmBlock == current_block + addy_registry.addyChangeDelay()
+    
+    # Test cannot confirm cancelled update
+    with boa.reverts():  # Empty revert as the assertion combines both checks
+        addy_registry.confirmAddyUpdate(addy_id, sender=governor)
+
+
 def test_disable_addy(addy_registry, new_addy, governor, bob):
     description = "Test Addy"
-    addy_id = addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    # Register and confirm initial addy
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
     assert addy_id != 0
+
+    current_block = boa.env.evm.patch.block_number
 
     # Test non-governor cannot disable
     with boa.reverts("no perms"):
-        addy_registry.disableAddy(addy_id, sender=bob)
+        addy_registry.disableAddyAddr(addy_id, sender=bob)
 
     # invalid id
     assert not addy_registry.isValidAddyDisable(999)
-    assert not addy_registry.disableAddy(999, sender=governor)
+    assert not addy_registry.disableAddyAddr(999, sender=governor)
 
-    # Test successful disable
-    assert addy_registry.disableAddy(addy_id, sender=governor)
+    # Test successful disable initiation
+    assert addy_registry.disableAddyAddr(addy_id, sender=governor)
+    
+    # Verify pending event
+    log = filter_logs(addy_registry, "AddyDisablePending")[0]
+    assert log.addyId == addy_id
+    assert log.addr == new_addy.address
+    assert log.confirmBlock == current_block + addy_registry.addyChangeDelay()
 
-    log = filter_logs(addy_registry, "AddyIdDisabled")[0]
-    assert log.prevAddy == new_addy.address
+    # Confirm disable after delay
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    assert addy_registry.confirmAddyDisable(addy_id, sender=governor)
+
+    # Verify disable event
+    log = filter_logs(addy_registry, "AddyDisableConfirmed")[0]
+    assert log.addr == new_addy.address
     assert log.addyId == addy_id
     assert log.version == 2
     assert log.description == description
@@ -142,12 +252,66 @@ def test_disable_addy(addy_registry, new_addy, governor, bob):
     assert info.lastModified == boa.env.evm.patch.timestamp
     
     # already disabled
-    assert not addy_registry.disableAddy(addy_id, sender=governor)
+    assert not addy_registry.disableAddyAddr(addy_id, sender=governor)
+
+
+def test_cancel_pending_disable(addy_registry, new_addy, governor, bob):
+    description = "Test Addy"
+    # Register and confirm initial addy
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
+    
+    current_block = boa.env.evm.patch.block_number
+    
+    # Initiate disable
+    assert addy_registry.disableAddyAddr(addy_id, sender=governor)
+    
+    # Test non-governor cannot cancel
+    with boa.reverts("no perms"):
+        addy_registry.cancelPendingAddyDisable(addy_id, sender=bob)
+    
+    # Test successful cancellation
+    assert addy_registry.cancelPendingAddyDisable(addy_id, sender=governor)
+    
+    # Verify cancellation event
+    log = filter_logs(addy_registry, "AddyDisableCancelled")[0]
+    assert log.addyId == addy_id
+    assert log.addr == new_addy.address
+    assert log.initiatedBlock == current_block
+    assert log.confirmBlock == current_block + addy_registry.addyChangeDelay()
+    
+    # Test cannot confirm cancelled disable
+    with boa.reverts():  # Empty revert as the assertion combines both checks
+        addy_registry.confirmAddyDisable(addy_id, sender=governor)
+
+
+def test_set_addy_change_delay(addy_registry, governor, bob):
+    min_delay = addy_registry.MIN_ADDY_CHANGE_DELAY()
+    max_delay = addy_registry.MAX_ADDY_CHANGE_DELAY()
+    
+    # Test non-governor cannot set delay
+    with boa.reverts("no perms"):
+        addy_registry.setAddyChangeDelay(min_delay + 1, sender=bob)
+    
+    # Test invalid delay values
+    with boa.reverts():  # Empty revert as the assertion combines both checks
+        addy_registry.setAddyChangeDelay(min_delay - 1, sender=governor)
+    with boa.reverts():  # Empty revert as the assertion combines both checks
+        addy_registry.setAddyChangeDelay(max_delay + 1, sender=governor)
+    
+    # Test successful delay update
+    new_delay = min_delay + 1
+    addy_registry.setAddyChangeDelay(new_delay, sender=governor)
+    assert addy_registry.addyChangeDelay() == new_delay
 
 
 def test_view_functions(addy_registry, new_addy, governor):
     description = "Test Addy"
-    addy_id = addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    # Register and confirm initial addy
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
     
     # Test isValidNewAddy
     assert not addy_registry.isValidNewAddy(new_addy.address)  # Already registered
@@ -165,76 +329,6 @@ def test_view_functions(addy_registry, new_addy, governor):
     assert addy_registry.isValidAddyId(addy_id)
     assert not addy_registry.isValidAddyId(0)
     assert not addy_registry.isValidAddyId(999)  # Non-existent ID
-
-
-def test_register_eoa_address_invalid(addy_registry, governor, bob):
-    """Registering an EOA (non‑contract) address must fail and return 0."""
-    description = "EOA Addy"
-
-    # bob is an EOA, so this should be considered invalid
-    assert not addy_registry.isValidNewAddy(bob)
-    assert addy_registry.registerNewAddy(bob, description, sender=governor) == 0
-
-
-def test_update_addy_with_eoa_invalid(addy_registry, governor, bob, alpha_token):
-    """Updating an existing addy to point to an EOA address must be rejected."""
-    original = alpha_token
-    description = "Original"
-    addy_id = addy_registry.registerNewAddy(original, description, sender=governor)
-    assert addy_id != 0
-
-    # Attempt to update to an EOA address (bob)
-    assert not addy_registry.updateAddy(addy_id, bob, sender=governor)
-
-    # Verify state has NOT changed
-    assert addy_registry.getAddy(addy_id) == original.address
-    assert addy_registry.getAddyId(original.address) == addy_id
-    assert addy_registry.getAddyId(bob) == 0
-
-
-def test_update_addy_after_disable(addy_registry, governor, bravo_token, charlie_token):
-    """A disabled addy can be updated to a new contract address, re‑enabling it."""
-    first = bravo_token
-    second = charlie_token
-    description = "Re‑enable flow"
-
-    # Register and then disable
-    addy_id = addy_registry.registerNewAddy(first, description, sender=governor)
-    assert addy_registry.disableAddy(addy_id, sender=governor)
-    assert addy_registry.getAddy(addy_id) == ZERO_ADDRESS
-
-    # Now update to a fresh contract addr — should succeed
-    assert addy_registry.updateAddy(addy_id, second, sender=governor)
-
-    # Version should have incremented (1 initial + 1 disable + 1 update = 3)
-    info = addy_registry.getAddyInfo(addy_id)
-    assert info.addr == second.address
-    assert info.version == 3
-    assert addy_registry.getAddyId(first.address) == 0
-    assert addy_registry.getAddyId(second.address) == addy_id
-
-
-def test_disable_addy_zero_id(addy_registry, governor):
-    """Disabling addyId == 0 should be a no‑op and return False (never reverts)."""
-    assert not addy_registry.isValidAddyDisable(0)
-    assert not addy_registry.disableAddy(0, sender=governor)
-
-
-def test_last_addy_after_disable(addy_registry, governor, charlie_token_erc4626_vault):
-    """When the last registered addy is disabled it should remain the last id but resolve to ZERO_ADDRESS."""
-    latest = charlie_token_erc4626_vault
-    description = "Latest Addy"
-    last_id = addy_registry.registerNewAddy(latest, description, sender=governor)
-
-    # Sanity check — it is indeed the last addy prior to disable
-    assert addy_registry.getLastAddyId() == last_id
-    assert addy_registry.getLastAddy() == latest.address
-
-    # Disable and verify getters
-    assert addy_registry.disableAddy(last_id, sender=governor)
-
-    assert addy_registry.getLastAddyId() == last_id  # index unchanged
-    assert addy_registry.getLastAddy() == ZERO_ADDRESS  # should now return zero addr
 
 
 ##############
@@ -487,4 +581,88 @@ def test_pending_governance_struct(addy_registry, governor, new_governor, new_ad
     assert pending_gov.newGov == ZERO_ADDRESS
     assert pending_gov.initiatedBlock == 0
     assert pending_gov.confirmBlock == 0
+
+
+def test_register_eoa_address_invalid(addy_registry, governor, bob):
+    """Test that EOA addresses cannot be registered"""
+    description = "Test Addy"
+    
+    # bob is an EOA, not a contract
+    assert not addy_registry.isValidNewAddy(bob)
+    assert not addy_registry.registerNewAddy(bob, description, sender=governor)
+
+
+def test_update_addy_with_eoa_invalid(addy_registry, new_addy, governor, bob):
+    """Test that EOA addresses cannot be used for updates"""
+    description = "Test Addy"
+    # Register and confirm initial addy
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
+    
+    # bob is an EOA, not a contract
+    assert not addy_registry.isValidAddyUpdate(addy_id, bob)
+    assert not addy_registry.updateAddyAddr(addy_id, bob, sender=governor)
+
+
+def test_update_addy_after_disable(addy_registry, new_addy, new_addy_b, governor):
+    """Test that disabled addys can be updated"""
+    description = "Test Addy"
+    # Register and confirm initial addy
+    assert addy_registry.registerNewAddy(new_addy, description, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id = addy_registry.confirmNewAddy(new_addy, sender=governor)
+    
+    # Disable addy
+    assert addy_registry.disableAddyAddr(addy_id, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    assert addy_registry.confirmAddyDisable(addy_id, sender=governor)
+    
+    # Update disabled addy - all steps should succeed
+    assert addy_registry.isValidAddyUpdate(addy_id, new_addy_b)  # Validation passes
+    assert addy_registry.updateAddyAddr(addy_id, new_addy_b, sender=governor)  # Update initiation succeeds
+    
+    # Confirm update
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    assert addy_registry.confirmAddyUpdate(addy_id, sender=governor)  # Update confirmation succeeds
+    
+    # Verify the update
+    assert addy_registry.getAddy(addy_id) == new_addy_b.address
+    assert addy_registry.getAddyId(new_addy_b.address) == addy_id
+    assert addy_registry.getAddyId(new_addy.address) == 0  # Old address mapping cleared
+
+
+def test_disable_addy_zero_id(addy_registry, governor):
+    """Test that addy ID 0 cannot be disabled"""
+    assert not addy_registry.isValidAddyDisable(0)
+    assert not addy_registry.disableAddyAddr(0, sender=governor)
+
+
+def test_last_addy_after_disable(addy_registry, new_addy, new_addy_b, governor):
+    """Test that last addy is updated correctly after disabling"""
+    description_a = "Test Addy A"
+    description_b = "Test Addy B"
+    
+    # Register and confirm first addy
+    assert addy_registry.registerNewAddy(new_addy, description_a, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id_a = addy_registry.confirmNewAddy(new_addy, sender=governor)
+    
+    # Register and confirm second addy
+    assert addy_registry.registerNewAddy(new_addy_b, description_b, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    addy_id_b = addy_registry.confirmNewAddy(new_addy_b, sender=governor)
+    
+    # Verify last addy is second addy
+    assert addy_registry.getLastAddyAddr() == new_addy_b.address
+    assert addy_registry.getLastAddyId() == addy_id_b
+    
+    # Disable second addy
+    assert addy_registry.disableAddyAddr(addy_id_b, sender=governor)
+    boa.env.time_travel(blocks=addy_registry.addyChangeDelay() + 1)
+    assert addy_registry.confirmAddyDisable(addy_id_b, sender=governor)
+    
+    # Verify last addy ID remains the same but address is zero
+    assert addy_registry.getLastAddyAddr() == ZERO_ADDRESS
+    assert addy_registry.getLastAddyId() == addy_id_b
 

@@ -2,8 +2,8 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, YIELD_OPP_UINT256, DEPOSIT_UINT256
-from contracts.core import WalletFunds, WalletConfig
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, YIELD_OPP_UINT256
+from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 
 TRIAL_AMOUNT = 10 * EIGHTEEN_DECIMALS
 
@@ -13,12 +13,12 @@ def new_ai_wallet(agent_factory, owner, agent):
     w = agent_factory.createUserWallet(owner, agent, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
-    return WalletFunds.at(w)
+    return UserWalletTemplate.at(w)
 
 
 @pytest.fixture(scope="module")
 def new_ai_wallet_config(new_ai_wallet):
-    return WalletConfig.at(new_ai_wallet.walletConfig())
+    return UserWalletConfigTemplate.at(new_ai_wallet.walletConfig())
 
 
 @pytest.fixture(scope="module")
@@ -26,7 +26,7 @@ def mock_lego_alpha_third(alpha_token, alpha_token_erc4626_vault_third, lego_reg
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_alpha_another")
     assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault_third, sender=governor)
     lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 
@@ -86,7 +86,7 @@ def test_wallet_creation_with_trial_funds(agent_factory, alpha_token, owner, age
     assert alpha_token.balanceOf(wallet_addr) == TRIAL_AMOUNT
 
     # Verify trial funds data in wallet
-    wallet = WalletFunds.at(wallet_addr)
+    wallet = UserWalletTemplate.at(wallet_addr)
     assert wallet.trialFundsAsset() == alpha_token.address
     assert wallet.trialFundsInitialAmount() == TRIAL_AMOUNT
 
@@ -173,7 +173,7 @@ def test_wallet_creation_insufficient_trial_funds(agent_factory, bravo_token, br
 
     # Create wallet - should work but with reduced trial funds
     wallet_addr = agent_factory.createUserWallet(owner, agent)
-    wallet = WalletFunds.at(wallet_addr)
+    wallet = UserWalletTemplate.at(wallet_addr)
 
     # Verify reduced trial funds
     assert bravo_token.balanceOf(wallet_addr) == TRIAL_AMOUNT // 2
@@ -253,7 +253,7 @@ def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_toke
 
     # Create first wallet
     wallet1 = agent_factory.createUserWallet(owner, agent)
-    wallet1_contract = WalletFunds.at(wallet1)
+    wallet1_contract = UserWalletTemplate.at(wallet1)
 
     # Verify first wallet trial funds
     assert alpha_token.balanceOf(wallet1) == alpha_amount
@@ -265,7 +265,7 @@ def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_toke
 
     # Create second wallet
     wallet2 = agent_factory.createUserWallet(owner, agent)
-    wallet2_contract = WalletFunds.at(wallet2)
+    wallet2_contract = UserWalletTemplate.at(wallet2)
 
     # Verify second wallet trial funds
     assert bravo_token.balanceOf(wallet2) == bravo_amount
@@ -319,8 +319,8 @@ def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, ag
     # Create two wallets
     wallet1 = agent_factory.createUserWallet(owner, agent)
     wallet2 = agent_factory.createUserWallet(owner, agent)
-    wallet1_contract = WalletFunds.at(wallet1)
-    wallet2_contract = WalletFunds.at(wallet2)
+    wallet1_contract = UserWalletTemplate.at(wallet1)
+    wallet2_contract = UserWalletTemplate.at(wallet2)
 
     # Verify initial trial funds
     assert alpha_token.balanceOf(wallet1) == TRIAL_AMOUNT

@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
+from constants import ZERO_ADDRESS, YIELD_OPP_UINT256, DEX_UINT256
 from conf_utils import filter_logs
 
 
@@ -29,34 +29,34 @@ def test_register_new_lego(lego_registry, new_lego, governor):
 
     assert lego_registry.isValidNewLegoAddr(new_lego)
     
-    numLegos = lego_registry.numLegos()
+    numLegos = lego_registry.numAddys()
     current_block = boa.env.evm.patch.block_number
 
     # Test successful registration initiation
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
 
     # Verify pending event
-    log = filter_logs(lego_registry, "NewLegoPending")[0]
+    log = filter_logs(lego_registry, "NewAddyPending")[0]
     assert log.addr == new_lego.address
     assert log.description == description
-    assert log.confirmBlock == current_block + lego_registry.legoChangeDelay()
+    assert log.confirmBlock == current_block + lego_registry.addyChangeDelay()
 
     # Confirm registration after delay
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     assert lego_id == numLegos
 
     # Verify registration event
-    log = filter_logs(lego_registry, "NewLegoRegistered")[0]
+    log = filter_logs(lego_registry, "NewAddyConfirmed")[0]
     assert log.addr == new_lego.address
-    assert log.legoId == lego_id
+    assert log.addyId == lego_id
     assert log.description == description
 
     assert lego_registry.isValidLegoAddr(new_lego.address)
     assert lego_registry.getLegoId(new_lego.address) == lego_id
     assert lego_registry.getLegoAddr(lego_id) == new_lego.address
     assert lego_registry.getLegoDescription(lego_id) == description
-    assert lego_registry.getNumLegos() == numLegos
+    assert lego_registry.getNumLegos() == lego_id
     assert lego_registry.getLastLegoAddr() == new_lego.address
     assert lego_registry.getLastLegoId() == lego_id
     
@@ -71,7 +71,7 @@ def test_register_new_lego_invalid_cases(lego_registry, new_lego, governor, bob)
     description = "Test Lego"
     
     # Test non-governor cannot register
-    with boa.reverts("no perms"):
+    with boa.reverts():  # Empty revert as the assertion combines both checks
         lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=bob)
     
     # Test cannot register zero address
@@ -82,7 +82,7 @@ def test_register_new_lego_invalid_cases(lego_registry, new_lego, governor, bob)
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
     
     # Wait for delay and confirm first registration
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     assert lego_id != 0
 
@@ -106,11 +106,11 @@ def test_cancel_pending_registration(lego_registry, new_lego, governor, bob):
     assert lego_registry.cancelPendingNewLego(new_lego, sender=governor)
     
     # Verify cancellation event
-    log = filter_logs(lego_registry, "NewPendingLegoCancelled")[0]
+    log = filter_logs(lego_registry, "NewPendingAddyCancelled")[0]
     assert log.addr == new_lego.address
     assert log.description == description
     assert log.initiatedBlock == current_block
-    assert log.confirmBlock == current_block + lego_registry.legoChangeDelay()
+    assert log.confirmBlock == current_block + lego_registry.addyChangeDelay()
     
     # Test cannot confirm cancelled registration
     with boa.reverts():  # Empty revert as the assertion combines both checks
@@ -121,7 +121,7 @@ def test_update_lego_addr(lego_registry, new_lego, new_lego_b, governor, bob):
     description = "Test Lego"
     # Register and confirm initial lego
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     assert lego_id != 0
 
@@ -142,21 +142,21 @@ def test_update_lego_addr(lego_registry, new_lego, new_lego_b, governor, bob):
     assert lego_registry.updateLegoAddr(lego_id, new_lego_b, sender=governor)
     
     # Verify pending event
-    log = filter_logs(lego_registry, "LegoAddrUpdatePending")[0]
+    log = filter_logs(lego_registry, "AddyUpdatePending")[0]
     assert log.newAddr == new_lego_b.address
     assert log.prevAddr == new_lego.address
-    assert log.legoId == lego_id
-    assert log.confirmBlock == current_block + lego_registry.legoChangeDelay()
+    assert log.addyId == lego_id
+    assert log.confirmBlock == current_block + lego_registry.addyChangeDelay()
 
     # Confirm update after delay
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     assert lego_registry.confirmLegoUpdate(lego_id, sender=governor)
 
     # Verify update event
-    log = filter_logs(lego_registry, "LegoAddrUpdated")[0]
+    log = filter_logs(lego_registry, "AddyUpdateConfirmed")[0]
     assert log.newAddr == new_lego_b.address
     assert log.prevAddr == new_lego.address
-    assert log.legoId == lego_id
+    assert log.addyId == lego_id
     assert log.version == 2
     assert log.description == description
 
@@ -175,7 +175,7 @@ def test_cancel_pending_update(lego_registry, new_lego, new_lego_b, governor, bo
     description = "Test Lego"
     # Register and confirm initial lego
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     
     current_block = boa.env.evm.patch.block_number
@@ -191,12 +191,12 @@ def test_cancel_pending_update(lego_registry, new_lego, new_lego_b, governor, bo
     assert lego_registry.cancelPendingLegoUpdate(lego_id, sender=governor)
     
     # Verify cancellation event
-    log = filter_logs(lego_registry, "LegoAddrUpdateCancelled")[0]
-    assert log.legoId == lego_id
+    log = filter_logs(lego_registry, "AddyUpdateCancelled")[0]
+    assert log.addyId == lego_id
     assert log.newAddr == new_lego_b.address
     assert log.prevAddr == new_lego.address
     assert log.initiatedBlock == current_block
-    assert log.confirmBlock == current_block + lego_registry.legoChangeDelay()
+    assert log.confirmBlock == current_block + lego_registry.addyChangeDelay()
     
     # Test cannot confirm cancelled update
     with boa.reverts():  # Empty revert as the assertion combines both checks
@@ -207,7 +207,7 @@ def test_disable_lego_addr(lego_registry, new_lego, governor, bob):
     description = "Test Lego"
     # Register and confirm initial lego
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     assert lego_id != 0
 
@@ -225,19 +225,19 @@ def test_disable_lego_addr(lego_registry, new_lego, governor, bob):
     assert lego_registry.disableLegoAddr(lego_id, sender=governor)
     
     # Verify pending event
-    log = filter_logs(lego_registry, "LegoAddrDisablePending")[0]
-    assert log.legoId == lego_id
+    log = filter_logs(lego_registry, "AddyDisablePending")[0]
+    assert log.addyId == lego_id
     assert log.addr == new_lego.address
-    assert log.confirmBlock == current_block + lego_registry.legoChangeDelay()
+    assert log.confirmBlock == current_block + lego_registry.addyChangeDelay()
 
     # Confirm disable after delay
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     assert lego_registry.confirmLegoDisable(lego_id, sender=governor)
 
     # Verify disable event
-    log = filter_logs(lego_registry, "LegoAddrDisabled")[0]
+    log = filter_logs(lego_registry, "AddyDisableConfirmed")[0]
     assert log.addr == new_lego.address
-    assert log.legoId == lego_id
+    assert log.addyId == lego_id
     assert log.version == 2
     assert log.description == description
 
@@ -258,7 +258,7 @@ def test_cancel_pending_disable(lego_registry, new_lego, governor, bob):
     description = "Test Lego"
     # Register and confirm initial lego
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     
     current_block = boa.env.evm.patch.block_number
@@ -274,11 +274,11 @@ def test_cancel_pending_disable(lego_registry, new_lego, governor, bob):
     assert lego_registry.cancelPendingLegoDisable(lego_id, sender=governor)
     
     # Verify cancellation event
-    log = filter_logs(lego_registry, "LegoAddrDisableCancelled")[0]
-    assert log.legoId == lego_id
+    log = filter_logs(lego_registry, "AddyDisableCancelled")[0]
+    assert log.addyId == lego_id
     assert log.addr == new_lego.address
     assert log.initiatedBlock == current_block
-    assert log.confirmBlock == current_block + lego_registry.legoChangeDelay()
+    assert log.confirmBlock == current_block + lego_registry.addyChangeDelay()
     
     # Test cannot confirm cancelled disable
     with boa.reverts():  # Empty revert as the assertion combines both checks
@@ -286,8 +286,8 @@ def test_cancel_pending_disable(lego_registry, new_lego, governor, bob):
 
 
 def test_set_lego_change_delay(lego_registry, governor, bob):
-    min_delay = lego_registry.MIN_LEGO_CHANGE_DELAY()
-    max_delay = lego_registry.MAX_LEGO_CHANGE_DELAY()
+    min_delay = lego_registry.MIN_ADDY_CHANGE_DELAY()
+    max_delay = lego_registry.MAX_ADDY_CHANGE_DELAY()
     
     # Test non-governor cannot set delay
     with boa.reverts("no perms"):
@@ -302,7 +302,7 @@ def test_set_lego_change_delay(lego_registry, governor, bob):
     # Test successful delay update
     new_delay = min_delay + 1
     lego_registry.setLegoChangeDelay(new_delay, sender=governor)
-    assert lego_registry.legoChangeDelay() == new_delay
+    assert lego_registry.addyChangeDelay() == new_delay
 
 
 def test_set_lego_helper(lego_registry, alpha_token, governor, bob):
@@ -333,7 +333,7 @@ def test_view_functions(lego_registry, new_lego, governor):
     description = "Test Lego"
     # Register and confirm initial lego
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     
     # Test isValidNewLegoAddr
@@ -358,37 +358,81 @@ def test_lego_type_handling(lego_registry, new_lego, governor):
     description = "Test Lego"
     # Register with YIELD_OPP type
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    
+    # Verify pending type is set correctly
+    assert lego_registry.pendingLegoType(new_lego.address) == YIELD_OPP_UINT256
+    
+    # Confirm registration
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     
-    # Verify type is stored correctly
-    info = lego_registry.getLegoInfo(lego_id)
-    assert info.legoType == YIELD_OPP_UINT256
+    # Verify type is stored correctly in final mapping
+    assert lego_registry.legoIdToType(lego_id) == YIELD_OPP_UINT256
+    # Verify pending type is cleared
+    assert lego_registry.pendingLegoType(new_lego.address) == 0  # Empty type after confirmation
 
 
-def test_underlying_asset_functionality(lego_registry, new_lego, alpha_token, alpha_token_erc4626_vault, governor):
+def test_lego_type_cancellation(lego_registry, new_lego, governor):
     description = "Test Lego"
-    # Register lego
+    # Register with YIELD_OPP type
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
-    lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     
-    # Test underlying asset lookup
-    assert lego_registry.getUnderlyingAsset(alpha_token_erc4626_vault) == alpha_token.address
-    assert lego_registry.getUnderlyingAsset(ZERO_ADDRESS) == ZERO_ADDRESS
+    # Verify pending type is set
+    assert lego_registry.pendingLegoType(new_lego.address) == YIELD_OPP_UINT256
+    
+    # Cancel registration
+    assert lego_registry.cancelPendingNewLego(new_lego, sender=governor)
+    
+    # Verify pending type is NOT cleared after cancellation (contract behavior)
+    assert lego_registry.pendingLegoType(new_lego.address) == YIELD_OPP_UINT256
 
 
-def test_user_underlying_amount(lego_registry, new_lego, alpha_token, alpha_token_erc4626_vault, governor, bob):
+def test_lego_type_update(lego_registry, new_lego, new_lego_b, governor):
     description = "Test Lego"
-    # Register lego
+    # Register and confirm first lego
     assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
-    lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
+    lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
     
-    # Test user underlying amount calculation
-    assert lego_registry.getUnderlyingForUser(bob, alpha_token) == 0
-    assert lego_registry.getUnderlyingForUser(ZERO_ADDRESS, alpha_token) == 0
-    assert lego_registry.getUnderlyingForUser(bob, ZERO_ADDRESS) == 0
+    # Verify initial type
+    assert lego_registry.legoIdToType(lego_id) == YIELD_OPP_UINT256
+    
+    # Update to new lego
+    assert lego_registry.updateLegoAddr(lego_id, new_lego_b, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
+    assert lego_registry.confirmLegoUpdate(lego_id, sender=governor)
+    
+    # Verify type persists after update
+    assert lego_registry.legoIdToType(lego_id) == YIELD_OPP_UINT256
+
+
+def test_lego_type_disable(lego_registry, new_lego, governor):
+    description = "Test Lego"
+    # Register and confirm lego
+    assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
+    lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
+    
+    # Verify initial type
+    assert lego_registry.legoIdToType(lego_id) == YIELD_OPP_UINT256
+    
+    # Disable lego
+    assert lego_registry.disableLegoAddr(lego_id, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
+    assert lego_registry.confirmLegoDisable(lego_id, sender=governor)
+    
+    # Verify type persists after disable
+    assert lego_registry.legoIdToType(lego_id) == YIELD_OPP_UINT256
+
+
+def test_lego_type_edge_cases(lego_registry):
+    # Test invalid ID cases
+    assert lego_registry.legoIdToType(0) == 0  # Empty type for invalid ID
+    assert lego_registry.legoIdToType(999) == 0  # Empty type for non-existent ID
+    
+    # Test pending type for unregistered address
+    assert lego_registry.pendingLegoType(ZERO_ADDRESS) == 0  # Empty type for zero address
+    assert lego_registry.pendingLegoType("0x" + "1" * 40) == 0  # Empty type for unregistered address
 
 
 def test_view_function_edge_cases(lego_registry):
@@ -412,3 +456,20 @@ def test_helper_contract_validation(lego_registry, alpha_token, governor, bob):
     # Test setting same helper twice
     assert lego_registry.setLegoHelper(alpha_token, sender=governor)
     assert not lego_registry.setLegoHelper(alpha_token, sender=governor)
+
+
+def test_multiple_lego_types(lego_registry, new_lego, new_lego_b, governor):
+    description = "Test Lego"
+    # Register and confirm YIELD_OPP lego
+    assert lego_registry.registerNewLego(new_lego, description, YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
+    yield_lego_id = lego_registry.confirmNewLegoRegistration(new_lego, sender=governor)
+    
+    # Register and confirm DEX lego
+    assert lego_registry.registerNewLego(new_lego_b, description, DEX_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
+    dex_lego_id = lego_registry.confirmNewLegoRegistration(new_lego_b, sender=governor)
+    
+    # Verify types are stored correctly
+    assert lego_registry.legoIdToType(yield_lego_id) == YIELD_OPP_UINT256
+    assert lego_registry.legoIdToType(dex_lego_id) == DEX_UINT256

@@ -3,7 +3,7 @@ import boa
 
 from conf_utils import filter_logs
 from constants import EIGHTEEN_DECIMALS, ZERO_ADDRESS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256
-from contracts.core import WalletFunds, WalletConfig
+from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 
 
 @pytest.fixture(scope="module")
@@ -11,12 +11,12 @@ def new_ai_wallet(agent_factory, owner, bob_agent):
     w = agent_factory.createUserWallet(owner, bob_agent, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
-    return WalletFunds.at(w)
+    return UserWalletTemplate.at(w)
 
 
 @pytest.fixture(scope="module")
 def new_ai_wallet_config(new_ai_wallet):
-    return WalletConfig.at(new_ai_wallet.walletConfig())
+    return UserWalletConfigTemplate.at(new_ai_wallet.walletConfig())
 
 
 @pytest.fixture(scope="module", autouse=True)

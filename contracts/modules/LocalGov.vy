@@ -151,6 +151,7 @@ def MIN_GOV_CHANGE_DELAY() -> uint256:
     """
     return _MIN_GOV_CHANGE_DELAY
 
+
 @view
 @external
 def MAX_GOV_CHANGE_DELAY() -> uint256:

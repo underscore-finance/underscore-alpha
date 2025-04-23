@@ -3,7 +3,7 @@ import boa
 
 from conf_utils import filter_logs
 from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS
-from contracts.core import WalletFunds, WalletConfig
+from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 
 
 def test_whitelist_add_and_confirm(ai_wallet_config, owner, sally, bob):
@@ -241,7 +241,7 @@ def test_transfer_to_wallet_with_pending_ownership(ai_wallet_config, owner, bob,
     """Test that transfers to wallets with pending ownership changes are not allowed"""
     # Create a new wallet owned by the same owner
     new_wallet = agent_factory.createUserWallet(owner, ZERO_ADDRESS, sender=owner)
-    new_wallet_config = WalletConfig.at(WalletFunds.at(new_wallet).walletConfig())
+    new_wallet_config = UserWalletConfigTemplate.at(UserWalletTemplate.at(new_wallet).walletConfig())
     
     # Initially can transfer to wallet with same owner
     assert ai_wallet_config.canTransferToRecipient(new_wallet)

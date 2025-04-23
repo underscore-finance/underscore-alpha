@@ -57,6 +57,9 @@ PARAMS = {
         # addy book gov (blocks)
         "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,  # 1 day on Base
         "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,  # 7 days on Base
+        # addy book - addy changes (blocks)
+        "ADDY_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
+        "ADDY_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
         # lego registry (blocks)
         "LEGO_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
         "LEGO_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
@@ -80,6 +83,9 @@ PARAMS = {
         # addy book gov (blocks)
         "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,
         "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,
+        # addy book - addy changes (blocks)
+        "ADDY_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
+        "ADDY_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
         # lego registry (blocks)
         "LEGO_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
         "LEGO_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base

@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
-from contracts.core import WalletFunds
+from contracts.core.templates import UserWalletTemplate
 
 
 # accounts
@@ -64,7 +64,7 @@ def bob_ai_wallet(agent_factory, bob, bob_agent):
     w = agent_factory.createUserWallet(bob, bob_agent, sender=bob)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
-    return WalletFunds.at(w)
+    return UserWalletTemplate.at(w)
 
 
 # mock asset: alpha token
@@ -157,8 +157,8 @@ def mock_weth():
 def mock_lego_alpha(alpha_token, alpha_token_erc4626_vault, lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_alpha")
     assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault, sender=governor)
-    lego_registry.registerNewLego(addr, "Mock Lego Alpha", YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    assert lego_registry.registerNewLego(addr, "Mock Lego Alpha", YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 
@@ -167,8 +167,8 @@ def mock_lego_alpha(alpha_token, alpha_token_erc4626_vault, lego_registry, addy_
 def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_alpha_another")
     assert addr.addAssetOpportunity(alpha_token, alpha_token_erc4626_vault_another, sender=governor)
-    lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    assert lego_registry.registerNewLego(addr, "Mock Lego Alpha Another", YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 
@@ -180,8 +180,8 @@ def mock_lego_alpha_another(alpha_token, alpha_token_erc4626_vault_another, lego
 def mock_lego_bravo(bravo_token, bravo_token_erc4626_vault, addy_registry_deploy, lego_registry, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_bravo")
     assert addr.addAssetOpportunity(bravo_token, bravo_token_erc4626_vault, sender=governor)
-    lego_registry.registerNewLego(addr, "Mock Lego Bravo", YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    assert lego_registry.registerNewLego(addr, "Mock Lego Bravo", YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 
@@ -191,8 +191,8 @@ def mock_lego_bravo(bravo_token, bravo_token_erc4626_vault, addy_registry_deploy
 @pytest.fixture(scope="session")
 def mock_lego_charlie(charlie_token, charlie_token_erc4626_vault, addy_registry_deploy, lego_registry, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="mock_lego_charlie")
-    lego_registry.registerNewLego(addr, "Mock Lego Charlie", YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
+    assert lego_registry.registerNewLego(addr, "Mock Lego Charlie", YIELD_OPP_UINT256, sender=governor)
+    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
     assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 

@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from eth_account import Account
-from contracts.core import WalletFunds, WalletConfig, AgentTemplate
+from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate, AgentTemplate
 from constants import ZERO_ADDRESS, MAX_UINT256, SWAP_UINT256
 from eth_account.messages import encode_defunct
 
@@ -12,12 +12,12 @@ def ai_wallet(agent_factory, owner, agent):
     w = agent_factory.createUserWallet(owner, agent, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
-    return WalletFunds.at(w)
+    return UserWalletTemplate.at(w)
 
 
 @pytest.fixture(scope="package")
 def ai_wallet_config(ai_wallet):
-    return WalletConfig.at(ai_wallet.walletConfig())
+    return UserWalletConfigTemplate.at(ai_wallet.walletConfig())
 
 
 @pytest.fixture(scope="package")
@@ -112,12 +112,12 @@ def special_ai_wallet(agent_factory, owner, special_agent):
     w = agent_factory.createUserWallet(owner, special_agent, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
-    return WalletFunds.at(w)
+    return UserWalletTemplate.at(w)
 
 
 @pytest.fixture(scope="package")
 def special_ai_wallet_config(special_ai_wallet):
-    return WalletConfig.at(special_ai_wallet.walletConfig())
+    return UserWalletConfigTemplate.at(special_ai_wallet.walletConfig())
 
 
 @pytest.fixture(scope="package")

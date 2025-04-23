@@ -10,17 +10,33 @@ from utils.BluePrint import PARAMS, ADDYS, CORE_TOKENS
 
 @pytest.fixture(scope="session")
 def addy_registry_deploy(governor, fork):
-    min_delay = PARAMS[fork]["ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY"]
-    max_delay = PARAMS[fork]["ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY"]
-    return boa.load("contracts/core/AddyRegistry.vy", governor, min_delay, max_delay, name="addy_registry")
+    min_gov_delay = PARAMS[fork]["ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY"]
+    max_gov_delay = PARAMS[fork]["ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY"]
+    min_change_delay = PARAMS[fork]["ADDY_REGISTRY_MIN_CHANGE_DELAY"]
+    max_change_delay = PARAMS[fork]["ADDY_REGISTRY_MAX_CHANGE_DELAY"]
+    return boa.load("contracts/core/registries/AddyRegistry.vy", governor, min_gov_delay, max_gov_delay, min_change_delay, max_change_delay, name="addy_registry")
 
 
 @pytest.fixture(scope="session", autouse=True)
 def addy_registry(addy_registry_deploy, lego_registry, agent_factory, price_sheets, oracle_registry, governor):
-    assert addy_registry_deploy.registerNewAddy(agent_factory, "Agent Factory", sender=governor) != 0 # 1
-    assert addy_registry_deploy.registerNewAddy(lego_registry, "Lego Registry", sender=governor) != 0 # 2
-    assert addy_registry_deploy.registerNewAddy(price_sheets, "Price Sheets", sender=governor) != 0 # 3
-    assert addy_registry_deploy.registerNewAddy(oracle_registry, "Oracle Registry", sender=governor) != 0 # 4
+    delay = addy_registry_deploy.addyChangeDelay()
+
+    assert addy_registry_deploy.registerNewAddy(agent_factory, "Agent Factory", sender=governor) # 1
+    boa.env.time_travel(blocks=delay + 1)
+    assert addy_registry_deploy.confirmNewAddy(agent_factory, sender=governor) != 0
+
+    assert addy_registry_deploy.registerNewAddy(lego_registry, "Lego Registry", sender=governor) # 2
+    boa.env.time_travel(blocks=delay + 1)
+    assert addy_registry_deploy.confirmNewAddy(lego_registry, sender=governor) != 0
+
+    assert addy_registry_deploy.registerNewAddy(price_sheets, "Price Sheets", sender=governor) # 3
+    boa.env.time_travel(blocks=delay + 1)
+    assert addy_registry_deploy.confirmNewAddy(price_sheets, sender=governor) != 0
+
+    assert addy_registry_deploy.registerNewAddy(oracle_registry, "Oracle Registry", sender=governor) # 4
+    boa.env.time_travel(blocks=delay + 1)
+    assert addy_registry_deploy.confirmNewAddy(oracle_registry, sender=governor) != 0
+
     return addy_registry_deploy
 
 
@@ -28,7 +44,7 @@ def addy_registry(addy_registry_deploy, lego_registry, agent_factory, price_shee
 def lego_registry(addy_registry_deploy, fork):
     min_delay = PARAMS[fork]["LEGO_REGISTRY_MIN_CHANGE_DELAY"]
     max_delay = PARAMS[fork]["LEGO_REGISTRY_MAX_CHANGE_DELAY"]
-    return boa.load("contracts/core/LegoRegistry.vy", addy_registry_deploy, min_delay, max_delay, name="lego_registry")
+    return boa.load("contracts/core/registries/LegoRegistry.vy", addy_registry_deploy, min_delay, max_delay, name="lego_registry")
 
 
 @pytest.fixture(scope="session")
@@ -57,7 +73,7 @@ def price_sheets(addy_registry_deploy, fork):
 def oracle_registry(addy_registry_deploy, fork):
     ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" if fork == "local" else ADDYS[fork]["ETH"]
     return boa.load(
-        "contracts/core/OracleRegistry.vy",
+        "contracts/core/registries/OracleRegistry.vy",
         ETH,
         PARAMS[fork]["ORACLE_REGISTRY_MIN_STALE_TIME"],
         PARAMS[fork]["ORACLE_REGISTRY_MAX_STALE_TIME"],
@@ -71,17 +87,17 @@ def oracle_registry(addy_registry_deploy, fork):
 
 @pytest.fixture(scope="session")
 def wallet_funds_template():
-    return boa.load("contracts/core/WalletFunds.vy", name="wallet_funds_template")
+    return boa.load("contracts/core/templates/UserWalletTemplate.vy", name="wallet_funds_template")
 
 
 @pytest.fixture(scope="session")
 def wallet_config_template(fork):
-    return boa.load("contracts/core/WalletConfig.vy", PARAMS[fork]["USER_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["USER_MAX_OWNER_CHANGE_DELAY"], name="wallet_config_template")
+    return boa.load("contracts/core/templates/UserWalletConfigTemplate.vy", PARAMS[fork]["USER_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["USER_MAX_OWNER_CHANGE_DELAY"], name="wallet_config_template")
 
 
 @pytest.fixture(scope="session")
 def agent_template(fork):
-    return boa.load("contracts/core/AgentTemplate.vy", PARAMS[fork]["AGENT_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["AGENT_MAX_OWNER_CHANGE_DELAY"], name="agent_template")
+    return boa.load("contracts/core/templates/AgentTemplate.vy", PARAMS[fork]["AGENT_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["AGENT_MAX_OWNER_CHANGE_DELAY"], name="agent_template")
 
 
 @pytest.fixture(scope="session")
@@ -112,7 +128,7 @@ def lego_helper(
         weth = CORE_TOKENS[fork]["WETH"]
 
     h = boa.load(
-        "contracts/core/LegoHelper.vy",
+        "contracts/legos/LegoHelper.vy",
         addy_registry,
         usdc,
         weth,

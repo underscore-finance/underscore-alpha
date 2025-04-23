@@ -3,7 +3,6 @@ import boa
 
 from conf_utils import filter_logs
 from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, CONVERSION_UINT256
-from contracts.core import WalletFunds
 from utils.BluePrint import CORE_TOKENS
 
 

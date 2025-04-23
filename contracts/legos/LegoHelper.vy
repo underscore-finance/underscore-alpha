@@ -6,12 +6,14 @@
 from interfaces import LegoYield
 from interfaces import LegoDex
 from ethereum.ercs import IERC20
+import contracts.modules.Registry as registry
 
 interface LegoRegistry:
     def getLegoAddr(_legoId: uint256) -> address: view
     def isValidLegoId(_legoId: uint256) -> bool: view
-    def legoInfo(_legoId: uint256) -> LegoInfo: view
-    def numLegos() -> uint256: view
+    def legoIdToType(_legoId: uint256) -> LegoType: view
+    def getLegoInfo(_legoId: uint256) -> registry.AddyInfo: view
+    def numAddys() -> uint256: view
 
 interface LegoDexNonStandard:
     def getBestSwapAmountOut(_tokenIn: address, _tokenOut: address, _amountIn: uint256) -> (address, uint256): nonpayable
@@ -51,13 +53,6 @@ struct UnderlyingData:
     legoId: uint256
     legoAddr: address
     legoDesc: String[64]
-
-struct LegoInfo:
-    addr: address
-    version: uint256
-    lastModified: uint256
-    description: String[64]
-    legoType: LegoType
 
 ADDY_REGISTRY: public(immutable(address))
 
@@ -324,13 +319,14 @@ def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: add
 
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
 
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
-        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.YIELD_OPP:
+        legoType: LegoType = staticcall LegoRegistry(legoRegistry).legoIdToType(i)
+        if legoType != LegoType.YIELD_OPP:
             continue
 
-        vaultTokenAmount: uint256 = staticcall LegoYield(legoInfo.addr).getVaultTokenAmount(_asset, _assetAmount, _vaultToken)
+        legoAddr: address = staticcall LegoRegistry(legoRegistry).getLegoAddr(i)
+        vaultTokenAmount: uint256 = staticcall LegoYield(legoAddr).getVaultTokenAmount(_asset, _assetAmount, _vaultToken)
         if vaultTokenAmount != 0:
             return vaultTokenAmount
 
@@ -341,11 +337,13 @@ def getVaultTokenAmount(_asset: address, _assetAmount: uint256, _vaultToken: add
 @external
 def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address, String[64]):
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
-        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.YIELD_OPP:
+        legoType: LegoType = staticcall LegoRegistry(legoRegistry).legoIdToType(i)
+        if legoType != LegoType.YIELD_OPP:
             continue
+
+        legoInfo: registry.AddyInfo = staticcall LegoRegistry(legoRegistry).getLegoInfo(i)
         if staticcall LegoYield(legoInfo.addr).isVaultToken(_vaultToken):
             return i, legoInfo.addr, legoInfo.description
     return 0, empty(address), ""
@@ -360,12 +358,13 @@ def getUnderlyingData(_asset: address, _amount: uint256) -> UnderlyingData:
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
     oracleRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(4)
 
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
-        legoInfo: LegoInfo = staticcall LegoRegistry(legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.YIELD_OPP:
+        legoType: LegoType = staticcall LegoRegistry(legoRegistry).legoIdToType(i)
+        if legoType != LegoType.YIELD_OPP:
             continue
 
+        legoInfo: registry.AddyInfo = staticcall LegoRegistry(legoRegistry).getLegoInfo(i)
         asset: address = empty(address)
         underlyingAmount: uint256 = 0
         usdValue: uint256 = 0
@@ -513,7 +512,7 @@ def _getBestSwapRoutesAmountOut(
 
     # required data
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     routerTokenA: address = ROUTER_TOKENA
     routerTokenB: address = ROUTER_TOKENB
 
@@ -547,7 +546,7 @@ def getBestSwapAmountOutWithRouterPool(
     _includeLegoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> (uint256, DynArray[SwapRoute, MAX_ROUTES]):
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     return self._getBestSwapAmountOutWithRouterPool(ROUTER_TOKENA, ROUTER_TOKENB, _tokenIn, _tokenOut, _amountIn, numLegos, legoRegistry, _includeLegoIds)
 
 
@@ -669,7 +668,7 @@ def getBestSwapAmountOutSinglePool(
     _includeLegoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> SwapRoute:
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     return self._getBestSwapAmountOutSinglePool(_tokenIn, _tokenOut, _amountIn, numLegos, legoRegistry, _includeLegoIds)
 
 
@@ -700,16 +699,17 @@ def _getBestSwapAmountOutSinglePool(
             continue
 
         # get lego info
-        legoInfo: LegoInfo = staticcall LegoRegistry(_legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.DEX:
+        legoType: LegoType = staticcall LegoRegistry(_legoRegistry).legoIdToType(i)
+        if legoType != LegoType.DEX:
             continue
 
+        legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(i)
         pool: address = empty(address)
         amountOut: uint256 = 0
         if i in [UNISWAP_V3_ID, AERODROME_SLIPSTREAM_ID]:
-            pool, amountOut = extcall LegoDexNonStandard(legoInfo.addr).getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn)
+            pool, amountOut = extcall LegoDexNonStandard(legoAddr).getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn)
         else:
-            pool, amountOut = staticcall LegoDex(legoInfo.addr).getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn)
+            pool, amountOut = staticcall LegoDex(legoAddr).getBestSwapAmountOut(_tokenIn, _tokenOut, _amountIn)
 
         # compare best
         if pool != empty(address) and amountOut > bestRoute.amountOut:
@@ -731,7 +731,7 @@ def getSwapAmountOutViaRouterPool(
     _includeLegoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> SwapRoute:
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     return self._getSwapAmountOutViaRouterPool(_tokenIn, _tokenOut, _amountIn, numLegos, legoRegistry, _includeLegoIds)
 
 
@@ -764,20 +764,21 @@ def _getSwapAmountOutViaRouterPool(
             continue
 
         # get lego info
-        legoInfo: LegoInfo = staticcall LegoRegistry(_legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.DEX:
+        legoType: LegoType = staticcall LegoRegistry(_legoRegistry).legoIdToType(i)
+        if legoType != LegoType.DEX:
             continue
 
         # get router pool
-        pool: address = staticcall LegoDex(legoInfo.addr).getCoreRouterPool()
+        legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(i)
+        pool: address = staticcall LegoDex(legoAddr).getCoreRouterPool()
         if pool == empty(address):
             continue
         
         amountOut: uint256 = 0
         if i in [UNISWAP_V3_ID, AERODROME_SLIPSTREAM_ID]:
-            amountOut = extcall LegoDexNonStandard(legoInfo.addr).getSwapAmountOut(pool, _tokenIn, _tokenOut, _amountIn)
+            amountOut = extcall LegoDexNonStandard(legoAddr).getSwapAmountOut(pool, _tokenIn, _tokenOut, _amountIn)
         else:
-            amountOut = staticcall LegoDex(legoInfo.addr).getSwapAmountOut(pool, _tokenIn, _tokenOut, _amountIn)
+            amountOut = staticcall LegoDex(legoAddr).getSwapAmountOut(pool, _tokenIn, _tokenOut, _amountIn)
         
         # compare best
         if amountOut > bestRoute.amountOut:
@@ -820,7 +821,7 @@ def _getBestSwapRoutesAmountIn(
 
     # required data
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     routerTokenA: address = ROUTER_TOKENA
     routerTokenB: address = ROUTER_TOKENB
 
@@ -854,7 +855,7 @@ def getBestSwapAmountInWithRouterPool(
     _includeLegoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> (uint256, DynArray[SwapRoute, MAX_ROUTES]):
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     return self._getBestSwapAmountInWithRouterPool(ROUTER_TOKENA, ROUTER_TOKENB, _tokenIn, _tokenOut, _amountOut, numLegos, legoRegistry, _includeLegoIds)
 
 
@@ -977,7 +978,7 @@ def getBestSwapAmountInSinglePool(
     _includeLegoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> SwapRoute:
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     return self._getBestSwapAmountInSinglePool(_tokenIn, _tokenOut, _amountOut, numLegos, legoRegistry, _includeLegoIds)
 
 
@@ -1007,16 +1008,17 @@ def _getBestSwapAmountInSinglePool(
         if shouldCheckLegoIds and i not in _includeLegoIds:
             continue
 
-        legoInfo: LegoInfo = staticcall LegoRegistry(_legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.DEX:
+        legoType: LegoType = staticcall LegoRegistry(_legoRegistry).legoIdToType(i)
+        if legoType != LegoType.DEX:
             continue
 
         pool: address = empty(address)
         amountIn: uint256 = max_value(uint256)
+        legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(i)
         if i in [UNISWAP_V3_ID, AERODROME_SLIPSTREAM_ID]:
-            pool, amountIn = extcall LegoDexNonStandard(legoInfo.addr).getBestSwapAmountIn(_tokenIn, _tokenOut, _amountOut)
+            pool, amountIn = extcall LegoDexNonStandard(legoAddr).getBestSwapAmountIn(_tokenIn, _tokenOut, _amountOut)
         else:
-            pool, amountIn = staticcall LegoDex(legoInfo.addr).getBestSwapAmountIn(_tokenIn, _tokenOut, _amountOut)
+            pool, amountIn = staticcall LegoDex(legoAddr).getBestSwapAmountIn(_tokenIn, _tokenOut, _amountOut)
 
         # compare best
         if pool != empty(address) and amountIn != 0 and amountIn < bestRoute.amountIn:
@@ -1038,7 +1040,7 @@ def getSwapAmountInViaRouterPool(
     _includeLegoIds: DynArray[uint256, MAX_LEGOS] = [],
 ) -> SwapRoute:
     legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
-    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numLegos()
+    numLegos: uint256 = staticcall LegoRegistry(legoRegistry).numAddys()
     return self._getSwapAmountInViaRouterPool(_tokenIn, _tokenOut, _amountOut, numLegos, legoRegistry, _includeLegoIds)
 
 
@@ -1070,20 +1072,21 @@ def _getSwapAmountInViaRouterPool(
         if shouldCheckLegoIds and i not in _includeLegoIds:
             continue
 
-        legoInfo: LegoInfo = staticcall LegoRegistry(_legoRegistry).legoInfo(i)
-        if legoInfo.legoType != LegoType.DEX:
+        legoType: LegoType = staticcall LegoRegistry(_legoRegistry).legoIdToType(i)
+        if legoType != LegoType.DEX:
             continue
 
         # get router pool
-        pool: address = staticcall LegoDex(legoInfo.addr).getCoreRouterPool()
+        legoAddr: address = staticcall LegoRegistry(_legoRegistry).getLegoAddr(i)
+        pool: address = staticcall LegoDex(legoAddr).getCoreRouterPool()
         if pool == empty(address):
             continue
         
         amountIn: uint256 = max_value(uint256)
         if i in [UNISWAP_V3_ID, AERODROME_SLIPSTREAM_ID]:
-            amountIn = extcall LegoDexNonStandard(legoInfo.addr).getSwapAmountIn(pool, _tokenIn, _tokenOut, _amountOut)
+            amountIn = extcall LegoDexNonStandard(legoAddr).getSwapAmountIn(pool, _tokenIn, _tokenOut, _amountOut)
         else:
-            amountIn = staticcall LegoDex(legoInfo.addr).getSwapAmountIn(pool, _tokenIn, _tokenOut, _amountOut)
+            amountIn = staticcall LegoDex(legoAddr).getSwapAmountIn(pool, _tokenIn, _tokenOut, _amountOut)
         
         # compare best
         if amountIn != 0 and amountIn < bestRoute.amountIn:
