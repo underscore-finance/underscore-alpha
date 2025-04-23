@@ -395,3 +395,10 @@ def setLegoId(_legoId: uint256) -> bool:
     self.legoId = _legoId
     log FluidLegoIdSet(legoId=_legoId)
     return True
+
+
+@external
+def activate(_shouldActivate: bool):
+    assert gov._canGovern(msg.sender) # dev: no perms
+    self.isActivated = _shouldActivate
+    log FluidActivated(isActivated=_shouldActivate)

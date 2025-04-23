@@ -3,6 +3,7 @@ import boa
 
 from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS
 from conf_utils import filter_logs
+from utils.BluePrint import PARAMS
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +22,7 @@ def new_oracle_b(addy_registry):
 
 
 def test_initial_state(oracle_registry):
-    assert oracle_registry.numAddys() == 1
+    assert oracle_registry.numOraclePartnersRaw() == 1
 
 
 def test_register_new_oracle_partner(oracle_registry, new_oracle, governor):
@@ -29,7 +30,7 @@ def test_register_new_oracle_partner(oracle_registry, new_oracle, governor):
 
     assert oracle_registry.isValidNewOraclePartnerAddr(new_oracle)
     
-    numOraclePartners = oracle_registry.numAddys()
+    numOraclePartners = oracle_registry.numOraclePartnersRaw()
     current_block = boa.env.evm.patch.block_number
 
     # Test successful registration initiation
@@ -39,10 +40,10 @@ def test_register_new_oracle_partner(oracle_registry, new_oracle, governor):
     log = filter_logs(oracle_registry, "NewAddyPending")[0]
     assert log.addr == new_oracle.address
     assert log.description == description
-    assert log.confirmBlock == current_block + oracle_registry.addyChangeDelay()
+    assert log.confirmBlock == current_block + oracle_registry.oracleChangeDelay()
 
     # Confirm registration after delay
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id == numOraclePartners
 
@@ -56,7 +57,7 @@ def test_register_new_oracle_partner(oracle_registry, new_oracle, governor):
     assert oracle_registry.getOraclePartnerId(new_oracle.address) == oracle_id
     assert oracle_registry.getOraclePartnerAddr(oracle_id) == new_oracle.address
     assert oracle_registry.getOraclePartnerDescription(oracle_id) == description
-    assert oracle_registry.numAddys() == oracle_id + 1  # Account for initial oracle partner
+    assert oracle_registry.numOraclePartnersRaw() == oracle_id + 1  # Account for initial oracle partner
     assert oracle_registry.getLastOraclePartnerAddr() == new_oracle.address
     assert oracle_registry.getLastOraclePartnerId() == oracle_id
     
@@ -82,7 +83,7 @@ def test_register_new_oracle_invalid_cases(oracle_registry, new_oracle, governor
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
     
     # Wait for delay and confirm first registration
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -110,7 +111,7 @@ def test_cancel_pending_registration(oracle_registry, new_oracle, governor, bob)
     assert log.addr == new_oracle.address
     assert log.description == description
     assert log.initiatedBlock == current_block
-    assert log.confirmBlock == current_block + oracle_registry.addyChangeDelay()
+    assert log.confirmBlock == current_block + oracle_registry.oracleChangeDelay()
     
     # Test cannot confirm cancelled registration
     with boa.reverts():  # Empty revert as the assertion combines both checks
@@ -121,7 +122,7 @@ def test_update_oracle_addr(oracle_registry, new_oracle, new_oracle_b, governor,
     description = "Test Oracle Partner"
     # Register and confirm initial oracle
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -146,10 +147,10 @@ def test_update_oracle_addr(oracle_registry, new_oracle, new_oracle_b, governor,
     assert log.newAddr == new_oracle_b.address
     assert log.prevAddr == new_oracle.address
     assert log.addyId == oracle_id
-    assert log.confirmBlock == current_block + oracle_registry.addyChangeDelay()
+    assert log.confirmBlock == current_block + oracle_registry.oracleChangeDelay()
 
     # Confirm update after delay
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     assert oracle_registry.confirmOraclePartnerUpdate(oracle_id, sender=governor)
 
     # Verify update event
@@ -175,7 +176,7 @@ def test_cancel_pending_update(oracle_registry, new_oracle, new_oracle_b, govern
     description = "Test Oracle Partner"
     # Register and confirm initial oracle
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     current_block = boa.env.evm.patch.block_number
@@ -196,7 +197,7 @@ def test_cancel_pending_update(oracle_registry, new_oracle, new_oracle_b, govern
     assert log.newAddr == new_oracle_b.address
     assert log.prevAddr == new_oracle.address
     assert log.initiatedBlock == current_block
-    assert log.confirmBlock == current_block + oracle_registry.addyChangeDelay()
+    assert log.confirmBlock == current_block + oracle_registry.oracleChangeDelay()
     
     # Test cannot confirm cancelled update
     with boa.reverts():  # Empty revert as the assertion combines both checks
@@ -207,7 +208,7 @@ def test_disable_oracle_addr(oracle_registry, new_oracle, governor, bob):
     description = "Test Oracle Partner"
     # Register and confirm initial oracle
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -228,10 +229,10 @@ def test_disable_oracle_addr(oracle_registry, new_oracle, governor, bob):
     log = filter_logs(oracle_registry, "AddyDisablePending")[0]
     assert log.addyId == oracle_id
     assert log.addr == new_oracle.address
-    assert log.confirmBlock == current_block + oracle_registry.addyChangeDelay()
+    assert log.confirmBlock == current_block + oracle_registry.oracleChangeDelay()
 
     # Confirm disable after delay
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     assert oracle_registry.confirmOraclePartnerDisable(oracle_id, sender=governor)
 
     # Verify disable event
@@ -258,7 +259,7 @@ def test_cancel_pending_disable(oracle_registry, new_oracle, governor, bob):
     description = "Test Oracle Partner"
     # Register and confirm initial oracle
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     current_block = boa.env.evm.patch.block_number
@@ -278,16 +279,16 @@ def test_cancel_pending_disable(oracle_registry, new_oracle, governor, bob):
     assert log.addyId == oracle_id
     assert log.addr == new_oracle.address
     assert log.initiatedBlock == current_block
-    assert log.confirmBlock == current_block + oracle_registry.addyChangeDelay()
+    assert log.confirmBlock == current_block + oracle_registry.oracleChangeDelay()
     
     # Test cannot confirm cancelled disable
     with boa.reverts():  # Empty revert as the assertion combines both checks
         oracle_registry.confirmOraclePartnerDisable(oracle_id, sender=governor)
 
 
-def test_set_oracle_change_delay(oracle_registry, governor, bob):
-    min_delay = oracle_registry.MIN_ADDY_CHANGE_DELAY()
-    max_delay = oracle_registry.MAX_ADDY_CHANGE_DELAY()
+def test_set_oracle_change_delay(oracle_registry, governor, bob, fork):
+    min_delay = PARAMS[fork]["ORACLE_REGISTRY_MIN_CHANGE_DELAY"]
+    max_delay = PARAMS[fork]["ORACLE_REGISTRY_MAX_CHANGE_DELAY"]
     
     # Test non-governor cannot set delay
     with boa.reverts("no perms"):
@@ -302,14 +303,14 @@ def test_set_oracle_change_delay(oracle_registry, governor, bob):
     # Test successful delay update
     new_delay = min_delay + 1
     oracle_registry.setOraclePartnerChangeDelay(new_delay, sender=governor)
-    assert oracle_registry.addyChangeDelay() == new_delay
+    assert oracle_registry.oracleChangeDelay() == new_delay
 
 
 def test_view_functions(oracle_registry, new_oracle, governor):
     description = "Test Oracle Partner"
     # Register and confirm initial oracle
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     # Test isValidNewOraclePartnerAddr
@@ -334,11 +335,11 @@ def test_priority_oracle_partners(oracle_registry, new_oracle, new_oracle_b, gov
     description = "Test Oracle Partner"
     # Register two oracle partners
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_a = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     assert oracle_registry.registerNewOraclePartner(new_oracle_b, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_b = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle_b, sender=governor)
     
     assert oracle_id_a != 0 and oracle_id_b != 0
@@ -385,11 +386,11 @@ def test_priority_oracle_partners_price_order(oracle_registry, new_oracle, new_o
     description = "Test Oracle Partner"
     # Register two oracle partners
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_a = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     assert oracle_registry.registerNewOraclePartner(new_oracle_b, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_b = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle_b, sender=governor)
     
     assert oracle_id_a != 0 and oracle_id_b != 0
@@ -455,7 +456,7 @@ def test_stale_time(oracle_registry, governor, bob):
 def test_stale_time_price_impact(oracle_registry, new_oracle, governor, alpha_token):
     description = "Test Oracle Partner"
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -488,7 +489,7 @@ def test_stale_time_price_impact(oracle_registry, new_oracle, governor, alpha_to
 def test_usd_value_and_asset_amount(oracle_registry, new_oracle, governor, alpha_token):
     description = "Test Oracle Partner"
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -520,7 +521,7 @@ def test_usd_value_and_asset_amount(oracle_registry, new_oracle, governor, alpha
 def test_usd_value_and_asset_amount_diff_decimals(oracle_registry, new_oracle, governor, charlie_token):
     description = "Test Oracle Partner"
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -542,7 +543,7 @@ def test_eth_specific_functions(oracle_registry, new_oracle, governor):
     ETH = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
     description = "Test Oracle Partner"
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -563,11 +564,11 @@ def test_eth_specific_functions(oracle_registry, new_oracle, governor):
 def test_has_price_feed(oracle_registry, new_oracle, new_oracle_b, governor, alpha_token, bravo_token):
     description = "Test Oracle Partner"
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_a = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     assert oracle_registry.registerNewOraclePartner(new_oracle_b, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_b = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle_b, sender=governor)
     
     assert oracle_id_a != 0 and oracle_id_b != 0
@@ -589,11 +590,11 @@ def test_has_price_feed(oracle_registry, new_oracle, new_oracle_b, governor, alp
 def test_priority_oracle_fallback(oracle_registry, addy_registry, new_oracle, new_oracle_b, governor, alpha_token):
     description = "Test Oracle Partner"
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_a = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     assert oracle_registry.registerNewOraclePartner(new_oracle_b, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_b = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle_b, sender=governor)
     
     assert oracle_id_a != 0 and oracle_id_b != 0
@@ -613,7 +614,7 @@ def test_priority_oracle_fallback(oracle_registry, addy_registry, new_oracle, ne
     # Register a third oracle C that's not in priority list
     new_oracle_c = boa.load("contracts/oracles/CustomOracle.vy", addy_registry, name="new_oracle_partner_c")
     assert oracle_registry.registerNewOraclePartner(new_oracle_c, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_c = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle_c, sender=governor)
     assert oracle_id_c != 0
 
@@ -632,7 +633,7 @@ def test_oracle_partner_registration_edge_cases(oracle_registry, new_oracle, gov
 
     # First registration
     assert oracle_registry.registerNewOraclePartner(new_oracle, description_a, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_a = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id_a != 0
     
@@ -645,12 +646,12 @@ def test_oracle_partner_registration_edge_cases(oracle_registry, new_oracle, gov
 
     # Test registration after disabling
     assert oracle_registry.disableOraclePartnerAddr(oracle_id_a, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     assert oracle_registry.confirmOraclePartnerDisable(oracle_id_a, sender=governor)
     
     # After disabling, we can update the same oracle ID
     assert oracle_registry.updateOraclePartnerAddr(oracle_id_a, new_oracle, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     assert oracle_registry.confirmOraclePartnerUpdate(oracle_id_a, sender=governor)
 
     assert oracle_registry.getOraclePartnerAddr(oracle_id_a) == new_oracle.address
@@ -660,7 +661,7 @@ def test_oracle_partner_registration_edge_cases(oracle_registry, new_oracle, gov
 def test_get_price_edge_cases(oracle_registry, new_oracle, governor, alpha_token):
     description = "Test Oracle Partner"
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     assert oracle_id != 0
 
@@ -693,7 +694,7 @@ def test_max_oracle_partners(oracle_registry, addy_registry, governor):
     for i in range(MAX_PARTNERS):
         new_oracle = boa.load("contracts/oracles/CustomOracle.vy", addy_registry, name=f"oracle_{i}")
         assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-        boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+        boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
         oracle_id = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
         oracle_ids.append(oracle_id)
     
@@ -708,11 +709,11 @@ def test_priority_oracle_partners_edge_cases(oracle_registry, new_oracle, new_or
     description = "Test Oracle Partner"
     # Register two oracle partners
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_a = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     assert oracle_registry.registerNewOraclePartner(new_oracle_b, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_b = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle_b, sender=governor)
     
     # Set priority order [A, B]
@@ -721,7 +722,7 @@ def test_priority_oracle_partners_edge_cases(oracle_registry, new_oracle, new_or
 
     # Disable oracle A
     assert oracle_registry.disableOraclePartnerAddr(oracle_id_a, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     assert oracle_registry.confirmOraclePartnerDisable(oracle_id_a, sender=governor)
 
     # Test priority list with disabled partner
@@ -734,7 +735,7 @@ def test_priority_oracle_partners_edge_cases(oracle_registry, new_oracle, new_or
     # Update oracle B
     new_oracle_c = boa.load("contracts/oracles/CustomOracle.vy", addy_registry, name="new_oracle_c")
     assert oracle_registry.updateOraclePartnerAddr(oracle_id_b, new_oracle_c, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     assert oracle_registry.confirmOraclePartnerUpdate(oracle_id_b, sender=governor)
 
     # Test priority list with updated partner
@@ -748,11 +749,11 @@ def test_stale_time_edge_cases(oracle_registry, new_oracle, new_oracle_b, govern
     description = "Test Oracle Partner"
     # Register two oracle partners
     assert oracle_registry.registerNewOraclePartner(new_oracle, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_a = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle, sender=governor)
     
     assert oracle_registry.registerNewOraclePartner(new_oracle_b, description, sender=governor)
-    boa.env.time_travel(blocks=oracle_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=oracle_registry.oracleChangeDelay() + 1)
     oracle_id_b = oracle_registry.confirmNewOraclePartnerRegistration(new_oracle_b, sender=governor)
     
     # Set priority order [A, B]
