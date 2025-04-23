@@ -104,9 +104,8 @@ numAddys: public(uint256)
 pendingNewAddy: public(HashMap[address, PendingNewAddy]) # addr -> pending new addy
 pendingAddyUpdate: public(HashMap[uint256, PendingAddyUpdate]) # addyId -> pending addy update
 pendingAddyDisable: public(HashMap[uint256, PendingAddyDisable]) # addyId -> pending addy disable
-
-# config
 addyChangeDelay: public(uint256)
+
 MIN_ADDY_CHANGE_DELAY: public(immutable(uint256))
 MAX_ADDY_CHANGE_DELAY: public(immutable(uint256))
 REGISTRY_STR: public(immutable(String[28]))

@@ -3,17 +3,15 @@
 # Underscore Protocol (C) 2025 Hightop Financial, Inc.
 # @version 0.4.1
 
+initializes: own
+exports: own.__interface__
+
+import contracts.modules.Ownership as own
 from interfaces import UserWalletInterface
 from ethereum.ercs import IERC20
 
 interface UserWalletCustom:
     def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]) -> (uint256, uint256, uint256): nonpayable
-
-interface AgentFactory:
-    def canCancelCriticalAction(_addr: address) -> bool: view
-
-interface AddyRegistry:
-    def getAddy(_addyId: uint256) -> address: view
 
 flag ActionType:
     DEPOSIT
@@ -66,44 +64,12 @@ struct ActionInstruction:
     isWethToEthConversion: bool
     swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]
 
-struct PendingOwner:
-    newOwner: address
-    initiatedBlock: uint256
-    confirmBlock: uint256
-
-event AgentOwnershipChangeInitiated:
-    prevOwner: indexed(address)
-    newOwner: indexed(address)
-    confirmBlock: uint256
-
-event AgentOwnershipChangeConfirmed:
-    prevOwner: indexed(address)
-    newOwner: indexed(address)
-    initiatedBlock: uint256
-    confirmBlock: uint256
-
-event AgentOwnershipChangeCancelled:
-    cancelledOwner: indexed(address)
-    cancelledBy: indexed(address)
-    initiatedBlock: uint256
-    confirmBlock: uint256
-
-event AgentOwnershipChangeDelaySet:
-    delayBlocks: uint256
-
 event AgentFundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
     balance: uint256
 
-initialized: public(bool)
 usedSignatures: public(HashMap[Bytes[65], bool])
-addyRegistry: public(address)
-
-# owner
-owner: public(address) # owner of the wallet
-pendingOwner: public(PendingOwner) # pending owner of the wallet
-ownershipChangeDelay: public(uint256) # num blocks to wait before owner can be changed
 
 # eip-712
 ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
@@ -124,36 +90,29 @@ REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(address userWallet,uint256
 BATCH_ACTIONS_TYPE_HASH: constant(bytes32) =  keccak256('BatchActions(address userWallet,ActionInstruction[] instructions,uint256 expiration)')
 ACTION_INSTRUCTION_TYPE_HASH: constant(bytes32) = keccak256('ActionInstruction(bool usePrevAmountOut,uint256 action,uint256 legoId,address asset,address vault,uint256 amount,uint256 altLegoId,address altAsset,address altVault,uint256 altAmount,uint256 minAmountOut,address pool,bytes32 proof,address nftAddr,uint256 nftTokenId,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 liqToRemove,address recipient,bool isWethToEthConversion,SwapInstruction[] swapInstructions)')
 
-MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
-MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_INSTRUCTIONS: constant(uint256) = 20
 MAX_SWAP_INSTRUCTIONS: constant(uint256) = 5
 MAX_TOKEN_PATH: constant(uint256) = 5
-AGENT_FACTORY_ID: constant(uint256) = 1
-
 API_VERSION: constant(String[28]) = "0.0.2"
 
 
 @deploy
-def __init__(_minOwnerChangeDelay: uint256, _maxOwnerChangeDelay: uint256):
-    MIN_OWNER_CHANGE_DELAY = _minOwnerChangeDelay
-    MAX_OWNER_CHANGE_DELAY = _maxOwnerChangeDelay
-
-    # make sure original reference contract can't be initialized
-    self.initialized = True
-
-
-@external
-def initialize(_owner: address, _addyRegistry: address) -> bool:
-    assert not self.initialized # dev: can only initialize once
-    self.initialized = True
-
+def __init__(
+    _owner: address,
+    _addyRegistry: address,
+    _minOwnerChangeDelay: uint256,
+    _maxOwnerChangeDelay: uint256,
+):
+    """
+    @notice Initializes the Agent contract with owner and registry settings
+    @dev Sets up the initial ownership and registry configuration for the agent
+    @param _owner The address that will own the agent
+    @param _addyRegistry The address of the registry contract
+    @param _minOwnerChangeDelay The minimum delay required for owner changes
+    @param _maxOwnerChangeDelay The maximum delay allowed for owner changes
+    """
     assert empty(address) not in [_owner, _addyRegistry] # dev: invalid addrs
-    self.owner = _owner
-    self.ownershipChangeDelay = MIN_OWNER_CHANGE_DELAY
-    self.addyRegistry = _addyRegistry
-
-    return True
+    own.__init__(_owner, _addyRegistry, _minOwnerChangeDelay, _maxOwnerChangeDelay)
 
 
 @pure
@@ -177,7 +136,7 @@ def depositTokens(
     _amount: uint256 = max_value(uint256),
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(DEPOSIT_TYPE_HASH, _userWallet, _legoId, _asset, _vault, _amount, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -199,7 +158,7 @@ def withdrawTokens(
     _vaultTokenAmount: uint256 = max_value(uint256),
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(WITHDRAWAL_TYPE_HASH, _userWallet, _legoId, _asset, _vaultToken, _vaultTokenAmount, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -223,7 +182,7 @@ def rebalance(
     _fromVaultTokenAmount: uint256 = max_value(uint256),
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(REBALANCE_TYPE_HASH, _userWallet, _fromLegoId, _fromAsset, _fromVaultToken, _toLegoId, _toVault, _fromVaultTokenAmount, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -242,7 +201,7 @@ def swapTokens(
     _swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS],
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSwapSignature(self._hashSwapInstructions(_userWallet, _swapInstructions, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -347,7 +306,7 @@ def borrow(
     _amount: uint256 = max_value(uint256),
     _sig: Signature = empty(Signature),
 ) -> (address, uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(BORROW_TYPE_HASH, _userWallet, _legoId, _borrowAsset, _amount, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -363,7 +322,7 @@ def repayDebt(
     _paymentAmount: uint256 = max_value(uint256),
     _sig: Signature = empty(Signature),
 ) -> (address, uint256, uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(REPAY_TYPE_HASH, _userWallet, _legoId, _paymentAsset, _paymentAmount, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -386,7 +345,7 @@ def claimRewards(
     _proof: bytes32 = empty(bytes32),
     _sig: Signature = empty(Signature),
 ):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(CLAIM_REWARDS_TYPE_HASH, _userWallet, _legoId, _market, _rewardToken, _rewardAmount, _proof, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -417,7 +376,7 @@ def addLiquidity(
     _minLpAmount: uint256 = 0,
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256, uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(ADD_LIQ_TYPE_HASH, _userWallet, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _amountA, _amountB, _tickLower, _tickUpper, _minAmountA, _minAmountB, _minLpAmount, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -444,7 +403,7 @@ def removeLiquidity(
     _minAmountB: uint256 = 0,
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256, bool):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(REMOVE_LIQ_TYPE_HASH, _userWallet, _legoId, _nftAddr, _nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -465,7 +424,7 @@ def transferFunds(
     _asset: address = empty(address),
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(TRANSFER_TYPE_HASH, _userWallet, _recipient, _amount, _asset, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -489,7 +448,7 @@ def convertEthToWeth(
     _depositVault: address = empty(address),
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256):
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(ETH_TO_WETH_TYPE_HASH, _userWallet, _amount, _depositLegoId, _depositVault, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -509,7 +468,7 @@ def convertWethToEth(
     _withdrawVaultToken: address = empty(address),
     _sig: Signature = empty(Signature),
 ) -> uint256:
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidSignature(abi_encode(WETH_TO_ETH_TYPE_HASH, _userWallet, _amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -528,7 +487,7 @@ def performBatchActions(
     _instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS],
     _sig: Signature = empty(Signature),
 ) -> bool:
-    owner: address = self.owner
+    owner: address = own.owner
     if msg.sender != owner:
         self._isValidBatchSignature(self._hashBatchActions(_userWallet, _instructions, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
@@ -775,76 +734,6 @@ def _isValidSignature(_encodedValue: Bytes[512], _sig: Signature):
     self.usedSignatures[_sig.signature] = True
 
 
-####################
-# Ownership Change #
-####################
-
-
-@external
-def changeOwnership(_newOwner: address):
-    """
-    @notice Initiates a new ownership change
-    @dev Can only be called by the current owner
-    @param _newOwner The address of the new owner
-    """
-    currentOwner: address = self.owner
-    assert msg.sender == currentOwner # dev: no perms
-    assert _newOwner not in [empty(address), currentOwner] # dev: invalid new owner
-
-    confirmBlock: uint256 = block.number + self.ownershipChangeDelay
-    self.pendingOwner = PendingOwner(
-        newOwner= _newOwner,
-        initiatedBlock= block.number,
-        confirmBlock= confirmBlock,
-    )
-    log AgentOwnershipChangeInitiated(prevOwner=currentOwner, newOwner=_newOwner, confirmBlock=confirmBlock)
-
-
-@external
-def confirmOwnershipChange():
-    """
-    @notice Confirms the ownership change
-    @dev Can only be called by the new owner
-    """
-    data: PendingOwner = self.pendingOwner
-    assert data.newOwner != empty(address) # dev: no pending owner
-    assert data.confirmBlock != 0 and block.number >= data.confirmBlock # dev: time delay not reached
-    assert msg.sender == data.newOwner # dev: only new owner can confirm
-
-    prevOwner: address = self.owner
-    self.owner = data.newOwner
-    self.pendingOwner = empty(PendingOwner)
-    log AgentOwnershipChangeConfirmed(prevOwner=prevOwner, newOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
-
-
-@external
-def cancelOwnershipChange():
-    """
-    @notice Cancels the ownership change
-    @dev Can only be called by the current owner or governance
-    """
-    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
-    assert msg.sender == self.owner or staticcall AgentFactory(agentFactory).canCancelCriticalAction(msg.sender) # dev: no perms (only owner or governance)
-
-    data: PendingOwner = self.pendingOwner
-    assert data.confirmBlock != 0 # dev: no pending change
-    self.pendingOwner = empty(PendingOwner)
-    log AgentOwnershipChangeCancelled(cancelledOwner=data.newOwner, cancelledBy=msg.sender, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
-
-
-@external
-def setOwnershipChangeDelay(_numBlocks: uint256):
-    """
-    @notice Sets the ownership change delay
-    @dev Can only be called by the owner
-    @param _numBlocks The number of blocks to wait before ownership can be changed
-    """
-    assert msg.sender == self.owner # dev: no perms
-    assert _numBlocks >= MIN_OWNER_CHANGE_DELAY and _numBlocks <= MAX_OWNER_CHANGE_DELAY # dev: invalid delay
-    self.ownershipChangeDelay = _numBlocks
-    log AgentOwnershipChangeDelaySet(delayBlocks=_numBlocks)
-
-
 #################
 # Recover Funds #
 #################
@@ -853,12 +742,12 @@ def setOwnershipChangeDelay(_numBlocks: uint256):
 @external
 def recoverFunds(_asset: address) -> bool:
     """
-    @notice transfers funds from the agent wallet to the owner
-    @dev anyone can call this!
+    @notice Transfers funds from the agent wallet to the owner
+    @dev Only callable by the owner
     @param _asset The address of the asset to recover
-    @return bool True if the funds were recovered successfully
+    @return bool True if the funds were recovered successfully, False if no funds to recover
     """
-    owner: address = self.owner
+    owner: address = own.owner
     assert msg.sender == owner # dev: no perms
     balance: uint256 = staticcall IERC20(_asset).balanceOf(self)
     if empty(address) in [owner, _asset] or balance == 0:

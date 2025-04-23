@@ -38,8 +38,8 @@ pendingGov: public(PendingGovernance) # pending governance change
 govChangeDelay: public(uint256) # num blocks to wait before governance can be changed
 
 # immutable
-_MIN_GOV_CHANGE_DELAY: immutable(uint256)
-_MAX_GOV_CHANGE_DELAY: immutable(uint256)
+MIN_GOV_CHANGE_DELAY: public(immutable(uint256))
+MAX_GOV_CHANGE_DELAY: public(immutable(uint256))
 _addyRegistry: address # ish
 
 
@@ -70,8 +70,8 @@ def __init__(
         maxDelay = staticcall AddyRegistry(_addyRegistry).MAX_GOV_CHANGE_DELAY()
 
     assert minDelay < maxDelay # dev: invalid delay
-    _MIN_GOV_CHANGE_DELAY = minDelay
-    _MAX_GOV_CHANGE_DELAY = maxDelay
+    MIN_GOV_CHANGE_DELAY = minDelay
+    MAX_GOV_CHANGE_DELAY = maxDelay
     self.govChangeDelay = minDelay
 
 
@@ -144,26 +144,6 @@ def _isAddyRegistryGov() -> bool:
     return self._addyRegistry == empty(address)
 
 
-@view
-@external
-def MIN_GOV_CHANGE_DELAY() -> uint256:
-    """
-    @notice Get the minimum number of blocks required for governance change delay
-    @return The minimum delay in blocks
-    """
-    return _MIN_GOV_CHANGE_DELAY
-
-
-@view
-@external
-def MAX_GOV_CHANGE_DELAY() -> uint256:
-    """
-    @notice Get the maximum number of blocks allowed for governance change delay
-    @return The maximum delay in blocks
-    """
-    return _MAX_GOV_CHANGE_DELAY
-
-
 ##################
 # Set Governance #
 ##################
@@ -232,6 +212,6 @@ def setGovernanceChangeDelay(_numBlocks: uint256):
     @param _numBlocks The number of blocks to wait before governance can be changed
     """
     assert self._canGovern(msg.sender) # dev: no perms
-    assert _numBlocks >= _MIN_GOV_CHANGE_DELAY and _numBlocks <= _MAX_GOV_CHANGE_DELAY # dev: invalid delay
+    assert _numBlocks >= MIN_GOV_CHANGE_DELAY and _numBlocks <= MAX_GOV_CHANGE_DELAY # dev: invalid delay
     self.govChangeDelay = _numBlocks
     log GovChangeDelaySet(delayBlocks=_numBlocks)

@@ -9,11 +9,10 @@ import contracts.modules.LocalGov as gov
 from ethereum.ercs import IERC20
 
 interface MainWallet:
-    def initialize(_walletConfig: address, _addyRegistry: address, _wethAddr: address, _trialFundsAsset: address, _trialFundsInitialAmount: uint256) -> bool: nonpayable
     def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS]) -> bool: nonpayable
 
 interface WalletConfig:
-    def initialize(_wallet: address, _addyRegistry: address, _owner: address, _initialAgent: address) -> bool: nonpayable
+    def setWallet(_wallet: address) -> bool: nonpayable
 
 interface Agent:
     def initialize(_owner: address, _addyRegistry: address) -> bool: nonpayable
@@ -128,6 +127,9 @@ WETH_ADDR: public(immutable(address))
 MAX_RECOVERIES: constant(uint256) = 100
 MAX_LEGOS: constant(uint256) = 20
 
+MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
+MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
+
 
 @deploy
 def __init__(
@@ -136,10 +138,14 @@ def __init__(
     _userWalletTemplate: address,
     _userConfigTemplate: address,
     _agentTemplate: address,
+    _minOwnerChangeDelay: uint256,
+    _maxOwnerChangeDelay: uint256,
 ):
     assert empty(address) not in [_addyRegistry, _wethAddr] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
     WETH_ADDR = _wethAddr
+    MIN_OWNER_CHANGE_DELAY = _minOwnerChangeDelay
+    MAX_OWNER_CHANGE_DELAY = _maxOwnerChangeDelay
     self.isActivated = True
 
     # set agent template
@@ -241,13 +247,10 @@ def createUserWallet(_owner: address = msg.sender, _agent: address = empty(addre
     if trialFundsData.asset != empty(address):
         trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
 
-    # create both contracts (main wallet and wallet config)
-    mainWalletAddr: address = create_minimal_proxy_to(mainWalletTemplate)
-    walletConfigAddr: address = create_minimal_proxy_to(walletConfigTemplate)
-
-    # initalize main wallet and wallet config
-    assert extcall MainWallet(mainWalletAddr).initialize(walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount) # dev: could not initialize main wallet
-    assert extcall WalletConfig(walletConfigAddr).initialize(mainWalletAddr, ADDY_REGISTRY, _owner, _agent) # dev: could not initialize wallet config
+    # create wallet contracts
+    walletConfigAddr: address = create_from_blueprint(walletConfigTemplate, _owner, _agent, ADDY_REGISTRY, MIN_OWNER_CHANGE_DELAY, MAX_OWNER_CHANGE_DELAY)
+    mainWalletAddr: address = create_from_blueprint(mainWalletTemplate, walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount)
+    assert extcall WalletConfig(walletConfigAddr).setWallet(mainWalletAddr) # dev: could not set wallet
 
     # transfer after initialization
     if trialFundsData.amount != 0:
@@ -403,8 +406,8 @@ def createAgent(_owner: address = msg.sender) -> address:
     """
     assert self.isActivated # dev: not activated
 
-    agentTemplateInfo: address = self.agentTemplateInfo.addr
-    if not self._isValidAgentSetup(agentTemplateInfo, _owner):
+    agentTemplate: address = self.agentTemplateInfo.addr
+    if not self._isValidAgentSetup(agentTemplate, _owner):
         return empty(address)
 
     # check limits
@@ -414,8 +417,7 @@ def createAgent(_owner: address = msg.sender) -> address:
         return empty(address)
 
     # create agent contract
-    agentAddr: address = create_minimal_proxy_to(agentTemplateInfo)
-    assert extcall Agent(agentAddr).initialize(_owner, ADDY_REGISTRY) # dev: could not initialize agent
+    agentAddr: address = create_from_blueprint(agentTemplate, _owner, ADDY_REGISTRY, MIN_OWNER_CHANGE_DELAY, MAX_OWNER_CHANGE_DELAY)
 
     # update data
     self.isAgent[agentAddr] = True

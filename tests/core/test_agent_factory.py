@@ -22,16 +22,16 @@ def test_agent_factory_init(agent_factory, addy_registry, weth, wallet_funds_tem
     assert agent_factory.currentAgentTemplate() == agent_template.address
 
 
-def test_init_with_zero_address(lego_registry, weth, fork):
-    new_wallet_template = boa.load("contracts/core/templates/UserWalletTemplate.vy", name="new_wallet_template")
-    new_wallet_config_template = boa.load("contracts/core/templates/UserWalletTemplate.vy", name="new_wallet_config_template")
-    new_agent_template = boa.load("contracts/core/templates/AgentTemplate.vy", PARAMS[fork]["AGENT_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["AGENT_MAX_OWNER_CHANGE_DELAY"], name="new_agent_template")
+def test_init_with_zero_address(lego_registry, weth):
+    new_wallet_template = boa.load_partial("contracts/core/templates/UserWalletTemplate.vy").deploy_as_blueprint()
+    new_wallet_config_template = boa.load_partial("contracts/core/templates/UserWalletConfigTemplate.vy").deploy_as_blueprint()
+    new_agent_template = boa.load_partial("contracts/core/templates/AgentTemplate.vy").deploy_as_blueprint()
 
     with boa.reverts("invalid addrs"):
-        AgentFactory.deploy(ZERO_ADDRESS, weth, new_wallet_template, new_wallet_config_template, new_agent_template)
+        AgentFactory.deploy(ZERO_ADDRESS, weth, new_wallet_template, new_wallet_config_template, new_agent_template, 1, 2)
     
     with boa.reverts("invalid addrs"):
-        AgentFactory.deploy(lego_registry.address, ZERO_ADDRESS, new_wallet_template, new_wallet_config_template, new_agent_template)
+        AgentFactory.deploy(lego_registry.address, ZERO_ADDRESS, new_wallet_template, new_wallet_config_template, new_agent_template, 1, 2)
 
 
 def test_create_user_wallet(agent_factory, owner, agent):
@@ -70,7 +70,7 @@ def test_create_wallet_when_deactivated(agent_factory, owner, agent, governor):
 
 
 def test_set_main_wallet_template(agent_factory, governor):
-    new_template = boa.load("contracts/core/templates/UserWalletTemplate.vy", name="new_new_wallet")
+    new_template = boa.load_partial("contracts/core/templates/UserWalletTemplate.vy").deploy_as_blueprint()
 
     assert agent_factory.setUserWalletTemplate(new_template, sender=governor)
 
@@ -85,7 +85,7 @@ def test_set_main_wallet_template(agent_factory, governor):
 
 
 def test_set_wallet_config_template(agent_factory, governor, fork):
-    new_template = boa.load("contracts/core/templates/UserWalletConfigTemplate.vy", PARAMS[fork]["USER_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["USER_MAX_OWNER_CHANGE_DELAY"], name="wallet_config_template")
+    new_template = boa.load_partial("contracts/core/templates/UserWalletConfigTemplate.vy").deploy_as_blueprint()
 
     assert agent_factory.setUserWalletConfigTemplate(new_template, sender=governor)
 
@@ -100,7 +100,7 @@ def test_set_wallet_config_template(agent_factory, governor, fork):
 
 
 def test_set_template_validation(agent_factory, governor, agent):
-    new_template = boa.load("contracts/core/templates/UserWalletTemplate.vy", name="new_new_wallet")
+    new_template = boa.load_partial("contracts/core/templates/UserWalletTemplate.vy").deploy_as_blueprint()
 
     with boa.reverts("no perms"):
         agent_factory.setUserWalletTemplate(new_template.address, sender=agent)
@@ -244,8 +244,8 @@ def test_create_agent_when_deactivated(agent_factory, owner, governor):
         agent_factory.createAgent(owner)
 
 
-def test_set_agent_template(agent_factory, governor, fork):
-    new_template = boa.load("contracts/core/templates/AgentTemplate.vy", PARAMS[fork]["AGENT_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["AGENT_MAX_OWNER_CHANGE_DELAY"], name="new_agent_template")
+def test_set_agent_template(agent_factory, governor):
+    new_template = boa.load_partial("contracts/core/templates/AgentTemplate.vy").deploy_as_blueprint()
 
     assert agent_factory.setAgentTemplate(new_template, sender=governor)
 
@@ -259,8 +259,8 @@ def test_set_agent_template(agent_factory, governor, fork):
     assert info.lastModified == boa.env.evm.patch.timestamp
 
 
-def test_set_agent_template_validation(agent_factory, governor, bob, fork):
-    new_template = boa.load("contracts/core/templates/AgentTemplate.vy", PARAMS[fork]["AGENT_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["AGENT_MAX_OWNER_CHANGE_DELAY"], name="new_agent_template")
+def test_set_agent_template_validation(agent_factory, governor, bob):
+    new_template = boa.load_partial("contracts/core/templates/AgentTemplate.vy").deploy_as_blueprint()
 
     with boa.reverts("no perms"):
         agent_factory.setAgentTemplate(new_template.address, sender=bob)

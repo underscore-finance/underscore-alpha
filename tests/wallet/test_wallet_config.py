@@ -10,12 +10,10 @@ from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256
 #########
 
 
-def test_wallet_config_initialization(ai_wallet, ai_wallet_config, owner, agent, addy_registry):
+def test_wallet_config_initialization(ai_wallet, ai_wallet_config, owner, agent):
     assert ai_wallet_config.wallet() == ai_wallet.address
     assert ai_wallet_config.owner() == owner
-    assert ai_wallet_config.addyRegistry() == addy_registry.address
-    assert ai_wallet_config.initialized()
-    assert ai_wallet_config.apiVersion() == "0.0.1"
+    assert ai_wallet_config.apiVersion() == "0.0.2"
 
     # Check initial agent settings
     agent_info = ai_wallet_config.agentSettings(agent)

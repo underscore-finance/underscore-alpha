@@ -4,6 +4,10 @@
 # @version 0.4.1
 # pragma optimize codesize
 
+initializes: own
+exports: own.__interface__
+
+import contracts.modules.Ownership as own
 from ethereum.ercs import IERC20
 
 interface PriceSheets:
@@ -103,11 +107,6 @@ struct SubscriptionInfo:
     trialPeriod: uint256
     payPeriod: uint256
 
-struct PendingOwner:
-    newOwner: address
-    initiatedBlock: uint256
-    confirmBlock: uint256
-
 event AgentAdded:
     agent: indexed(address)
     allowedAssets: uint256
@@ -167,26 +166,6 @@ event ReserveAssetSet:
     asset: indexed(address)
     amount: uint256
 
-event OwnershipChangeInitiated:
-    prevOwner: indexed(address)
-    newOwner: indexed(address)
-    confirmBlock: uint256
-
-event OwnershipChangeConfirmed:
-    prevOwner: indexed(address)
-    newOwner: indexed(address)
-    initiatedBlock: uint256
-    confirmBlock: uint256
-
-event OwnershipChangeCancelled:
-    cancelledOwner: indexed(address)
-    cancelledBy: indexed(address)
-    initiatedBlock: uint256
-    confirmBlock: uint256
-
-event OwnershipChangeDelaySet:
-    delayBlocks: uint256
-
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -194,11 +173,7 @@ event FundsRecovered:
 
 # core
 wallet: public(address)
-
-# owner
-owner: public(address) # owner of the wallet
-pendingOwner: public(PendingOwner) # pending owner of the wallet
-ownershipChangeDelay: public(uint256) # num blocks to wait before owner can be changed
+didSetWallet: public(bool)
 
 # user settings
 protocolSub: public(ProtocolSub) # subscription info
@@ -209,59 +184,43 @@ agentSettings: public(HashMap[address, AgentInfo]) # agent -> agent info
 isRecipientAllowed: public(HashMap[address, bool]) # recipient -> is allowed
 pendingWhitelist: public(HashMap[address, PendingWhitelist]) # addr -> pending whitelist
 
-# config
-addyRegistry: public(address)
-initialized: public(bool)
-
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
-MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
-MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
-
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
-API_VERSION: constant(String[28]) = "0.0.1"
+API_VERSION: constant(String[28]) = "0.0.2"
+
+ADDY_REGISTRY: public(immutable(address))
 
 
 @deploy
-def __init__(_minOwnerChangeDelay: uint256, _maxOwnerChangeDelay: uint256):
-    MIN_OWNER_CHANGE_DELAY = _minOwnerChangeDelay
-    MAX_OWNER_CHANGE_DELAY = _maxOwnerChangeDelay
-
-    # make sure original reference contract can't be initialized
-    self.initialized = True
-
-
-@external
-def initialize(
-    _wallet: address,
-    _addyRegistry: address,
+def __init__(
     _owner: address,
     _initialAgent: address,
-) -> bool:
+    _addyRegistry: address,
+    _minOwnerChangeDelay: uint256,
+    _maxOwnerChangeDelay: uint256,
+):
     """
-    @notice Sets up the initial state of the wallet template
-    @dev Can only be called once and sets core contract parameters
-    @param _wallet The address of the wallet contract
-    @param _addyRegistry The address of the core registry contract
-    @param _owner The address that will own this wallet
-    @param _initialAgent The address of the initial AI agent (if any)
-    @return bool True if initialization was successful
+    @notice Initializes a new UserWalletConfig contract with ownership and agent settings
+    @dev Sets up the config with owner, registry, and optional initial agent. Also initializes protocol subscription.
+    @param _owner Address of the contract owner who will have administrative privileges
+    @param _initialAgent Address of the initial agent to be set up (can be empty)
+    @param _addyRegistry Address of the registry contract that stores core protocol addresses
+    @param _minOwnerChangeDelay Minimum delay in blocks required for ownership changes
+    @param _maxOwnerChangeDelay Maximum delay in blocks allowed for ownership changes
     """
-    assert not self.initialized # dev: can only initialize once
-    self.initialized = True
-
-    assert empty(address) not in [_wallet, _addyRegistry, _owner] # dev: invalid addrs
+    assert empty(address) not in [_addyRegistry, _owner] # dev: invalid addrs
     assert _initialAgent != _owner # dev: agent cannot be owner
-    self.wallet = _wallet
-    self.addyRegistry = _addyRegistry
-    self.owner = _owner
-    self.ownershipChangeDelay = MIN_OWNER_CHANGE_DELAY
 
+    # initialize ownership
+    own.__init__(_owner, _addyRegistry, _minOwnerChangeDelay, _maxOwnerChangeDelay)
+
+    ADDY_REGISTRY = _addyRegistry
     priceSheets: address = staticcall AddyRegistry(_addyRegistry).getAddy(PRICE_SHEETS_ID)
 
     # initial agent setup
@@ -288,6 +247,20 @@ def initialize(
         protocolSub.paidThroughBlock = block.number + subInfo.trialPeriod
     self.protocolSub = protocolSub
 
+
+@external
+def setWallet(_wallet: address) -> bool:
+    """
+    @notice Sets the associated wallet address for this config contract
+    @dev Can only be called once by the agent factory. Establishes the link between config and wallet.
+    @param _wallet Address of the wallet contract to be associated with this config
+    @return bool True if the wallet was successfully set
+    """
+    assert not self.didSetWallet # dev: wallet already set
+    assert _wallet != empty(address) # dev: invalid wallet
+    assert msg.sender == staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID) # dev: no perms
+    self.wallet = _wallet
+    self.didSetWallet = True
     return True
 
 
@@ -485,10 +458,10 @@ def handleSubscriptionsAndPermissions(
 @view
 @internal
 def _getCoreData() -> CoreData:
-    addyRegistry: address = self.addyRegistry
+    addyRegistry: address = ADDY_REGISTRY
     wallet: address = self.wallet
     return CoreData(
-        owner=self.owner,
+        owner=own.owner,
         wallet=wallet,
         walletConfig=self,
         addyRegistry=addyRegistry,
@@ -621,7 +594,7 @@ def addOrModifyAgent(
     @param _allowedActions The actions the agent can perform
     @return bool True if the agent was successfully added or modified
     """
-    owner: address = self.owner
+    owner: address = own.owner
     assert msg.sender == owner # dev: no perms
     assert _agent != owner # dev: agent cannot be owner
     assert _agent != empty(address) # dev: invalid agent
@@ -637,7 +610,7 @@ def addOrModifyAgent(
     agentInfo.allowedAssets, agentInfo.allowedLegoIds = self._sanitizeAgentInputData(_allowedAssets, _allowedLegoIds)
 
     # get subscription info
-    priceSheets: address = staticcall AddyRegistry(self.addyRegistry).getAddy(PRICE_SHEETS_ID)
+    priceSheets: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(PRICE_SHEETS_ID)
     subInfo: SubscriptionInfo = staticcall PriceSheets(priceSheets).getAgentSubPriceData(_agent)
     
     isNewAgent: bool = (agentInfo.installBlock == 0)
@@ -683,7 +656,7 @@ def _sanitizeAgentInputData(
     # validate and dedupe lego ids
     cleanLegoIds: DynArray[uint256, MAX_LEGOS] = []
     if len(_allowedLegoIds) != 0:
-        legoRegistry: address = staticcall AddyRegistry(self.addyRegistry).getAddy(LEGO_REGISTRY_ID)
+        legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(LEGO_REGISTRY_ID)
         for i: uint256 in range(len(_allowedLegoIds), bound=MAX_LEGOS):
             legoId: uint256 = _allowedLegoIds[i]
             if not staticcall LegoRegistry(legoRegistry).isValidLegoId(legoId):
@@ -706,7 +679,7 @@ def disableAgent(_agent: address) -> bool:
     @param _agent The address of the agent to disable
     @return bool True if the agent was successfully disabled
     """
-    assert msg.sender == self.owner # dev: no perms
+    assert msg.sender == own.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
     assert agentInfo.isActive # dev: agent not active
@@ -730,12 +703,12 @@ def addLegoIdForAgent(_agent: address, _legoId: uint256) -> bool:
     @param _legoId The lego ID to add
     @return bool True if the lego ID was successfully added
     """
-    assert msg.sender == self.owner # dev: no perms
+    assert msg.sender == own.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
     assert agentInfo.isActive # dev: agent not active
 
-    legoRegistry: address = staticcall AddyRegistry(self.addyRegistry).getAddy(LEGO_REGISTRY_ID)
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(LEGO_REGISTRY_ID)
     assert staticcall LegoRegistry(legoRegistry).isValidLegoId(_legoId)
     assert _legoId not in agentInfo.allowedLegoIds # dev: lego id already saved
 
@@ -761,7 +734,7 @@ def addAssetForAgent(_agent: address, _asset: address) -> bool:
     @param _asset The asset address to add
     @return bool True if the asset was successfully added
     """
-    assert msg.sender == self.owner # dev: no perms
+    assert msg.sender == own.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
     assert agentInfo.isActive # dev: agent not active
@@ -791,7 +764,7 @@ def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empt
     @param _allowedActions The new allowed actions
     @return bool True if the allowed actions were successfully modified
     """
-    assert msg.sender == self.owner # dev: no perms
+    assert msg.sender == own.owner # dev: no perms
 
     agentInfo: AgentInfo = self.agentSettings[_agent]
     assert agentInfo.isActive # dev: agent not active
@@ -828,15 +801,15 @@ def canTransferToRecipient(_recipient: address) -> bool:
         return True
 
     # pending ownership change, don't even check if recipient is Underscore wallet
-    if self.pendingOwner.initiatedBlock != 0:
+    if own._hasPendingOwnerChange():
         return False
 
     # check if recipient is Underscore wallet, if owner is same (no pending ownership changes), transfer is allowed
-    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
+    agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
     if staticcall AgentFactory(agentFactory).isUserWallet(_recipient):
         walletConfig: address = staticcall UserWallet(_recipient).walletConfig()
         if not staticcall WalletConfig(walletConfig).hasPendingOwnerChange():
-            isAllowed = self.owner == staticcall WalletConfig(walletConfig).owner()
+            isAllowed = own.owner == staticcall WalletConfig(walletConfig).owner()
 
     return isAllowed
 
@@ -849,17 +822,18 @@ def addWhitelistAddr(_addr: address):
     @dev Can only be called by the owner
     @param _addr The address to add to the whitelist
     """
-    owner: address = self.owner
+    owner: address = own.owner
     assert msg.sender == owner # dev: only owner can add whitelist
 
     assert _addr != empty(address) # dev: invalid addr
     assert _addr != owner # dev: owner cannot be whitelisted
-    assert _addr != self # dev: wallet cannot be whitelisted
+    assert _addr != self # dev: wallet config cannot be whitelisted
+    assert _addr != self.wallet # dev: wallet cannot be whitelisted
     assert not self.isRecipientAllowed[_addr] # dev: already whitelisted
     assert self.pendingWhitelist[_addr].initiatedBlock == 0 # dev: pending whitelist already exists
 
     # this uses same delay as ownership change
-    confirmBlock: uint256 = block.number + self.ownershipChangeDelay
+    confirmBlock: uint256 = block.number + own.ownershipChangeDelay
     self.pendingWhitelist[_addr] = PendingWhitelist(
         initiatedBlock = block.number,
         confirmBlock = confirmBlock,
@@ -875,7 +849,7 @@ def confirmWhitelistAddr(_addr: address):
     @dev Can only be called by the owner
     @param _addr The address to confirm
     """
-    assert msg.sender == self.owner # dev: only owner can confirm
+    assert msg.sender == own.owner # dev: only owner can confirm
 
     data: PendingWhitelist = self.pendingWhitelist[_addr]
     assert data.initiatedBlock != 0 # dev: no pending whitelist
@@ -894,8 +868,8 @@ def cancelPendingWhitelistAddr(_addr: address):
     @dev Can only be called by the owner or governance
     @param _addr The address to cancel
     """
-    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
-    assert msg.sender == self.owner or staticcall AgentFactory(agentFactory).canCancelCriticalAction(msg.sender) # dev: no perms (only owner or governance)
+    agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
+    assert msg.sender == own.owner or staticcall AgentFactory(agentFactory).canCancelCriticalAction(msg.sender) # dev: no perms (only owner or governance)
 
     data: PendingWhitelist = self.pendingWhitelist[_addr]
     assert data.initiatedBlock != 0 # dev: no pending whitelist
@@ -911,7 +885,7 @@ def removeWhitelistAddr(_addr: address):
     @dev Can only be called by the owner
     @param _addr The address to remove from the whitelist
     """
-    assert msg.sender == self.owner # dev: only owner can remove whitelist
+    assert msg.sender == own.owner # dev: only owner can remove whitelist
     assert self.isRecipientAllowed[_addr] # dev: not on whitelist
 
     self.isRecipientAllowed[_addr] = False
@@ -933,7 +907,7 @@ def setReserveAsset(_asset: address, _amount: uint256) -> bool:
     @param _amount The amount of the asset to set
     @return bool True if the reserve asset was successfully set
     """
-    assert msg.sender == self.owner # dev: no perms
+    assert msg.sender == own.owner # dev: no perms
     assert _asset != empty(address) # dev: invalid asset
     self.reserveAssets[_asset] = _amount
     log ReserveAssetSet(asset=_asset, amount=_amount)
@@ -949,7 +923,7 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
     @param _assets The array of reserve assets to set
     @return bool True if the reserve assets were successfully set
     """
-    assert msg.sender == self.owner # dev: no perms
+    assert msg.sender == own.owner # dev: no perms
     assert len(_assets) != 0 # dev: invalid array length
     for i: uint256 in range(len(_assets), bound=MAX_ASSETS):
         asset: address = _assets[i].asset
@@ -959,86 +933,6 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
         log ReserveAssetSet(asset=asset, amount=amount)
 
     return True
-
-
-####################
-# Ownership Change #
-####################
-
-
-@view
-@external
-def hasPendingOwnerChange() -> bool:
-    """
-    @notice Checks if there is a pending ownership change
-    @return bool True if there is a pending ownership change, false otherwise
-    """
-    return self.pendingOwner.initiatedBlock != 0
-
-
-@external
-def changeOwnership(_newOwner: address):
-    """
-    @notice Initiates a new ownership change
-    @dev Can only be called by the current owner
-    @param _newOwner The address of the new owner
-    """
-    currentOwner: address = self.owner
-    assert msg.sender == currentOwner # dev: no perms
-    assert _newOwner not in [empty(address), currentOwner] # dev: invalid new owner
-
-    confirmBlock: uint256 = block.number + self.ownershipChangeDelay
-    self.pendingOwner = PendingOwner(
-        newOwner= _newOwner,
-        initiatedBlock= block.number,
-        confirmBlock= confirmBlock,
-    )
-    log OwnershipChangeInitiated(prevOwner=currentOwner, newOwner=_newOwner, confirmBlock=confirmBlock)
-
-
-@external
-def confirmOwnershipChange():
-    """
-    @notice Confirms the ownership change
-    @dev Can only be called by the new owner
-    """
-    data: PendingOwner = self.pendingOwner
-    assert data.newOwner != empty(address) # dev: no pending owner
-    assert data.confirmBlock != 0 and block.number >= data.confirmBlock # dev: time delay not reached
-    assert msg.sender == data.newOwner # dev: only new owner can confirm
-
-    prevOwner: address = self.owner
-    self.owner = data.newOwner
-    self.pendingOwner = empty(PendingOwner)
-    log OwnershipChangeConfirmed(prevOwner=prevOwner, newOwner=data.newOwner, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
-
-
-@external
-def cancelOwnershipChange():
-    """
-    @notice Cancels the ownership change
-    @dev Can only be called by the current owner or governance
-    """
-    agentFactory: address = staticcall AddyRegistry(self.addyRegistry).getAddy(AGENT_FACTORY_ID)
-    assert msg.sender == self.owner or staticcall AgentFactory(agentFactory).canCancelCriticalAction(msg.sender) # dev: no perms (only owner or governance)
-
-    data: PendingOwner = self.pendingOwner
-    assert data.confirmBlock != 0 # dev: no pending change
-    self.pendingOwner = empty(PendingOwner)
-    log OwnershipChangeCancelled(cancelledOwner=data.newOwner, cancelledBy=msg.sender, initiatedBlock=data.initiatedBlock, confirmBlock=data.confirmBlock)
-
-
-@external
-def setOwnershipChangeDelay(_numBlocks: uint256):
-    """
-    @notice Sets the ownership change delay
-    @dev Can only be called by the owner
-    @param _numBlocks The number of blocks to wait before ownership can be changed
-    """
-    assert msg.sender == self.owner # dev: no perms
-    assert _numBlocks >= MIN_OWNER_CHANGE_DELAY and _numBlocks <= MAX_OWNER_CHANGE_DELAY # dev: invalid delay
-    self.ownershipChangeDelay = _numBlocks
-    log OwnershipChangeDelaySet(delayBlocks=_numBlocks)
 
 
 #################

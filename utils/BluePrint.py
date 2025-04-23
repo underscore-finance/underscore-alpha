@@ -69,9 +69,6 @@ PARAMS = {
         # user wallet config (blocks)
         "USER_MIN_OWNER_CHANGE_DELAY": 21_600,  # 12 hours on Base
         "USER_MAX_OWNER_CHANGE_DELAY": 302_400,  # 7 days on Base
-        # agent wallet config (blocks)
-        "AGENT_MIN_OWNER_CHANGE_DELAY": 21_600,  # 12 hours on Base
-        "AGENT_MAX_OWNER_CHANGE_DELAY": 302_400,  # 7 days on Base
         # price sheets (blocks)
         "PRICES_MIN_TRIAL_PERIOD": 43_200,  # 1 day on Base
         "PRICES_MAX_TRIAL_PERIOD": 1_296_000,  # 1 month on Base
@@ -98,9 +95,6 @@ PARAMS = {
         # user wallet config (blocks)
         "USER_MIN_OWNER_CHANGE_DELAY": 21_600,
         "USER_MAX_OWNER_CHANGE_DELAY": 302_400,
-        # agent wallet config (blocks)
-        "AGENT_MIN_OWNER_CHANGE_DELAY": 21_600,
-        "AGENT_MAX_OWNER_CHANGE_DELAY": 302_400,
         # price sheets (blocks)
         "PRICES_MIN_TRIAL_PERIOD": 43_200,
         "PRICES_MAX_TRIAL_PERIOD": 1_296_000,

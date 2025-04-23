@@ -172,7 +172,7 @@ def test_whitelist_validation(ai_wallet_config, owner, ai_wallet):
         ai_wallet_config.addWhitelistAddr(owner, sender=owner)
     
     # Cannot whitelist wallet config
-    with boa.reverts("wallet cannot be whitelisted"):
+    with boa.reverts("wallet config cannot be whitelisted"):
         ai_wallet_config.addWhitelistAddr(ai_wallet_config.address, sender=owner)
     
     # Cannot confirm non-existent pending whitelist

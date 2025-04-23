@@ -48,8 +48,10 @@ def lego_registry(addy_registry_deploy, fork):
 
 
 @pytest.fixture(scope="session")
-def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, governor):
-    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, name="agent_factory")
+def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, governor, fork):
+    min_owner_change_delay = PARAMS[fork]["USER_MIN_OWNER_CHANGE_DELAY"]
+    max_owner_change_delay = PARAMS[fork]["USER_MAX_OWNER_CHANGE_DELAY"]
+    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, min_owner_change_delay, max_owner_change_delay, name="agent_factory")
     assert f.setNumUserWalletsAllowed(MAX_UINT256, sender=governor)
     assert f.setNumAgentsAllowed(MAX_UINT256, sender=governor)
     return f
@@ -84,22 +86,25 @@ def oracle_registry(addy_registry_deploy, fork):
     )
 
 
-# other
+# templates
 
 
 @pytest.fixture(scope="session")
 def wallet_funds_template():
-    return boa.load("contracts/core/templates/UserWalletTemplate.vy", name="wallet_funds_template")
+    return boa.load_partial("contracts/core/templates/UserWalletTemplate.vy").deploy_as_blueprint()
 
 
 @pytest.fixture(scope="session")
-def wallet_config_template(fork):
-    return boa.load("contracts/core/templates/UserWalletConfigTemplate.vy", PARAMS[fork]["USER_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["USER_MAX_OWNER_CHANGE_DELAY"], name="wallet_config_template")
+def wallet_config_template():
+    return boa.load_partial("contracts/core/templates/UserWalletConfigTemplate.vy").deploy_as_blueprint()
 
 
 @pytest.fixture(scope="session")
-def agent_template(fork):
-    return boa.load("contracts/core/templates/AgentTemplate.vy", PARAMS[fork]["AGENT_MIN_OWNER_CHANGE_DELAY"], PARAMS[fork]["AGENT_MAX_OWNER_CHANGE_DELAY"], name="agent_template")
+def agent_template():
+    return boa.load_partial("contracts/core/templates/AgentTemplate.vy").deploy_as_blueprint()
+
+
+# other
 
 
 @pytest.fixture(scope="session")

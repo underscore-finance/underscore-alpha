@@ -11,12 +11,10 @@ from utils.BluePrint import CORE_TOKENS
 #########
 
 
-def test_wallet_initialization(ai_wallet, ai_wallet_config, addy_registry, weth):
+def test_wallet_initialization(ai_wallet, ai_wallet_config, weth):
     assert ai_wallet.walletConfig() == ai_wallet_config.address
-    assert ai_wallet.addyRegistry() == addy_registry.address
     assert ai_wallet.wethAddr() == weth.address
-    assert ai_wallet.initialized()
-    assert ai_wallet.apiVersion() == "0.0.1"
+    assert ai_wallet.apiVersion() == "0.0.2"
 
 
 def test_deposit_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego_alpha, alpha_token, bravo_token, bravo_token_erc4626_vault, mock_lego_bravo, alpha_token_erc4626_vault, alpha_token_whale):

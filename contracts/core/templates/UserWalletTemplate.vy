@@ -237,9 +237,7 @@ trialFundsAsset: public(address)
 trialFundsInitialAmount: public(uint256)
 
 # config
-addyRegistry: public(address)
 wethAddr: public(address)
-initialized: public(bool)
 
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
@@ -254,13 +252,37 @@ MAX_LEGOS: constant(uint256) = 20
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
-API_VERSION: constant(String[28]) = "0.0.1"
+API_VERSION: constant(String[28]) = "0.0.2"
+
+ADDY_REGISTRY: public(immutable(address))
 
 
 @deploy
-def __init__():
-    # make sure original reference contract can't be initialized
-    self.initialized = True
+def __init__(
+    _walletConfig: address,
+    _addyRegistry: address,
+    _wethAddr: address,
+    _trialFundsAsset: address,
+    _trialFundsInitialAmount: uint256,
+):
+    """
+    @notice Initializes a new UserWallet contract with required configuration parameters
+    @dev Sets up the wallet with its configuration, registry addresses, and optional trial funds
+    @param _walletConfig Address of the wallet configuration contract that manages permissions and settings
+    @param _addyRegistry Address of the registry contract that stores core protocol addresses
+    @param _wethAddr Address of the WETH contract for ETH wrapping/unwrapping functionality
+    @param _trialFundsAsset Address of the asset used for trial funds (can be empty)
+    @param _trialFundsInitialAmount Initial amount of trial funds to be held (can be 0)
+    """
+    assert empty(address) not in [_walletConfig, _addyRegistry, _wethAddr] # dev: invalid addrs
+    self.walletConfig = _walletConfig
+    self.wethAddr = _wethAddr
+    ADDY_REGISTRY = _addyRegistry
+
+    # trial funds info
+    if _trialFundsAsset != empty(address) and _trialFundsInitialAmount != 0:   
+        self.trialFundsAsset = _trialFundsAsset
+        self.trialFundsInitialAmount = _trialFundsInitialAmount
 
 
 @payable
@@ -274,40 +296,6 @@ def __default__():
 def onERC721Received(_operator: address, _owner: address, _tokenId: uint256, _data: Bytes[1024]) -> bytes4:
     # must implement method for safe NFT transfers
     return method_id("onERC721Received(address,address,uint256,bytes)", output_type=bytes4)
-
-
-@external
-def initialize(
-    _walletConfig: address,
-    _addyRegistry: address,
-    _wethAddr: address,
-    _trialFundsAsset: address,
-    _trialFundsInitialAmount: uint256,
-) -> bool:
-    """
-    @notice Sets up the initial state of the wallet template
-    @dev Can only be called once and sets core contract parameters
-    @param _walletConfig The address of the wallet config contract
-    @param _addyRegistry The address of the core registry contract
-    @param _wethAddr The address of the WETH contract
-    @param _trialFundsAsset The address of the gift asset
-    @param _trialFundsInitialAmount The amount of the gift asset
-    @return bool True if initialization was successful
-    """
-    assert not self.initialized # dev: can only initialize once
-    self.initialized = True
-
-    assert empty(address) not in [_walletConfig, _addyRegistry, _wethAddr] # dev: invalid addrs
-    self.walletConfig = _walletConfig
-    self.addyRegistry = _addyRegistry
-    self.wethAddr = _wethAddr
-
-    # trial funds info
-    if _trialFundsAsset != empty(address) and _trialFundsInitialAmount != 0:   
-        self.trialFundsAsset = _trialFundsAsset
-        self.trialFundsInitialAmount = _trialFundsInitialAmount
-
-    return True
 
 
 @pure
@@ -1166,7 +1154,7 @@ def convertWethToEth(
 @view
 @internal
 def _getCoreData() -> CoreData:
-    addyRegistry: address = self.addyRegistry
+    addyRegistry: address = ADDY_REGISTRY
     walletConfig: address = self.walletConfig
     return CoreData(
         owner=staticcall WalletConfig(walletConfig).owner(),
