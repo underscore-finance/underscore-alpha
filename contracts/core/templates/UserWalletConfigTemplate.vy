@@ -144,6 +144,9 @@ event AllowedActionsModified:
     canBorrow: bool
     canRepay: bool
 
+event CanTransferToAltOwnerWalletsSet:
+    canTransfer: bool
+
 event WhitelistAddrPending:
     addr: indexed(address)
     confirmBlock: uint256
@@ -183,6 +186,7 @@ agentSettings: public(HashMap[address, AgentInfo]) # agent -> agent info
 # transfer whitelist
 isRecipientAllowed: public(HashMap[address, bool]) # recipient -> is allowed
 pendingWhitelist: public(HashMap[address, PendingWhitelist]) # addr -> pending whitelist
+canTransferToAltOwnerWallets: public(bool)
 
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
@@ -247,6 +251,8 @@ def __init__(
         protocolSub.paidThroughBlock = block.number + subInfo.trialPeriod
     self.protocolSub = protocolSub
 
+    self.canTransferToAltOwnerWallets = True
+
 
 @external
 def setWallet(_wallet: address) -> bool:
@@ -300,30 +306,39 @@ def canAgentAccess(
 @view
 @internal
 def _canAgentAccess(
-    _agent: AgentInfo,
+    _agentInfo: AgentInfo,
     _action: ActionType,
     _assets: DynArray[address, MAX_ASSETS],
     _legoIds: DynArray[uint256, MAX_LEGOS],
 ) -> bool:
-    if not _agent.isActive:
+    """
+    @notice Checks if an agent has permission to perform a specific action with given assets and lego IDs
+    @dev Validates agent's active status, allowed actions, allowed assets, and allowed lego IDs
+    @param _agentInfo The agent's information including permissions and allowed actions
+    @param _action The type of action being attempted
+    @param _assets Array of asset addresses involved in the action
+    @param _legoIds Array of lego IDs involved in the action
+    @return True if the agent has permission to perform the action, False otherwise
+    """
+    if not _agentInfo.isActive:
         return False
 
     # check allowed actions
-    if not self._canAgentPerformAction(_action, _agent.allowedActions):
+    if not self._canAgentPerformAction(_action, _agentInfo.allowedActions):
         return False
 
     # check allowed assets
-    if len(_agent.allowedAssets) != 0:
+    if len(_agentInfo.allowedAssets) != 0:
         for i: uint256 in range(len(_assets), bound=MAX_ASSETS):
             asset: address = _assets[i]
-            if asset != empty(address) and asset not in _agent.allowedAssets:
+            if asset != empty(address) and asset not in _agentInfo.allowedAssets:
                 return False
 
     # check allowed lego ids
-    if len(_agent.allowedLegoIds) != 0:
+    if len(_agentInfo.allowedLegoIds) != 0:
         for i: uint256 in range(len(_legoIds), bound=MAX_LEGOS):
             legoId: uint256 = _legoIds[i]
-            if legoId != 0 and legoId not in _agent.allowedLegoIds:
+            if legoId != 0 and legoId not in _agentInfo.allowedLegoIds:
                 return False
 
     return True
@@ -796,22 +811,64 @@ def canTransferToRecipient(_recipient: address) -> bool:
     @param _recipient The address of the recipient
     @return bool True if the transfer is allowed, false otherwise
     """
-    isAllowed: bool = self.isRecipientAllowed[_recipient]
-    if isAllowed:
+    if self.isRecipientAllowed[_recipient]:
         return True
 
-    # pending ownership change, don't even check if recipient is Underscore wallet
+    # pending ownership change, don't even check alt wallet ownership
     if own._hasPendingOwnerChange():
         return False
 
-    # check if recipient is Underscore wallet, if owner is same (no pending ownership changes), transfer is allowed
-    agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
-    if staticcall AgentFactory(agentFactory).isUserWallet(_recipient):
-        walletConfig: address = staticcall UserWallet(_recipient).walletConfig()
-        if not staticcall WalletConfig(walletConfig).hasPendingOwnerChange():
-            isAllowed = own.owner == staticcall WalletConfig(walletConfig).owner()
+    # if enabled, check if alt wallet has same owner
+    if self.canTransferToAltOwnerWallets:
+        return self._doesWalletHaveSameOwner(_recipient)
 
-    return isAllowed
+    return False
+
+
+@view
+@external
+def doesWalletHaveSameOwner(_wallet: address) -> bool:
+    return self._doesWalletHaveSameOwner(_wallet)
+
+
+@view
+@internal
+def _doesWalletHaveSameOwner(_wallet: address) -> bool:
+    """
+    @notice Checks if the wallet is an Underscore wallet with the same owner as this wallet
+    @dev This function verifies that:
+        1. The wallet is a valid Underscore wallet
+        2. The wallet config has no pending ownership changes
+        3. The wallet has the same owner as this wallet
+    @param _wallet The address of the wallet to check
+    @return bool True if the wallet is an Underscore wallet with the same owner, False otherwise
+    """
+    isSame: bool = False
+
+    # check if wallet is Underscore wallet, if owner is same (no pending ownership changes), transfer is allowed
+    agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
+    if staticcall AgentFactory(agentFactory).isUserWallet(_wallet):
+        walletConfig: address = staticcall UserWallet(_wallet).walletConfig()
+        if not staticcall WalletConfig(walletConfig).hasPendingOwnerChange():
+            isSame = own.owner == staticcall WalletConfig(walletConfig).owner()
+
+    return isSame
+
+
+@external
+def setCanTransferToAltOwnerWallets(_canTransfer: bool) -> bool:
+    """
+    @notice Sets the flag for allowing transfers to other AI wallets (with same owner)
+    @dev Can only be called by the owner
+    @param _canTransfer The new flag value (True or False)
+    @return bool True if the flag was successfully set
+    """
+    assert msg.sender == own.owner # dev: only owner can set
+    if self.canTransferToAltOwnerWallets == _canTransfer:
+        return False
+    self.canTransferToAltOwnerWallets = _canTransfer
+    log CanTransferToAltOwnerWalletsSet(canTransfer=_canTransfer)
+    return True
 
 
 @nonreentrant

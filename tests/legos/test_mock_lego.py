@@ -9,7 +9,7 @@ from conf_utils import filter_logs
 def new_mock_lego(lego_registry, addy_registry_deploy, governor):
     addr = boa.load("contracts/mock/MockLego.vy", addy_registry_deploy, name="lego_morpho")
     lego_registry.registerNewLego(addr, "New Mock Lego", YIELD_OPP_UINT256, sender=governor)
-    boa.env.time_travel(blocks=lego_registry.addyChangeDelay() + 1)
+    boa.env.time_travel(blocks=lego_registry.legoChangeDelay() + 1)
     assert lego_registry.confirmNewLegoRegistration(addr, sender=governor) != 0
     return addr
 

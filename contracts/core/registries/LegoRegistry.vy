@@ -7,7 +7,6 @@ initializes: gov
 initializes: registry
 
 exports: gov.__interface__
-exports: registry.__interface__
 
 import contracts.modules.LocalGov as gov
 import contracts.modules.Registry as registry
@@ -228,9 +227,21 @@ def setLegoChangeDelay(_numBlocks: uint256) -> bool:
     return registry._setAddyChangeDelay(_numBlocks)
 
 
+@view
+@external
+def legoChangeDelay() -> uint256:
+    return registry.addyChangeDelay
+
+
 #################
 # Views / Utils #
 #################
+
+
+@view
+@external
+def numLegosRaw() -> uint256:
+    return registry.numAddys
 
 
 # is valid
