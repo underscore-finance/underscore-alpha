@@ -18,6 +18,7 @@ def migrate(migration: Migration):
     )
 
     migration.execute(lego_registry.registerNewLego, compound_v3, 'CompoundV3', LegoType.YIELD_OPP)
+    migration.execute(lego_registry.confirmNewLegoRegistration, compound_v3)
 
     tokens = [
         "USDC",

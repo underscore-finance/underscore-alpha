@@ -17,3 +17,4 @@ def migrate(migration: Migration):
     )
 
     migration.execute(oracle_registry.registerNewOraclePartner, pyth_feeds, 'Pyth')
+    migration.execute(oracle_registry.confirmNewOraclePartnerRegistration, pyth_feeds)

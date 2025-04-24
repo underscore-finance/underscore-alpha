@@ -19,6 +19,7 @@ def migrate(migration: Migration):
         blueprint.ADDYS['AERODROME_WETH_USDC_POOL']
     )
     migration.execute(lego_registry.registerNewLego, aerodrome_classic, 'Aero Classic', LegoType.DEX)
+    migration.execute(lego_registry.confirmNewLegoRegistration, aerodrome_classic)
 
     aerodrome_slipstream = migration.deploy(
         'LegoAeroSlipstream',
@@ -29,6 +30,7 @@ def migrate(migration: Migration):
         blueprint.ADDYS['AERO_SLIPSTREAM_WETH_USDC_POOL']
     )
     migration.execute(lego_registry.registerNewLego, aerodrome_slipstream, 'Aero Slipstream', LegoType.DEX)
+    migration.execute(lego_registry.confirmNewLegoRegistration, aerodrome_slipstream)
 
     curve = migration.deploy(
         'LegoCurve',
@@ -36,6 +38,7 @@ def migrate(migration: Migration):
         addy_registry,
     )
     migration.execute(lego_registry.registerNewLego, curve, 'Curve', LegoType.DEX)
+    migration.execute(lego_registry.confirmNewLegoRegistration, curve)
 
     uniswap_v2 = migration.deploy(
         'LegoUniswapV2',
@@ -45,6 +48,7 @@ def migrate(migration: Migration):
         blueprint.ADDYS['UNI_V2_WETH_USDC_POOL']
     )
     migration.execute(lego_registry.registerNewLego, uniswap_v2, 'Uniswap V2', LegoType.DEX)
+    migration.execute(lego_registry.confirmNewLegoRegistration, uniswap_v2)
 
     uniswap_v3 = migration.deploy(
         'LegoUniswapV3',
@@ -55,3 +59,4 @@ def migrate(migration: Migration):
         blueprint.ADDYS['UNI_V3_WETH_USDC_POOL']
     )
     migration.execute(lego_registry.registerNewLego, uniswap_v3, 'Uniswap V3', LegoType.DEX)
+    migration.execute(lego_registry.confirmNewLegoRegistration, uniswap_v3)

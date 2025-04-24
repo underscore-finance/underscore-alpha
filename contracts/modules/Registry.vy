@@ -116,7 +116,6 @@ def __init__(_minAddyChangeDelay: uint256, _maxAddyChangeDelay: uint256, _regist
     assert _minAddyChangeDelay < _maxAddyChangeDelay # dev: invalid delay
     MIN_ADDY_CHANGE_DELAY = _minAddyChangeDelay
     MAX_ADDY_CHANGE_DELAY = _maxAddyChangeDelay
-    self.addyChangeDelay = _minAddyChangeDelay
 
     REGISTRY_STR = _registryStr
 

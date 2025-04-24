@@ -33,6 +33,7 @@ def migrate(migration: Migration):
     )
 
     migration.execute(oracle_registry.registerNewOraclePartner, chainlink_feeds, 'Chainlink')
+    migration.execute(oracle_registry.confirmNewOraclePartnerRegistration, chainlink_feeds)
 
     log.h2('Adding chainlink feeds to registry...')
     migration.execute(chainlink_feeds.setChainlinkFeed, blueprint.CORE_TOKENS['USDC'], ChainlinkFeeds.USDC)

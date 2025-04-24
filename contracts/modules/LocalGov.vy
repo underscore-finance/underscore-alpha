@@ -72,7 +72,9 @@ def __init__(
     assert minDelay < maxDelay # dev: invalid delay
     MIN_GOV_CHANGE_DELAY = minDelay
     MAX_GOV_CHANGE_DELAY = maxDelay
-    self.govChangeDelay = minDelay
+    
+    if _addyRegistry != empty(address):
+        self.govChangeDelay = minDelay  
 
 
 #############
@@ -211,6 +213,7 @@ def setGovernanceChangeDelay(_numBlocks: uint256):
     @dev Can only be called by current governance
     @param _numBlocks The number of blocks to wait before governance can be changed
     """
+    assert self.pendingGov.confirmBlock == 0 # dev: cannot set delay if there is a pending change
     assert self._canGovern(msg.sender) # dev: no perms
     assert _numBlocks >= MIN_GOV_CHANGE_DELAY and _numBlocks <= MAX_GOV_CHANGE_DELAY # dev: invalid delay
     self.govChangeDelay = _numBlocks

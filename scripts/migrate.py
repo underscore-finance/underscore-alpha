@@ -60,10 +60,10 @@ CLICK_PROMPTS = {
         "default": "DEPLOYER",
         "help": "Account name for deployment. Defaults to `DEPLOYER`"
     },
-    "ignore_logs": {
+    "is_retry": {
         "prompt": "Ignore current logs (always run transactions)?",
         "help": "Ignore previous log files",
-        "default": True,
+        "default": False,
     },
 }
 
@@ -169,16 +169,16 @@ def param_prompt(ctx, param, value):
     callback=param_prompt,
 )
 @click.option(
-    "--ignore-logs",
+    "--is-retry",
     is_flag=True,
-    default=CLICK_PROMPTS["ignore_logs"]["default"],
-    help=CLICK_PROMPTS["ignore_logs"]["help"],
+    default=CLICK_PROMPTS["is_retry"]["default"],
+    help=CLICK_PROMPTS["is_retry"]["help"],
     callback=param_prompt,
 )
 def cli(
     silent,
     fork,
-    ignore_logs,
+    is_retry,
     rpc,
     single,
     environment,
@@ -219,7 +219,7 @@ def cli(
 
     sender = get_account(account)
 
-    deploy_args = DeployArgs(sender, chain, ignore_logs, blueprint)
+    deploy_args = DeployArgs(sender, chain, ignore_logs=not is_retry, blueprint=blueprint)
 
     log.h1("Contract Migration")
     log.info(f"Connected to rpc `{final_rpc}`.")

@@ -18,6 +18,7 @@ def migrate(migration: Migration):
     )
 
     migration.execute(lego_registry.registerNewLego, fluid, 'Fluid', LegoType.YIELD_OPP)
+    migration.execute(lego_registry.confirmNewLegoRegistration, fluid)
 
     tokens = [
         "USDC",
