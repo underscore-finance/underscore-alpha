@@ -18,3 +18,4 @@ def migrate(migration: Migration):
     )
 
     migration.execute(lego_registry.registerNewLego, sky, 'Sky', LegoType.YIELD_OPP)
+    migration.execute(lego_registry.confirmNewLegoRegistration, sky)

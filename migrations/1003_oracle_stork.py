@@ -17,3 +17,4 @@ def migrate(migration: Migration):
     )
 
     migration.execute(oracle_registry.registerNewOraclePartner, stork_feeds, 'Stork')
+    migration.execute(oracle_registry.confirmNewOraclePartnerRegistration, stork_feeds)

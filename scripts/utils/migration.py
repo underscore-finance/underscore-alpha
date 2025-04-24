@@ -48,6 +48,24 @@ class Migration:
 
         return tx
 
+    def deploy_bp(self, name):
+        """
+        Deploys contract with given name as blueprint or skips if already deployed
+        Returns the deployed contract.
+        """
+        args = []
+        kwargs = {}
+
+        def deploy_bp_wrapper(*args, **kwargs):
+            c = boa.load_partial(self._files[name]).deploy_as_blueprint()
+            return c
+
+        contract = self._run(name, deploy_bp_wrapper, *args, **kwargs)
+        self._contracts[name] = contract
+        self._args[name] = args
+        self._save_log_file()
+        return contract
+
     def deploy(self, name, *args, **kwargs):
         """
         Deploys contract with given name and args or skips if already deployed
@@ -55,9 +73,6 @@ class Migration:
         """
         contract = self._run(name, boa.load, self._files[name], *args, name=name, **kwargs)
 
-        # db = get_deployments_db()
-        # deployment = next(db.get_deployments())
-        # print(deployment)
         self._contracts[name] = contract
         self._args[name] = args
         self._save_log_file()
@@ -156,7 +171,8 @@ class Migration:
             self._transactions.append(str(tx))
             gas = 0
             if contract_name != '':
-                gas = tx._computation.get_gas_used()
+                if hasattr(tx, '_computation') and tx._computation is not None:
+                    gas = tx._computation.get_gas_used()
                 log.h3(
                     f"Contract {contract_name} deployed at {tx.address}"
                 )

@@ -1,0 +1,18 @@
+{
+  "transactions": [
+    "<contracts/core/registries/AddyRegistry.vy at 0x18C13e0E172b6a3a6Eb7e1C02f8822d0bFdD1395, compiled with vyper-0.4.1+8a93dd27>",
+    "<boa.contracts.vyper.vyper_contract.VyperBlueprint object at 0x10f2e7500>",
+    "<boa.contracts.vyper.vyper_contract.VyperBlueprint object at 0x107de1370>",
+    "<boa.contracts.vyper.vyper_contract.VyperBlueprint object at 0x11925cf80>",
+    "<contracts/core/AgentFactory.vy at 0x2914CA857f2De5C49714Da76cE8BFe06F2957823, compiled with vyper-0.4.1+8a93dd27>\n<storage: trialFundsData=TrialFundsData({'asset': '0x0000000000000000000000000000000000000000', 'amount': 0}), recoveryCaller=0x0000000000000000000000000000000000000000, userWalletTemplate=TemplateInfo({'addr': '0xe741f9358fc88AB682dC7a9404ee771D0af58a97', 'version': 1, 'lastModified': 1745466367}), userWalletConfig=TemplateInfo({'addr': '0x6c5e59b66c1F87169C96eee25bE7C40113013884', 'version': 1, 'lastModified': 1745466367}), isUserWallet={}, numUserWallets=0, agentTemplateInfo=TemplateInfo({'addr': '0x8b01E630F43778a1Cc4A9118600d2B5a09BBD3cc', 'version': 1, 'lastModified': 1745466367}), isAgent={}, numAgents=0, agentBlacklist={}, numUserWalletsAllowed=0, numAgentsAllowed=0, whitelist={}, shouldEnforceWhitelist=False, canCriticalCancel={}, isActivated=True>",
+    "<contracts/core/registries/LegoRegistry.vy at 0x8E8e44B2d15b84bD9ce8695dD2697bEb87617a1E, compiled with vyper-0.4.1+8a93dd27>\n<storage: pendingLegoType={}, legoIdToType={}, legoHelper=0x0000000000000000000000000000000000000000>"
+  ],
+  "contracts": {
+    "AddyRegistry": "0x18C13e0E172b6a3a6Eb7e1C02f8822d0bFdD1395",
+    "UserWalletTemplate": "0xe741f9358fc88AB682dC7a9404ee771D0af58a97",
+    "UserWalletConfigTemplate": "0x6c5e59b66c1F87169C96eee25bE7C40113013884",
+    "AgentTemplate": "0x8b01E630F43778a1Cc4A9118600d2B5a09BBD3cc",
+    "AgentFactory": "0x2914CA857f2De5C49714Da76cE8BFe06F2957823",
+    "LegoRegistry": "0x8E8e44B2d15b84bD9ce8695dD2697bEb87617a1E"
+  }
+}

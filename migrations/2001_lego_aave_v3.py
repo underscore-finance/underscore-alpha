@@ -19,6 +19,7 @@ def migrate(migration: Migration):
     )
 
     migration.execute(lego_registry.registerNewLego, aave_v3, 'AaveV3', LegoType.YIELD_OPP)
+    migration.execute(lego_registry.confirmNewLegoRegistration, aave_v3)
 
     tokens = [
         "WETH",

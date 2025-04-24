@@ -19,6 +19,7 @@ def migrate(migration: Migration):
     )
 
     migration.execute(lego_registry.registerNewLego, moonwell, 'Moonwell', LegoType.YIELD_OPP)
+    migration.execute(lego_registry.confirmNewLegoRegistration, moonwell)
 
     tokens = [
         "WETH",

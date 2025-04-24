@@ -19,6 +19,7 @@ def migrate(migration: Migration):
     )
 
     migration.execute(lego_registry.registerNewLego, morpho, 'Morpho', LegoType.YIELD_OPP)
+    migration.execute(lego_registry.confirmNewLegoRegistration, morpho)
 
     # morpho moonwell
     tokens = [
