@@ -53,7 +53,7 @@ def get_account(accountName):
 
 def execute_transaction(transaction, *args, **kwargs):
     attempts = 0
-    max_attempts = 3
+    max_attempts = 20
     if "max_attempts" in kwargs:
         max_attempts = kwargs["max_attempts"]
 
@@ -73,7 +73,8 @@ def execute_transaction(transaction, *args, **kwargs):
             )
             log.error(f"\tException: {str(exception)}\n")
             if attempts == max_attempts:
-                raise exception
+                log.error(f"\tMax attempts reached. Exiting.\n")
+                break
 
             time.sleep(3)
 
