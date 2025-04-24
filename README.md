@@ -161,38 +161,38 @@ For detailed information about which directories and files are covered by each l
 
 ### Base Mainnet
 
-| Core Contracts |                                                                                                                       |
-| -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| AddyRegistry   | [0x49B08551e452cA99da7dE9B3a60E39e5f10C13CD](https://basescan.org/address/0x49B08551e452cA99da7dE9B3a60E39e5f10C13CD) |
-| AgentFactory   | [0x7bA5A18b88fFc9bB569d5A7e311c1607a0737a25](https://basescan.org/address/0x7bA5A18b88fFc9bB569d5A7e311c1607a0737a25) |
-| WalletFunds    | [0x6A5263B0645c7dFd2788eF46f95f210E947e0743](https://basescan.org/address/0x6A5263B0645c7dFd2788eF46f95f210E947e0743) |
-| WalletConfig   | [0x45D1a9429Fd603c13Cdab685dc2540f4F57Df464](https://basescan.org/address/0x45D1a9429Fd603c13Cdab685dc2540f4F57Df464) |
-| AgentTemplate  | [0x70418b3AAa1044eC8bFF6a461B4E43460bb5699E](https://basescan.org/address/0x70418b3AAa1044eC8bFF6a461B4E43460bb5699E) |
-| LegoRegistry   | [0x590504539913411CeF7fc1b3Fa49b06FE970c759](https://basescan.org/address/0x590504539913411CeF7fc1b3Fa49b06FE970c759) |
-| OracleRegistry | [0xc56add9377Bc3a39f1B928Abc7440E43B6b10e1f](https://basescan.org/address/0xc56add9377Bc3a39f1B928Abc7440E43B6b10e1f) |
-| PriceSheets    | [0x59918c90eD44a3D7a72375f60C0148Ae18001ADC](https://basescan.org/address/0x59918c90eD44a3D7a72375f60C0148Ae18001ADC) |
-| LegoHelper     | [0xd313d00cC5E2129799B90Ad538334BB19e17dfEd](https://basescan.org/address/0xd313d00cC5E2129799B90Ad538334BB19e17dfEd) |
+| Core Contracts           |                                                                                                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| AddyRegistry             | [0xdCCaB9855D7eE558409EBdf358a3A44a8b2415B3](https://basescan.org/address/0xdCCaB9855D7eE558409EBdf358a3A44a8b2415B3) |
+| AgentFactory             | [0x484637E77C66eaE88C8Edb64E09c5057F52866BE](https://basescan.org/address/0x484637E77C66eaE88C8Edb64E09c5057F52866BE) |
+| UserWalletTemplate       | [0xf614Bb656a8B1B8646b25f3Ca4a9655E407D38e5](https://basescan.org/address/0xf614Bb656a8B1B8646b25f3Ca4a9655E407D38e5) |
+| UserWalletConfigTemplate | [0xAeE931cC57CfBE31328bCfF092Af7eC7dFD7EBC8](https://basescan.org/address/0xAeE931cC57CfBE31328bCfF092Af7eC7dFD7EBC8) |
+| AgentTemplate            | [0x2e3754aD00DcC1c31Ee1Ea46379DA83bD02896F7](https://basescan.org/address/0x2e3754aD00DcC1c31Ee1Ea46379DA83bD02896F7) |
+| LegoRegistry             | [0x5dC5A7304a1f2feeadF491b8F62BD41687CB330b](https://basescan.org/address/0x5dC5A7304a1f2feeadF491b8F62BD41687CB330b) |
+| OracleRegistry           | [0x4D97d514d92Efd711D0645fE0759fA68480facc5](https://basescan.org/address/0x4D97d514d92Efd711D0645fE0759fA68480facc5) |
+| PriceSheets              | [0x38Cd202B42b3906051573174e506b5b6BC83D47C](https://basescan.org/address/0x38Cd202B42b3906051573174e506b5b6BC83D47C) |
+| LegoHelper               | [0xF2920Dcb5298D48755b49a5e91F073D47A25439b](https://basescan.org/address/0xF2920Dcb5298D48755b49a5e91F073D47A25439b) |
 
 | Oracles        |                                                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| ChainlinkFeeds | [0x6035ff5936563132caD931a3a2F328477372fb82](https://basescan.org/address/0x6035ff5936563132caD931a3a2F328477372fb82) |
-| PythFeeds      | [0xB8090783aBF7B6336121FAfd6c4aCa3C4516792D](https://basescan.org/address/0xB8090783aBF7B6336121FAfd6c4aCa3C4516792D) |
-| StorkFeeds     | [0x389e7d981A74cd957bf56d83cCB85e6fc9e9d9bD](https://basescan.org/address/0x389e7d981A74cd957bf56d83cCB85e6fc9e9d9bD) |
+| ChainlinkFeeds | [0x5e06882026739D91541b4F979FbF40057C75aB96](https://basescan.org/address/0x5e06882026739D91541b4F979FbF40057C75aB96) |
+| PythFeeds      | [0x56cC721FA002425b074e767A1F7B663Eb00C7535](https://basescan.org/address/0x56cC721FA002425b074e767A1F7B663Eb00C7535) |
+| StorkFeeds     | [0x37Ce94Ec6A9072ee1231eff57A8987448aDb8E0a](https://basescan.org/address/0x37Ce94Ec6A9072ee1231eff57A8987448aDb8E0a) |
 
 | Yield Legos    |                                                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| LegoAaveV3     | [0x904CCd911533259C1d6B4C50d87DE8130ABeb55D](https://basescan.org/address/0x904CCd911533259C1d6B4C50d87DE8130ABeb55D) |
-| LegoCompoundV3 | [0x8546b0ad0C399930847ce725921DBE0F7c106aD9](https://basescan.org/address/0x8546b0ad0C399930847ce725921DBE0F7c106aD9) |
-| LegoEuler      | [0x38400f38E1e7E5d0c49C10a43c37a32977b62339](https://basescan.org/address/0x38400f38E1e7E5d0c49C10a43c37a32977b62339) |
-| LegoFluid      | [0xfC78950624d322D30D11aF8363BEB3BdA559FaB9](https://basescan.org/address/0xfC78950624d322D30D11aF8363BEB3BdA559FaB9) |
-| LegoMoonwell   | [0xCAacba1b91F4004CCba7d3Ffea0CaAd7E588EEe4](https://basescan.org/address/0xCAacba1b91F4004CCba7d3Ffea0CaAd7E588EEe4) |
-| LegoMorpho     | [0x055104Bc79447c94655aABA432D60e0f2ab44cb3](https://basescan.org/address/0x055104Bc79447c94655aABA432D60e0f2ab44cb3) |
-| LegoSky        | [0x43bd7a38464179d56402341d03bF030BF3140D41](https://basescan.org/address/0x43bd7a38464179d56402341d03bF030BF3140D41) |
+| LegoAaveV3     | [0x580729527620ab496195465bfFD15E89eFb508B4](https://basescan.org/address/0x580729527620ab496195465bfFD15E89eFb508B4) |
+| LegoCompoundV3 | [0x71fC412B72e052F91AEF0e11084D7cEb99ae275c](https://basescan.org/address/0x71fC412B72e052F91AEF0e11084D7cEb99ae275c) |
+| LegoEuler      | [0x29e0815b2c801D6946bD05EB0A5c9b5a510d88f1](https://basescan.org/address/0x29e0815b2c801D6946bD05EB0A5c9b5a510d88f1) |
+| LegoFluid      | [0x76765fcd0A666fAc585e520C421FcD881ca0d861](https://basescan.org/address/0x76765fcd0A666fAc585e520C421FcD881ca0d861) |
+| LegoMoonwell   | [0x959753dB45E61Cf7dCc6057279A57AC286830C28](https://basescan.org/address/0x959753dB45E61Cf7dCc6057279A57AC286830C28) |
+| LegoMorpho     | [0xF7B09b7E6528037e125Ac8d3Ed047A39d10A32AF](https://basescan.org/address/0xF7B09b7E6528037e125Ac8d3Ed047A39d10A32AF) |
+| LegoSky        | [0x6c2496434a42779A1c5dc62C18B3177C1771Bb80](https://basescan.org/address/0x6c2496434a42779A1c5dc62C18B3177C1771Bb80) |
 
 | Dex Legos          |                                                                                                                       |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| LegoAeroClassic    | [0xdE426b4f9f6C6ed8D254b6363089597d9eb102A3](https://basescan.org/address/0xdE426b4f9f6C6ed8D254b6363089597d9eb102A3) |
-| LegoAeroSlipstream | [0xD6A7aDdB5bCF306e9D5C0d431103C5641576bB90](https://basescan.org/address/0xD6A7aDdB5bCF306e9D5C0d431103C5641576bB90) |
-| LegoCurve          | [0xEA11B89c506a1B4b2D214643d4019BBc64B92958](https://basescan.org/address/0xEA11B89c506a1B4b2D214643d4019BBc64B92958) |
-| LegoUniswapV2      | [0xFA56408A68ba9bF5Df0F1CF4187B7260fDf38fC4](https://basescan.org/address/0xFA56408A68ba9bF5Df0F1CF4187B7260fDf38fC4) |
-| LegoUniswapV3      | [0x83C1864F112A9CD8b9e93c4a166F4d885244Eef3](https://basescan.org/address/0x83C1864F112A9CD8b9e93c4a166F4d885244Eef3) |
+| LegoAeroClassic    | [0xF66d2FD9Ee2975DF518c6bA9D2ff7d562EE8530b](https://basescan.org/address/0xF66d2FD9Ee2975DF518c6bA9D2ff7d562EE8530b) |
+| LegoAeroSlipstream | [0xe819d6367d393AD952265Ed34b2A9A67a3F1423A](https://basescan.org/address/0xe819d6367d393AD952265Ed34b2A9A67a3F1423A) |
+| LegoCurve          | [0x3EadC664BE12D7Ef39ACf50C48695ff8614127f1](https://basescan.org/address/0x3EadC664BE12D7Ef39ACf50C48695ff8614127f1) |
+| LegoUniswapV2      | [0xC9Eeeab623B1cd6b53a03938Df5eBf9B7d3d2C0F](https://basescan.org/address/0xC9Eeeab623B1cd6b53a03938Df5eBf9B7d3d2C0F) |
+| LegoUniswapV3      | [0x5282BA17Ec8cF31c78404d0C57Fb7CfeabC212a0](https://basescan.org/address/0x5282BA17Ec8cF31c78404d0C57Fb7CfeabC212a0) |
