@@ -124,9 +124,8 @@ MAX_LEGOS: constant(uint256) = 20
 MAX_RECOVERIES: constant(uint256) = 100
 
 # agent factories
-OLD_AGENT_FACTORY: constant(address) = 0x0000000000000000000000000000000000000000 # TODO: set this
-NEW_AGENT_FACTORY: constant(address) = 0xd5a1cc447D94114136A5a8828F59d5a1cfe65038
-
+OLD_AGENT_FACTORY: constant(address) = 0x7bA5A18b88fFc9bB569d5A7e311c1607a0737a25 # v1
+NEW_AGENT_FACTORY: constant(address) = 0x7C4be37a65E8410c0fb03d62059E3cB04f78c565 # v3
 
 @deploy
 def __init__(
