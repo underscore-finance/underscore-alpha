@@ -339,7 +339,7 @@ def test_view_functions(addy_registry, new_addy, governor):
 def test_initial_governance(addy_registry, governor):
     """Test initial governance setup"""
     assert addy_registry.governance() == governor
-    assert addy_registry.govChangeDelay() == addy_registry.MIN_GOV_CHANGE_DELAY()
+    assert addy_registry.govChangeDelay() == 0
 
 
 def test_governance_change_delay(addy_registry, governor, bob):
@@ -368,6 +368,9 @@ def test_governance_change_delay(addy_registry, governor, bob):
 
 def test_governance_change_process(addy_registry, governor, new_governor):
     """Test complete governance change process"""
+
+    addy_registry.setGovernanceChangeDelay(addy_registry.MIN_GOV_CHANGE_DELAY(), sender=governor)
+
     delay = addy_registry.govChangeDelay()
     current_block = boa.env.evm.patch.block_number
 

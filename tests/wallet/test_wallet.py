@@ -14,7 +14,7 @@ from utils.BluePrint import CORE_TOKENS
 def test_wallet_initialization(ai_wallet, ai_wallet_config, weth):
     assert ai_wallet.walletConfig() == ai_wallet_config.address
     assert ai_wallet.wethAddr() == weth.address
-    assert ai_wallet.apiVersion() == "0.0.2"
+    assert ai_wallet.apiVersion() == "0.0.3"
 
 
 def test_deposit_operations(ai_wallet, ai_wallet_config, owner, agent, mock_lego_alpha, alpha_token, bravo_token, bravo_token_erc4626_vault, mock_lego_bravo, alpha_token_erc4626_vault, alpha_token_whale):
@@ -455,7 +455,7 @@ def test_eth_weth_conversion_with_fees(ai_wallet, owner, agent, lego_aave_v3, ge
     log = filter_logs(ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == DEPOSIT_UINT256
     assert log.asset == vault_token.address
-    assert log.amount != 0
+    assert log.protocolAmount != 0
 
     # Test WETH to ETH conversion with withdrawal and transfer fees
     amount = ai_wallet.convertWethToEth(MAX_UINT256, owner, lego_id, vault_token, sender=agent)

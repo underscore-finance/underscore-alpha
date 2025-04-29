@@ -10,12 +10,17 @@ from ethereum.ercs import IERC20
 
 interface MainWallet:
     def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS]) -> bool: nonpayable
+    def canBeAmbassador() -> bool: view
+    def apiVersion() -> String[28]: view
+
+interface Agent:
+    def initialize(_owner: address, _addyRegistry: address) -> bool: nonpayable
 
 interface WalletConfig:
     def setWallet(_wallet: address) -> bool: nonpayable
 
-interface Agent:
-    def initialize(_owner: address, _addyRegistry: address) -> bool: nonpayable
+interface LegacyAgentFactory:
+    def isUserWallet(_wallet: address) -> bool: view
 
 struct TemplateInfo:
     addr: address
@@ -39,6 +44,7 @@ event UserWalletCreated:
     configAddr: indexed(address)
     owner: indexed(address)
     agent: address
+    ambassador: address
     creator: address
 
 event AgentCreated:
@@ -101,7 +107,7 @@ recoveryCaller: public(address)
 # user wallets
 userWalletTemplate: public(TemplateInfo)
 userWalletConfig: public(TemplateInfo)
-isUserWallet: public(HashMap[address, bool])
+isUserWalletLocal: public(HashMap[address, bool])
 numUserWallets: public(uint256)
 
 # agents
@@ -126,7 +132,9 @@ WETH_ADDR: public(immutable(address))
 
 MAX_RECOVERIES: constant(uint256) = 100
 MAX_LEGOS: constant(uint256) = 20
+MAX_LEGACY_AGENT_FACTORIES: constant(uint256) = 20
 
+LEGACY_AGENT_FACTORIES: public(immutable(DynArray[address, MAX_LEGACY_AGENT_FACTORIES]))
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
 
@@ -140,12 +148,14 @@ def __init__(
     _agentTemplate: address,
     _minOwnerChangeDelay: uint256,
     _maxOwnerChangeDelay: uint256,
+    _legacyAgentFactories: DynArray[address, MAX_LEGACY_AGENT_FACTORIES],
 ):
     assert empty(address) not in [_addyRegistry, _wethAddr] # dev: invalid addrs
     ADDY_REGISTRY = _addyRegistry
     WETH_ADDR = _wethAddr
     MIN_OWNER_CHANGE_DELAY = _minOwnerChangeDelay
     MAX_OWNER_CHANGE_DELAY = _maxOwnerChangeDelay
+    LEGACY_AGENT_FACTORIES = _legacyAgentFactories
     self.isActivated = True
 
     # set agent template
@@ -200,6 +210,32 @@ def currentAgentTemplate() -> address:
 
 
 @view
+@external
+def isUserWallet(_wallet: address) -> bool:
+    """
+    @notice Check if a given address is a user wallet within Underscore Protocol
+    @dev Returns True if the address is a user wallet, False otherwise
+    """
+    return self._isUserWallet(_wallet)
+
+
+@view
+@internal
+def _isUserWallet(_wallet: address) -> bool:
+    isUserWallet: bool = self.isUserWalletLocal[_wallet]
+    if isUserWallet:
+        return True
+
+    # check legacy factories
+    for legacyFactory: address in LEGACY_AGENT_FACTORIES:
+        isUserWallet = staticcall LegacyAgentFactory(legacyFactory).isUserWallet(_wallet)
+        if isUserWallet:
+            return True
+
+    return False
+
+
+@view
 @external 
 def isValidUserWalletSetup(_owner: address, _agent: address) -> bool:
     """
@@ -221,12 +257,13 @@ def _isValidUserWalletSetup(_mainTemplate: address, _configTemplate: address, _o
 
 
 @external
-def createUserWallet(_owner: address = msg.sender, _agent: address = empty(address)) -> address:
+def createUserWallet(_owner: address = msg.sender, _agent: address = empty(address), _ambassador: address = empty(address)) -> address:
     """
     @notice Create a new User Wallet with specified owner and optional agent
     @dev Creates a minimal proxy of the current template and initializes it
     @param _owner The address that will own the wallet (defaults to msg.sender)
     @param _agent The address that will be the agent (defaults to empty address, can add this later)
+    @param _ambassador The address of the ambassador who invited the user (defaults to empty address)
     @return The address of the newly created wallet, or empty address if setup is invalid
     """
     assert self.isActivated # dev: not activated
@@ -242,13 +279,21 @@ def createUserWallet(_owner: address = msg.sender, _agent: address = empty(addre
     if self.numUserWallets >= self.numUserWalletsAllowed:
         return empty(address)
 
+    # validate ambassador
+    ambassador: address = empty(address)
+    if _ambassador != empty(address):
+        assert self._isUserWallet(_ambassador) # dev: ambassador must be Underscore wallet
+        version: String[28] = staticcall MainWallet(_ambassador).apiVersion()
+        if version != "0.0.1" and version != "0.0.2" and staticcall MainWallet(_ambassador).canBeAmbassador():
+            ambassador = _ambassador
+
     # initial trial funds asset + amount
     trialFundsData: TrialFundsData = self.trialFundsData
     if trialFundsData.asset != empty(address):
         trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
 
     # create wallet contracts
-    walletConfigAddr: address = create_from_blueprint(walletConfigTemplate, _owner, _agent, ADDY_REGISTRY, MIN_OWNER_CHANGE_DELAY, MAX_OWNER_CHANGE_DELAY)
+    walletConfigAddr: address = create_from_blueprint(walletConfigTemplate, _owner, _agent, ambassador, ADDY_REGISTRY, MIN_OWNER_CHANGE_DELAY, MAX_OWNER_CHANGE_DELAY)
     mainWalletAddr: address = create_from_blueprint(mainWalletTemplate, walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount)
     assert extcall WalletConfig(walletConfigAddr).setWallet(mainWalletAddr) # dev: could not set wallet
 
@@ -257,10 +302,10 @@ def createUserWallet(_owner: address = msg.sender, _agent: address = empty(addre
         assert extcall IERC20(trialFundsData.asset).transfer(mainWalletAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
 
     # update data
-    self.isUserWallet[mainWalletAddr] = True
+    self.isUserWalletLocal[mainWalletAddr] = True
     self.numUserWallets += 1
 
-    log UserWalletCreated(mainAddr=mainWalletAddr, configAddr=walletConfigAddr, owner=_owner, agent=_agent, creator=msg.sender)
+    log UserWalletCreated(mainAddr=mainWalletAddr, configAddr=walletConfigAddr, owner=_owner, agent=_agent, ambassador=ambassador, creator=msg.sender)
     return mainWalletAddr
 
 

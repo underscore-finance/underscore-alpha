@@ -18,6 +18,9 @@ interface WalletConfig:
     def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo): nonpayable
     def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData = empty(CoreData)) -> uint256: view
     def canTransferToRecipient(_recipient: address) -> bool: view
+    def canWalletBeAmbassador() -> bool: view
+    def getProceedsAddr() -> address: view
+    def myAmbassador() -> address: view
     def owner() -> address: view
 
 interface LegoRegistry:
@@ -34,13 +37,16 @@ interface WethContract:
     def deposit(): payable
 
 interface PriceSheets:
-    def getTransactionFeeData(_user: address, _action: ActionType) -> (uint256, address): view
+    def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256): view
 
 interface AgentFactory:
     def agentBlacklist(_agentAddr: address) -> bool: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
+
+interface UserWallet:
+    def walletConfig() -> address: view
 
 flag ActionType:
     DEPOSIT
@@ -213,9 +219,11 @@ event UserWalletSubscriptionPaid:
     isAgent: bool
 
 event UserWalletTransactionFeePaid:
-    recipient: indexed(address)
     asset: indexed(address)
-    amount: uint256
+    protocolRecipient: indexed(address)
+    protocolAmount: uint256
+    ambassadorRecipient: indexed(address)
+    ambassadorAmount: uint256
     fee: uint256
     action: ActionType
 
@@ -250,9 +258,10 @@ MAX_TOKEN_PATH: constant(uint256) = 5
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
+MAX_TX_FEE: constant(uint256) = 10_00 # 10.00%
 
 ERC721_RECEIVE_DATA: constant(Bytes[1024]) = b"UnderscoreErc721"
-API_VERSION: constant(String[28]) = "0.0.2"
+API_VERSION: constant(String[28]) = "0.0.3"
 
 ADDY_REGISTRY: public(immutable(address))
 
@@ -307,6 +316,17 @@ def apiVersion() -> String[28]:
     @return String[28] The API version string
     """
     return API_VERSION
+
+
+@view
+@external
+def canBeAmbassador() -> bool:
+    """
+    @notice Checks if the current wallet can be an ambassador
+    @dev Returns True if the wallet is a valid ambassador, False otherwise
+    @return bool True if the wallet can be an ambassador, False otherwise
+    """
+    return staticcall WalletConfig(self.walletConfig).canWalletBeAmbassador()
 
 
 ###########
@@ -1220,17 +1240,57 @@ def _handleTransactionFees(
         return 0
 
     fee: uint256 = 0
-    recipient: address = empty(address)
-    fee, recipient = staticcall PriceSheets(_priceSheets).getTransactionFeeData(self, _action)
-    if fee == 0 or recipient == empty(address):
+    protocolRecipient: address = empty(address)
+    ambassadorRatio: uint256 = 0
+    fee, protocolRecipient, ambassadorRatio = staticcall PriceSheets(_priceSheets).getTransactionFeeDataWithAmbassadorRatio(self, _action)
+    if fee == 0 or protocolRecipient == empty(address):
         return 0
 
-    amount: uint256 = min(_amount * fee // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
-    if amount != 0:
-        assert extcall IERC20(_asset).transfer(recipient, amount, default_return_value=True) # dev: protocol tx fee payment failed
-        log UserWalletTransactionFeePaid(recipient=recipient, asset=_asset, amount=amount, fee=fee, action=_action)
+    adjFee: uint256 = min(fee, MAX_TX_FEE)
+    totalAmount: uint256 = min(_amount * adjFee // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
+    if totalAmount == 0:
+        return 0
 
-    return amount
+    protocolAmount: uint256 = totalAmount
+    ambassadorAmount: uint256 = 0
+
+    # pay ambassador proceeds
+    ambassadorRecipient: address = empty(address)
+    if ambassadorRatio != 0:
+        ambassadorAmount, ambassadorRecipient = self._payAmbassadorTxFee(_asset, protocolAmount, ambassadorRatio)
+        if ambassadorAmount != 0:
+            protocolAmount = min(protocolAmount - ambassadorAmount, staticcall IERC20(_asset).balanceOf(self))
+
+    # pay protocol proceeds
+    if protocolAmount != 0:
+        assert extcall IERC20(_asset).transfer(protocolRecipient, protocolAmount, default_return_value=True) # dev: protocol tx fee payment failed
+
+    log UserWalletTransactionFeePaid(asset=_asset, protocolRecipient=protocolRecipient, protocolAmount=protocolAmount, ambassadorRecipient=ambassadorRecipient, ambassadorAmount=ambassadorAmount, fee=fee, action=_action)
+    return totalAmount
+
+
+@internal
+def _payAmbassadorTxFee(
+    _asset: address,
+    _amount: uint256,
+    _ambassadorRatio: uint256,
+) -> (uint256, address):
+    myAmbassador: address = staticcall WalletConfig(self.walletConfig).myAmbassador()
+    if myAmbassador == empty(address):
+        return 0, empty(address)
+
+    ambassadorWalletConfig: address = staticcall UserWallet(myAmbassador).walletConfig()
+    proceedsAddr: address = staticcall WalletConfig(ambassadorWalletConfig).getProceedsAddr()
+    if proceedsAddr == empty(address):
+        return 0, empty(address)
+
+    # transfer ambassador proceeds
+    ambassadorRatio: uint256 = min(_ambassadorRatio, HUNDRED_PERCENT)
+    amount: uint256 = min(_amount * ambassadorRatio // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
+    if amount != 0:
+        assert extcall IERC20(_asset).transfer(proceedsAddr, amount, default_return_value=True) # dev: ambassador tx fee payment failed
+
+    return min(_amount, amount), proceedsAddr
 
 
 # allow lego to perform action

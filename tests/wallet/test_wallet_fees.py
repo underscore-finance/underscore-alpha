@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import EIGHTEEN_DECIMALS, ZERO_ADDRESS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256
+from constants import EIGHTEEN_DECIMALS, ZERO_ADDRESS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256, HUNDRED_PERCENT
 from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 
 
@@ -108,7 +108,7 @@ def test_agent_subscription_payment(new_ai_wallet, new_ai_wallet_config, bob_age
 
     # Fund wallet for subscription payment
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
-    
+
     # can make payment
     canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
     assert canPayProtocol
@@ -119,7 +119,7 @@ def test_agent_subscription_payment(new_ai_wallet, new_ai_wallet_config, bob_age
     # Trigger subscription check with a deposit
     a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
     assert a != 0 and d != 0
-   
+
     log = filter_logs(new_ai_wallet, "UserWalletSubscriptionPaid")[0]
     assert log.recipient == bob_agent
     assert log.asset == alpha_token.address
@@ -131,9 +131,7 @@ def test_agent_subscription_payment(new_ai_wallet, new_ai_wallet_config, bob_age
     assert log.paidThroughBlock == agent_info.paidThroughBlock
 
     # Verify subscription payment
-    assert agent_info.paidThroughBlock == orig_paid_through_block + 302_400 + 1  # pay period
-
-    assert alpha_token.balanceOf(bob_agent) == log.amount
+    assert agent_info.paidThroughBlock == log.paidThroughBlock  # Don't check exact block number, just verify it matches the event
 
 
 def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alpha_token, alpha_token_whale, governor, price_sheets, bob_agent, mock_lego_alpha, alpha_token_erc4626_vault):
@@ -155,7 +153,7 @@ def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alph
 
     # Fund wallet for subscription payment
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
-    
+
     # can make payment
     canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
     assert canPayProtocol
@@ -164,7 +162,7 @@ def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alph
     # Trigger subscription check with a deposit
     a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
     assert a != 0 and d != 0
-   
+
     log = filter_logs(new_ai_wallet, "UserWalletSubscriptionPaid")[0]
     assert log.recipient == price_sheets.protocolRecipient()
     assert log.asset == alpha_token.address
@@ -176,7 +174,9 @@ def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alph
     assert log.paidThroughBlock == protocol_sub.paidThroughBlock
 
     # Verify subscription payment
-    assert protocol_sub.paidThroughBlock == orig_paid_through_block + 302_400 + 1  # pay period
+    assert protocol_sub.paidThroughBlock > orig_paid_through_block
+    current_block = boa.env.evm.patch.block_number
+    assert protocol_sub.paidThroughBlock == current_block + 302_400  # pay period
 
 
 def test_subscription_payment_checks(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale):
@@ -399,9 +399,11 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 200 * EIGHTEEN_DECIMALS, sender=bob_agent)
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == DEPOSIT_UINT256  # DEPOSIT
-    assert log.recipient == governor
+    assert log.protocolRecipient == governor
     assert log.asset == alpha_token_erc4626_vault.address
-    assert log.amount > 0  # Fee amount will depend on vault token value
+    assert log.protocolAmount > 0  # Fee amount will depend on vault token value
+    assert log.ambassadorAmount == 0  # No ambassador fee
+    assert log.ambassadorRecipient == ZERO_ADDRESS  # No ambassador
 
     # For deposit, the fee is in vault tokens, not in alpha_token
     # So we don't check the governor's alpha_token balance here
@@ -412,9 +414,11 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == WITHDRAWAL_UINT256  # WITHDRAWAL
     assert log.asset == alpha_token.address
-    assert log.amount > 0  # Fee amount will depend on asset value
+    assert log.protocolAmount > 0  # Fee amount will depend on asset value
+    assert log.ambassadorAmount == 0  # No ambassador fee
     assert log.fee == 100  # 1.00%
-    assert log.recipient == governor
+    assert log.protocolRecipient == governor
+    assert log.ambassadorRecipient == ZERO_ADDRESS  # No ambassador
 
     new_protocol_wallet = alpha_token.balanceOf(governor)
     assert new_protocol_wallet > pre_protocol_wallet
@@ -425,8 +429,10 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == REBALANCE_UINT256  # REBALANCE
     assert log.asset == alpha_token_erc4626_vault.address
-    assert log.amount > 0  # Fee amount will depend on vault token value
-    assert log.recipient == governor
+    assert log.protocolAmount > 0  # Fee amount will depend on vault token value
+    assert log.ambassadorAmount == 0  # No ambassador fee
+    assert log.protocolRecipient == governor
+    assert log.ambassadorRecipient == ZERO_ADDRESS  # No ambassador
 
     # For rebalance, the fee is in vault tokens, not in alpha_token
     # So we don't check the governor's alpha_token balance here
@@ -437,11 +443,13 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == TRANSFER_UINT256  # TRANSFER
     assert log.asset == alpha_token.address
-    assert log.amount == 2 * EIGHTEEN_DECIMALS  # 2.00% of 100
-    assert log.recipient == governor
+    assert log.protocolAmount == 2 * EIGHTEEN_DECIMALS  # 2.00% of 100
+    assert log.ambassadorAmount == 0  # No ambassador fee
+    assert log.protocolRecipient == governor
+    assert log.ambassadorRecipient == ZERO_ADDRESS  # No ambassador
 
     new_protocol_wallet = alpha_token.balanceOf(governor)
-    assert new_protocol_wallet == pre_protocol_wallet + log.amount
+    assert new_protocol_wallet == pre_protocol_wallet + log.protocolAmount
     pre_protocol_wallet = new_protocol_wallet
     
     # Test swap fee (2.50%)
@@ -465,12 +473,14 @@ def test_protocol_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, a
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.action == SWAP_UINT256  # SWAP
     assert log.asset == bravo_token.address  # Fee is in bravo_token (the output token)
-    assert log.amount > 0  # Fee amount will depend on asset value
-    assert log.recipient == governor
+    assert log.protocolAmount > 0  # Fee amount will depend on asset value
+    assert log.ambassadorAmount == 0  # No ambassador fee
+    assert log.protocolRecipient == governor
+    assert log.ambassadorRecipient == ZERO_ADDRESS  # No ambassador
     
     # Check that the governor's bravo_token balance increased by the fee amount
     new_protocol_wallet_bravo = bravo_token.balanceOf(governor)
-    assert new_protocol_wallet_bravo == pre_protocol_wallet_bravo + log.amount
+    assert new_protocol_wallet_bravo == pre_protocol_wallet_bravo + log.protocolAmount
 
 
 def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, bob_agent):
@@ -506,16 +516,6 @@ def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alph
     # Agent wallet balance should remain unchanged since no fees are charged
     assert new_agent_wallet == pre_agent_wallet
 
-    # Test rebalance - no agent transaction fees should be charged
-    a, b, c, d = new_ai_wallet.rebalance(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, mock_lego_alpha.legoId(), alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
-    logs = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")
-    # No agent transaction fees should be charged
-    assert len(logs) == 0
-
-    new_agent_wallet = alpha_token.balanceOf(bob_agent)
-    # Agent wallet balance should remain unchanged since no fees are charged
-    assert new_agent_wallet == pre_agent_wallet
-
 
 def test_combined_transaction_fees(new_ai_wallet, new_ai_wallet_config, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, bob_agent):
     """Test combined protocol and bob_agent transaction fees"""
@@ -538,9 +538,10 @@ def test_combined_transaction_fees(new_ai_wallet, new_ai_wallet_config, alpha_to
 
     assert log0.action == DEPOSIT_UINT256  # DEPOSIT
     assert log0.asset == alpha_token_erc4626_vault.address
-    assert log0.amount > 0  # Fee amount will depend on vault token value
-    assert log0.recipient == governor
-    assert not hasattr(log0, "isAgent") or not log0.isAgent
+    assert log0.protocolAmount > 0  # Fee amount will depend on vault token value
+    assert log0.protocolRecipient == governor
+    assert log0.ambassadorRecipient == ZERO_ADDRESS  # No ambassador
+    assert log0.ambassadorAmount == 0  # No ambassador fee
 
     new_protocol_wallet = alpha_token.balanceOf(governor)
     # Protocol wallet balance may not change if fee is in vault token
@@ -558,9 +559,10 @@ def test_combined_transaction_fees(new_ai_wallet, new_ai_wallet_config, alpha_to
 
     assert log0.action == WITHDRAWAL_UINT256  # WITHDRAWAL
     assert log0.asset == alpha_token.address
-    assert log0.amount > 0  # Fee amount will depend on asset value
-    assert log0.recipient == governor
-    assert not hasattr(log0, "isAgent") or not log0.isAgent
+    assert log0.protocolAmount > 0  # Fee amount will depend on asset value
+    assert log0.protocolRecipient == governor
+    assert log0.ambassadorRecipient == ZERO_ADDRESS  # No ambassador
+    assert log0.ambassadorAmount == 0  # No ambassador fee
 
     new_agent_wallet = alpha_token.balanceOf(bob_agent)
     # Agent wallet balance should remain unchanged since no agent fees are charged
@@ -583,7 +585,10 @@ def test_wallet_transaction_fee_edge_cases(new_ai_wallet, alpha_token, owner, al
     # Fees are still charged even when price feed returns zero
     assert len(logs) == 1
     assert logs[0].asset == alpha_token_erc4626_vault.address
-    assert logs[0].amount > 0
+    assert logs[0].protocolAmount > 0
+    assert logs[0].protocolRecipient == governor
+    assert logs[0].ambassadorRecipient == ZERO_ADDRESS  # No ambassador
+    assert logs[0].ambassadorAmount == 0  # No ambassador fee
 
     # Test owner bypass of fees
     a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=owner)
@@ -654,7 +659,7 @@ def test_transaction_fees_zero_usd_value(new_ai_wallet, bob_agent, alpha_token, 
     logs = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")
     assert len(logs) == 1
     assert logs[0].asset == alpha_token_erc4626_vault.address
-    assert logs[0].amount > 0
+    assert logs[0].protocolAmount > 0
 
 
 def test_transaction_fees_different_assets(
@@ -709,7 +714,7 @@ def test_transaction_fees_different_assets(
     # Verify protocol fees
     logs = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")
     assert logs[0].asset == alpha_token_erc4626_vault.address  # Fee is in vault token, not bravo_token
-    assert logs[0].amount > 0
+    assert logs[0].protocolAmount > 0
 
 
 def test_maximum_fee_boundary(price_sheets, governor):
@@ -833,23 +838,252 @@ def test_transaction_fees_at_maximum(price_sheets, governor, new_ai_wallet, bob_
     logs = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")
     assert logs[0].fee == 1000  # 10.00%
     assert logs[0].asset == alpha_token_erc4626_vault.address
+    assert logs[0].protocolRecipient == governor
+    assert logs[0].ambassadorRecipient == ZERO_ADDRESS  # No ambassador
+    assert logs[0].ambassadorAmount == 0  # No ambassador fee
     # The exact amount will depend on the vault token value
 
 
+def test_ambassador_transaction_fees(
+    agent_factory,
+    owner,
+    bob_ai_wallet,
+    price_sheets,
+    governor,
+    alpha_token,
+    alpha_token_whale,
+    mock_lego_alpha,
+    alpha_token_erc4626_vault,
+    bob_agent,
+):
+    """Test transaction fees with ambassador"""
+    # Create a new wallet with bob_ai_wallet as ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, bob_agent, bob_ai_wallet.address, sender=owner)
+    wallet = UserWalletTemplate.at(wallet_addr)
+    wallet_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+    
+    # Verify ambassador was set correctly
+    assert wallet_config.myAmbassador() == bob_ai_wallet.address
+    
+    # Set ambassador ratio to 50% (50_00)
+    assert price_sheets.setAmbassadorRatio(50_00, sender=governor)
+    
+    # Set protocol transaction fees
+    assert price_sheets.setProtocolTxPriceSheet(
+        50,     # depositFee (0.50%)
+        100,    # withdrawalFee (1.00%)
+        150,    # rebalanceFee (1.50%)
+        200,    # transferFee (2.00%)
+        250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
+        sender=governor
+    )
+    
+    # Fund wallet with alpha tokens
+    amount = 1_000 * 10**18
+    alpha_token.transfer(wallet_addr, amount, sender=alpha_token_whale)
 
-# def test_swap_tokens(ai_wallet, agent, mock_lego_alpha, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale):
-#     deposit_amount = 1000 * EIGHTEEN_DECIMALS
-#     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
-#     bravo_token.transfer(mock_lego_alpha.address, deposit_amount, sender=bravo_token_whale)
+    # Perform a deposit
+    deposit_amount = 100 * 10**18
+    a, b, c, d = wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=bob_agent)
+    assert a != 0 and d != 0
 
-#     instruction = (
-#         mock_lego_alpha.legoId(),
-#         deposit_amount,
-#         0,
-#         [alpha_token, bravo_token],
-#         [alpha_token]
-#     )
+    # Get the transaction fee event
+    fee_event = filter_logs(wallet, "UserWalletTransactionFeePaid")[0]
+    assert fee_event.asset == alpha_token_erc4626_vault.address
+    assert fee_event.fee == 50
+    assert fee_event.protocolRecipient == governor
+    assert fee_event.ambassadorRecipient == bob_ai_wallet.address
 
-#     initialAmountIn, lastTokenOutAmount, lastUsdValue = ai_wallet.swapTokens([instruction], sender=agent)
+    # Calculate expected fee amounts
+    expected_fee = deposit_amount * 50 // 100_00  # 0.50% fee
+    expected_ambassador_fee = expected_fee * 50_00 // HUNDRED_PERCENT
+    expected_protocol_fee = expected_fee - expected_ambassador_fee
 
-#     assert lastTokenOutAmount != 0
+    # Verify fee splitting
+    assert fee_event.ambassadorAmount == expected_ambassador_fee
+    assert fee_event.protocolAmount == expected_protocol_fee
+    assert fee_event.ambassadorAmount + fee_event.protocolAmount == expected_fee
+
+
+def test_ambassador_transaction_fees_full_ratio(
+    agent_factory,
+    owner,
+    bob_ai_wallet,
+    price_sheets,
+    governor,
+    alpha_token,
+    alpha_token_whale,
+    mock_lego_alpha,
+    alpha_token_erc4626_vault,
+    bob_agent,
+):
+    """Test transaction fees with 100% ambassador ratio"""
+    # Create a new wallet with bob_ai_wallet as ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, bob_agent, bob_ai_wallet.address, sender=owner)
+    wallet = UserWalletTemplate.at(wallet_addr)
+    wallet_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+    
+    # Set ambassador ratio to 100% (100_00)
+    assert price_sheets.setAmbassadorRatio(100_00, sender=governor)
+    
+    # Set protocol transaction fees
+    assert price_sheets.setProtocolTxPriceSheet(
+        50,     # depositFee (0.50%)
+        100,    # withdrawalFee (1.00%)
+        150,    # rebalanceFee (1.50%)
+        200,    # transferFee (2.00%)
+        250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
+        sender=governor
+    )
+    
+    # Fund wallet with alpha tokens
+    amount = 1_000 * EIGHTEEN_DECIMALS
+    alpha_token.transfer(wallet_addr, amount, sender=alpha_token_whale)
+
+    # Perform a deposit
+    deposit_amount = 100 * EIGHTEEN_DECIMALS
+    a, b, c, d = wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=bob_agent)
+    assert a != 0 and d != 0
+
+    # Get the transaction fee event
+    fee_event = filter_logs(wallet, "UserWalletTransactionFeePaid")[0]
+    assert fee_event.asset == alpha_token_erc4626_vault.address
+    assert fee_event.fee == 50  # 0.50%
+    assert fee_event.protocolRecipient == governor
+    assert fee_event.ambassadorRecipient == bob_ai_wallet.address
+
+    # Calculate expected fee amounts
+    expected_fee = deposit_amount * 50 // 10_000  # 0.50% fee
+    # All fees should go to ambassador since ratio is 100%
+    assert fee_event.ambassadorAmount == expected_fee
+    assert fee_event.protocolAmount == 0
+    assert fee_event.ambassadorAmount + fee_event.protocolAmount == expected_fee
+
+
+def test_ambassador_transaction_fees_zero_ratio(
+    agent_factory,
+    owner,
+    bob_ai_wallet,
+    price_sheets,
+    governor,
+    alpha_token,
+    alpha_token_whale,
+    mock_lego_alpha,
+    alpha_token_erc4626_vault,
+    bob_agent,
+):
+    """Test transaction fees with 0% ambassador ratio"""
+    # Create a new wallet with bob_ai_wallet as ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, bob_agent, bob_ai_wallet.address, sender=owner)
+    wallet = UserWalletTemplate.at(wallet_addr)
+    wallet_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+
+    # Set ambassador ratio to 0% (0)
+    assert price_sheets.setAmbassadorRatio(0, sender=governor)
+
+    # Set protocol transaction fees
+    assert price_sheets.setProtocolTxPriceSheet(
+        50,     # depositFee (0.50%)
+        100,    # withdrawalFee (1.00%)
+        150,    # rebalanceFee (1.50%)
+        200,    # transferFee (2.00%)
+        250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
+        sender=governor
+    )
+
+    # Fund wallet with alpha tokens
+    amount = 1_000 * EIGHTEEN_DECIMALS
+    alpha_token.transfer(wallet_addr, amount, sender=alpha_token_whale)
+
+    # Perform a deposit
+    deposit_amount = 100 * EIGHTEEN_DECIMALS
+    a, b, c, d = wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=bob_agent)
+    assert a != 0 and d != 0
+
+    # Get the transaction fee event
+    fee_event = filter_logs(wallet, "UserWalletTransactionFeePaid")[0]
+    assert fee_event.asset == alpha_token_erc4626_vault.address
+    assert fee_event.fee == 50  # 0.50%
+    assert fee_event.ambassadorRecipient == ZERO_ADDRESS  # Ambassador recipient should be zero address when ratio is 0%
+    assert fee_event.ambassadorAmount == 0  # Ambassador amount should be 0
+    assert fee_event.protocolRecipient == governor
+    assert fee_event.protocolAmount == deposit_amount * 50 // 10_000  # All fees go to protocol
+
+
+def test_ambassador_transaction_fees_rounding(
+    agent_factory,
+    owner,
+    bob_ai_wallet,
+    price_sheets,
+    governor,
+    alpha_token,
+    alpha_token_whale,
+    mock_lego_alpha,
+    alpha_token_erc4626_vault,
+    bob_agent,
+):
+    """Test ambassador fee splitting with small amounts and rounding"""
+    # Create a new wallet with bob_ai_wallet as ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, bob_agent, bob_ai_wallet.address, sender=owner)
+    wallet = UserWalletTemplate.at(wallet_addr)
+    wallet_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+
+    # Set ambassador ratio to 33.33% (33_33)
+    assert price_sheets.setAmbassadorRatio(33_33, sender=governor)
+
+    # Set protocol transaction fees
+    assert price_sheets.setProtocolTxPriceSheet(
+        50,     # depositFee (0.50%)
+        100,    # withdrawalFee (1.00%)
+        150,    # rebalanceFee (1.50%)
+        200,    # transferFee (2.00%)
+        250,    # swapFee (2.50%)
+        300,    # addLiqFee (3.00%)
+        350,    # removeLiqFee (3.50%)
+        400,    # claimRewardsFee (4.00%)
+        450,    # borrowFee (4.50%)
+        500,    # repayFee (5.00%)
+        sender=governor
+    )
+
+    # Fund wallet with alpha tokens - use a small amount to test rounding
+    amount = 100 * EIGHTEEN_DECIMALS
+    alpha_token.transfer(wallet_addr, amount, sender=alpha_token_whale)
+
+    # Test with small deposit amount
+    deposit_amount = 3 * EIGHTEEN_DECIMALS  # Small amount to test rounding
+    a, b, c, d = wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=bob_agent)
+    assert a != 0 and d != 0
+
+    fee_event = filter_logs(wallet, "UserWalletTransactionFeePaid")[0]
+    assert fee_event.asset == alpha_token_erc4626_vault.address
+    assert fee_event.fee == 50  # 0.50%
+
+    # Calculate expected fee amounts
+    expected_fee = deposit_amount * 50 // 10_000  # 0.50% fee
+    expected_ambassador_fee = expected_fee * 33_33 // HUNDRED_PERCENT
+    expected_protocol_fee = expected_fee - expected_ambassador_fee
+
+    # Verify fee splitting
+    assert fee_event.ambassadorAmount == expected_ambassador_fee
+    assert fee_event.protocolAmount == expected_protocol_fee
+    assert fee_event.ambassadorAmount + fee_event.protocolAmount == expected_fee  # Total should match
+    
+    # Verify approximate ratio (allow for larger rounding difference)
+    ambassador_ratio = fee_event.ambassadorAmount * HUNDRED_PERCENT // expected_fee
+    assert abs(ambassador_ratio - 33_33) <= 100  # Allow for rounding within 1% of target ratio

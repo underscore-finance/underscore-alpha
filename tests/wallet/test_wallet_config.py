@@ -13,7 +13,7 @@ from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, MAX_UINT256
 def test_wallet_config_initialization(ai_wallet, ai_wallet_config, owner, agent):
     assert ai_wallet_config.wallet() == ai_wallet.address
     assert ai_wallet_config.owner() == owner
-    assert ai_wallet_config.apiVersion() == "0.0.2"
+    assert ai_wallet_config.apiVersion() == "0.0.3"
 
     # Check initial agent settings
     agent_info = ai_wallet_config.agentSettings(agent)
@@ -251,4 +251,68 @@ def test_cancel_ownership_change_owner(ai_wallet_config, owner, sally):
     assert log.initiatedBlock != 0
     assert log.confirmBlock != 0
     assert log.cancelledBy == owner
+
+
+def test_ambassador_settings(ai_wallet_config, owner, sally):
+    """Test ambassador settings functionality"""
+    # Test initial state
+    assert ai_wallet_config.canWalletBeAmbassador() == True
+    assert ai_wallet_config.ambassadorForwarder() == ZERO_ADDRESS
+
+    # Test setting canWalletBeAmbassador
+    assert ai_wallet_config.setCanWalletBeAmbassador(False, sender=owner)
+    log = filter_logs(ai_wallet_config, "CanWalletBeAmbassadorSet")[0]
+    assert log.canWalletBeAmbassador == False
+    assert ai_wallet_config.canWalletBeAmbassador() == False
+
+    # Test setting back to True
+    assert ai_wallet_config.setCanWalletBeAmbassador(True, sender=owner)
+    log = filter_logs(ai_wallet_config, "CanWalletBeAmbassadorSet")[0]
+    assert log.canWalletBeAmbassador == True
+    assert ai_wallet_config.canWalletBeAmbassador() == True
+
+    # Test non-owner cannot set
+    with boa.reverts("no perms"):
+        ai_wallet_config.setCanWalletBeAmbassador(False, sender=sally)
+
+    # Test setting same value returns False
+    assert not ai_wallet_config.setCanWalletBeAmbassador(True, sender=owner)
+
+
+def test_ambassador_forwarder(ai_wallet_config, owner, sally, bob_ai_wallet):
+    """Test ambassador forwarder functionality"""
+    # Test initial state
+    assert ai_wallet_config.ambassadorForwarder() == ZERO_ADDRESS
+
+    # Test setting forwarder to non-underscore wallet
+    with boa.reverts():
+        ai_wallet_config.setAmbassadorForwarder(sally, sender=owner)
+
+    # Test setting valid forwarder (bob_ai_wallet should be able to be ambassador by default)
+    assert ai_wallet_config.setAmbassadorForwarder(bob_ai_wallet.address, sender=owner)
+    log = filter_logs(ai_wallet_config, "AmbassadorForwarderSet")[0]
+    assert log.addr == bob_ai_wallet.address
+    assert ai_wallet_config.ambassadorForwarder() == bob_ai_wallet.address
+
+    # Test setting same forwarder returns False
+    assert not ai_wallet_config.setAmbassadorForwarder(bob_ai_wallet.address, sender=owner)
+
+    # Test non-owner cannot set
+    with boa.reverts("no perms"):
+        ai_wallet_config.setAmbassadorForwarder(bob_ai_wallet.address, sender=sally)
+
+
+def test_get_proceeds_addr(ai_wallet_config, owner, bob_ai_wallet):
+    """Test getProceedsAddr functionality"""
+    # Test when cannot be ambassador
+    ai_wallet_config.setCanWalletBeAmbassador(False, sender=owner)
+    assert ai_wallet_config.getProceedsAddr() == ZERO_ADDRESS
+
+    # Test when can be ambassador but no forwarder
+    ai_wallet_config.setCanWalletBeAmbassador(True, sender=owner)
+    assert ai_wallet_config.getProceedsAddr() == ai_wallet_config.wallet()
+
+    # Test when forwarder is set
+    assert ai_wallet_config.setAmbassadorForwarder(bob_ai_wallet.address, sender=owner)
+    assert ai_wallet_config.getProceedsAddr() == bob_ai_wallet.address
 

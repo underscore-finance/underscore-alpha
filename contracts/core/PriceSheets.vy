@@ -130,6 +130,9 @@ event ProtocolRecipientSet:
 event PriceChangeDelaySet:
     delayBlocks: uint256
 
+event AmbassadorRatioSet:
+    ratio: uint256
+
 event PriceSheetsActivated:
     isActivated: bool
 
@@ -146,6 +149,9 @@ agentSubPriceData: public(HashMap[address, SubscriptionInfo]) # agent -> subscri
 pendingAgentSubPrices: public(HashMap[address, PendingSubPrice])
 priceChangeDelay: public(uint256) # number of blocks that must pass before price changes take effect
 
+# ambassador settings
+ambassadorRatio: public(uint256) # ratio of ambassador proceeds
+
 # config
 ADDY_REGISTRY: public(immutable(address))
 isActivated: public(bool)
@@ -159,6 +165,7 @@ MIN_PAY_PERIOD: public(immutable(uint256))
 MAX_PAY_PERIOD: public(immutable(uint256))
 MIN_PRICE_CHANGE_BUFFER: public(immutable(uint256))
 
+HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 MAX_TX_FEE: constant(uint256) = 10_00 # 10.00%
 
 
@@ -176,7 +183,6 @@ def __init__(
     self.isActivated = True
     gov.__init__(empty(address), _addyRegistry, 0, 0)
 
-
     ADDY_REGISTRY = _addyRegistry
     MIN_TRIAL_PERIOD = _minTrialPeriod
     MAX_TRIAL_PERIOD = _maxTrialPeriod
@@ -190,6 +196,7 @@ def __init__(
 def _isRegisteredAgent(_agent: address) -> bool:
     agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
     return staticcall AgentFactory(agentFactory).isAgent(_agent)
+
 
 
 ######################
@@ -494,7 +501,7 @@ def removeProtocolSubPrice() -> bool:
 
 @view
 @external
-def getTransactionFeeData(_user: address, _action: ActionType) -> (uint256, address):
+def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256):
     """
     @notice Get transaction fee data for the protocol
     @dev Returns a tuple containing the fee amount and recipient address for the protocol
@@ -502,8 +509,16 @@ def getTransactionFeeData(_user: address, _action: ActionType) -> (uint256, addr
     @param _action The type of action being performed
     @return feeAmount The fee amount for the action
     @return recipient The recipient address for the fee
+    @return ambassadorRatio The ratio of ambassador proceeds
     """
     # NOTE: in future, we may have different pricing tiers depending on the `_user`
+    return self._getTxFeeForAction(_action, self.protocolTxPriceData), self.protocolRecipient, self.ambassadorRatio
+
+
+@view
+@external
+def getTransactionFeeData(_user: address, _action: ActionType) -> (uint256, address):
+    # NOTE: this function is still used by legacy wallets
     return self._getTxFeeForAction(_action, self.protocolTxPriceData), self.protocolRecipient
 
 
@@ -692,6 +707,25 @@ def setPriceChangeDelay(_delayBlocks: uint256) -> bool:
     assert _delayBlocks == 0 or _delayBlocks >= MIN_PRICE_CHANGE_BUFFER # dev: invalid delay
     self.priceChangeDelay = _delayBlocks
     log PriceChangeDelaySet(delayBlocks=_delayBlocks)
+    return True
+
+
+#######################
+# Ambassador Settings #
+#######################
+
+
+@external
+def setAmbassadorRatio(_ratio: uint256) -> bool:
+    """
+    @notice Set the ratio of ambassador proceeds
+    @dev Only callable by governor
+    @param _ratio The ratio of ambassador proceeds
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    assert _ratio <= HUNDRED_PERCENT # dev: invalid ratio
+    self.ambassadorRatio = _ratio
+    log AmbassadorRatioSet(ratio=_ratio)
     return True
 
 

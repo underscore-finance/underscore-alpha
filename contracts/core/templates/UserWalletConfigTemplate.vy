@@ -10,15 +10,16 @@ exports: own.__interface__
 import contracts.modules.Ownership as own
 from ethereum.ercs import IERC20
 
-interface PriceSheets:
-    def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
-    def getAgentSubPriceData(_agent: address) -> SubscriptionInfo: view
-    def protocolSubPriceData() -> SubscriptionInfo: view
-
 interface UserWallet:
     def trialFundsInitialAmount() -> uint256: view
     def trialFundsAsset() -> address: view
     def walletConfig() -> address: view
+    def canBeAmbassador() -> bool: view
+
+interface PriceSheets:
+    def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
+    def getAgentSubPriceData(_agent: address) -> SubscriptionInfo: view
+    def protocolSubPriceData() -> SubscriptionInfo: view
 
 interface LegoRegistry:
     def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
@@ -169,6 +170,12 @@ event ReserveAssetSet:
     asset: indexed(address)
     amount: uint256
 
+event CanWalletBeAmbassadorSet:
+    canWalletBeAmbassador: bool
+
+event AmbassadorForwarderSet:
+    addr: indexed(address)
+
 event FundsRecovered:
     asset: indexed(address)
     recipient: indexed(address)
@@ -188,6 +195,11 @@ isRecipientAllowed: public(HashMap[address, bool]) # recipient -> is allowed
 pendingWhitelist: public(HashMap[address, PendingWhitelist]) # addr -> pending whitelist
 canTransferToAltOwnerWallets: public(bool)
 
+# ambassador settings
+canWalletBeAmbassador: public(bool)
+ambassadorForwarder: public(address)
+myAmbassador: public(address) # cannot be edited -- inviter of THIS user wallet
+
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
@@ -196,7 +208,7 @@ ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
-API_VERSION: constant(String[28]) = "0.0.2"
+API_VERSION: constant(String[28]) = "0.0.3"
 
 ADDY_REGISTRY: public(immutable(address))
 
@@ -205,6 +217,7 @@ ADDY_REGISTRY: public(immutable(address))
 def __init__(
     _owner: address,
     _initialAgent: address,
+    _ambassador: address,
     _addyRegistry: address,
     _minOwnerChangeDelay: uint256,
     _maxOwnerChangeDelay: uint256,
@@ -214,6 +227,7 @@ def __init__(
     @dev Sets up the config with owner, registry, and optional initial agent. Also initializes protocol subscription.
     @param _owner Address of the contract owner who will have administrative privileges
     @param _initialAgent Address of the initial agent to be set up (can be empty)
+    @param _ambassador Address of the ambassador who invited the user (can be empty)
     @param _addyRegistry Address of the registry contract that stores core protocol addresses
     @param _minOwnerChangeDelay Minimum delay in blocks required for ownership changes
     @param _maxOwnerChangeDelay Maximum delay in blocks allowed for ownership changes
@@ -250,6 +264,11 @@ def __init__(
     if subInfo.usdValue != 0:
         protocolSub.paidThroughBlock = block.number + subInfo.trialPeriod
     self.protocolSub = protocolSub
+
+    # ambassador settings
+    self.canWalletBeAmbassador = True
+    if _ambassador != empty(address):
+        self.myAmbassador = _ambassador
 
     self.canTransferToAltOwnerWallets = True
 
@@ -989,6 +1008,75 @@ def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
         self.reserveAssets[asset] = amount
         log ReserveAssetSet(asset=asset, amount=amount)
 
+    return True
+
+
+########################
+# Ambassador Settings #
+########################
+
+
+@view
+@external
+def getProceedsAddr() -> address:
+    """
+    @notice Gets the address where proceeds should be forwarded to (if this wallet is an ambassador)
+    @dev Returns:
+        - empty address if wallet cannot be ambassador
+        - forwarder address if set
+        - wallet address as fallback
+    @return address The address where proceeds should be sent
+    """
+    # cannot get proceeds
+    if not self.canWalletBeAmbassador:
+        return empty(address)
+    
+    # forwarder set
+    forwarder: address = self.ambassadorForwarder
+    if forwarder != empty(address):
+        return forwarder
+
+    # return wallet
+    return self.wallet
+
+
+@nonreentrant
+@external
+def setAmbassadorForwarder(_addr: address) -> bool:
+    """
+    @notice Sets the forwarder address for the ambassador (where proceeds will be sent)
+    @dev Can only be called by the owner
+    @param _addr The address to forward proceeds to
+    @return bool True if the forwarder was successfully set
+    """
+    assert msg.sender == own.owner # dev: no perms
+    if self.ambassadorForwarder == _addr or _addr == self.wallet:
+        return False
+
+    # make sure valid underscore wallet
+    agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
+    if not staticcall UserWallet(_addr).canBeAmbassador() or not staticcall AgentFactory(agentFactory).isUserWallet(_addr):
+        return False
+
+    self.ambassadorForwarder = _addr
+    log AmbassadorForwarderSet(addr=_addr)
+    return True
+
+
+@nonreentrant
+@external
+def setCanWalletBeAmbassador(_canWalletBeAmbassador: bool) -> bool:
+    """
+    @notice Sets the flag for allowing the wallet to be an ambassador
+    @dev Can only be called by the owner
+    @param _canWalletBeAmbassador The new flag value (True or False)
+    @return bool True if the flag was successfully set
+    """
+    assert msg.sender == own.owner # dev: no perms
+    if self.canWalletBeAmbassador == _canWalletBeAmbassador:
+        return False
+    self.canWalletBeAmbassador = _canWalletBeAmbassador
+    log CanWalletBeAmbassadorSet(canWalletBeAmbassador=_canWalletBeAmbassador)
     return True
 
 

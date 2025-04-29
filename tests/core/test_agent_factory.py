@@ -3,7 +3,7 @@ import boa
 
 from conf_utils import filter_logs
 from constants import ZERO_ADDRESS
-from contracts.core.templates import UserWalletTemplate
+from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 from contracts.core import AgentFactory
 from utils.BluePrint import PARAMS
 
@@ -28,10 +28,10 @@ def test_init_with_zero_address(lego_registry, weth):
     new_agent_template = boa.load_partial("contracts/core/templates/AgentTemplate.vy").deploy_as_blueprint()
 
     with boa.reverts("invalid addrs"):
-        AgentFactory.deploy(ZERO_ADDRESS, weth, new_wallet_template, new_wallet_config_template, new_agent_template, 1, 2)
+        AgentFactory.deploy(ZERO_ADDRESS, weth, new_wallet_template, new_wallet_config_template, new_agent_template, 1, 2, [])
     
     with boa.reverts("invalid addrs"):
-        AgentFactory.deploy(lego_registry.address, ZERO_ADDRESS, new_wallet_template, new_wallet_config_template, new_agent_template, 1, 2)
+        AgentFactory.deploy(lego_registry.address, ZERO_ADDRESS, new_wallet_template, new_wallet_config_template, new_agent_template, 1, 2, [])
 
 
 def test_create_user_wallet(agent_factory, owner, agent):
@@ -375,4 +375,53 @@ def test_critical_cancel_permissions(agent_factory, governor, bob, sally):
     
     # Governor can always cancel critical actions
     assert agent_factory.canCancelCriticalAction(governor)
+
+
+def test_create_wallet_with_ambassador(agent_factory, owner, agent, bob_ai_wallet):
+    """Test creating a wallet with a valid ambassador"""
+    # Create wallet with ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, agent, bob_ai_wallet.address, sender=owner)
+    assert wallet_addr != ZERO_ADDRESS
+
+    # Verify ambassador was set in config
+    wallet = UserWalletTemplate.at(wallet_addr)
+    wallet_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+    assert wallet_config.myAmbassador() == bob_ai_wallet.address
+
+    log = filter_logs(agent_factory, "UserWalletCreated")[0]
+    assert log.mainAddr == wallet_addr
+    assert log.owner == owner
+    assert log.agent == agent
+    assert log.creator == owner
+
+
+def test_create_wallet_with_non_underscore_ambassador(agent_factory, owner, agent, sally):
+    """Test creating a wallet with an invalid ambassador (non-underscore wallet)"""
+    # Try to create wallet with non-underscore wallet as ambassador
+    with boa.reverts("ambassador must be Underscore wallet"):
+        agent_factory.createUserWallet(owner, agent, sally)
+
+
+def test_create_wallet_with_non_ambassador_wallet(agent_factory, owner, agent, bob_ai_wallet, bob):
+    """Test creating a wallet with a wallet that cannot be ambassador"""
+    # Set bob_ai_wallet to not be able to be ambassador
+    bob_config = UserWalletConfigTemplate.at(bob_ai_wallet.walletConfig())
+    bob_config.setCanWalletBeAmbassador(False, sender=bob)
+    assert not bob_ai_wallet.canBeAmbassador()
+
+    # Create wallet - should succeed but ambassador should be empty since canBeAmbassador is false
+    wallet_addr = agent_factory.createUserWallet(owner, agent, bob_ai_wallet.address, sender=owner)
+    assert wallet_addr != ZERO_ADDRESS
+
+    # Verify ambassador was NOT set in config
+    wallet = UserWalletTemplate.at(wallet_addr)
+    wallet_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+    assert wallet_config.myAmbassador() == ZERO_ADDRESS
+
+    log = filter_logs(agent_factory, "UserWalletCreated")[0]
+    assert log.mainAddr == wallet_addr
+    assert log.owner == owner
+    assert log.agent == agent
+    assert log.creator == owner
+    assert log.ambassador == ZERO_ADDRESS  # Ambassador should be empty since canBeAmbassador is false
 
