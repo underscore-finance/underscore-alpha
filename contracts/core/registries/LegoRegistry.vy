@@ -46,6 +46,12 @@ def __init__(
     registry.__init__(_minLegoChangeDelay, _maxLegoChangeDelay, "LegoRegistry.vy")
 
 
+@view
+@external
+def isYieldLego(_legoId: uint256) -> bool:
+    return self.legoIdToType[_legoId] == LegoType.YIELD_OPP
+
+
 #################
 # Register Lego #
 #################
@@ -368,6 +374,27 @@ def getUnderlyingForUser(_user: address, _asset: address) -> uint256:
                 totalDeposited += staticcall LegoYield(legoAddr).getUnderlyingAmount(vaultToken, vaultTokenBal)
 
     return totalDeposited
+
+
+@view
+@external
+def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address):
+    """
+    @notice Get the lego ID and address for a given vault token
+    @dev Returns (0, empty(address)) if vault token is not registered
+    @param _vaultToken The address of the vault token to query
+    @return The lego ID and address
+    """
+    numLegos: uint256 = registry.numAddys
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoType: LegoType = self.legoIdToType[i]
+        if legoType != LegoType.YIELD_OPP:
+            continue
+
+        legoAddr: address = registry.addyInfo[i].addr
+        if staticcall LegoYield(legoAddr).isVaultToken(_vaultToken):
+            return i, legoAddr
+    return 0, empty(address)
 
 
 ###############
