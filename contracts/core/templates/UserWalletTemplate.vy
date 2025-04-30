@@ -395,7 +395,7 @@ def _depositTokens(
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # book keeping
-    self._updateVaultTokenAmountOnDeposit(vaultToken, vaultTokenAmountReceived, _asset, assetAmountDeposited)
+    self._updateVaultTokenAmountOnDeposit(vaultToken, vaultTokenAmountReceived, assetAmountDeposited)
 
     # handle tx fees
     if _shouldChargeFees:
@@ -409,7 +409,6 @@ def _depositTokens(
 def _updateVaultTokenAmountOnDeposit(
     _vaultToken: address,
     _vaultTokenAmountReceived: uint256,
-    _asset: address,
     _assetAmountDeposited: uint256,
 ):
     if _vaultToken == empty(address):
@@ -484,8 +483,9 @@ def _withdrawTokens(
     # if actual asset is vault token (withdrawal from Ripe, when used as collateral)
     self._updateVaultTokenAmountOnEntry(_asset, assetAmountReceived, _cd.legoRegistry)
 
-    # if doing normal yield opp withdrawal
-    self._updateVaultTokenAmountOnWithdrawal(_vaultToken, vaultTokenAmountBurned, _asset, assetAmountReceived)
+    # check for profits
+    amountRemoved: uint256 = self._updateVaultTokenAmountOnWithdrawal(_vaultToken, vaultTokenAmountBurned, assetAmountReceived)
+    assetAmountReceived -= amountRemoved
 
     # zero out approvals
     if _vaultToken != empty(address):
@@ -523,13 +523,42 @@ def _updateVaultTokenAmountOnEntry(
 def _updateVaultTokenAmountOnWithdrawal(
     _vaultToken: address,
     _vaultTokenAmountBurned: uint256,
-    _asset: address,
     _assetAmountReceived: uint256,
-):
+) -> uint256:
     if _vaultToken == empty(address) or not self.isVaultToken[_vaultToken]:
-        return
+        return 0
 
-    # TODO: need to implement this
+    trackedVaultTokenAmount: uint256 = self.vaultTokenAmounts[_vaultToken]
+    adjAssetAmountReceived: uint256 = _assetAmountReceived
+    assetProfitAmount: uint256 = 0
+
+    # handle vault tokens
+    shouldZeroOut: bool = False
+    if _vaultTokenAmountBurned > trackedVaultTokenAmount:
+        self.vaultTokenAmounts[_vaultToken] = 0
+        adjAssetAmountReceived = _assetAmountReceived * trackedVaultTokenAmount // _vaultTokenAmountBurned
+        shouldZeroOut = True
+    else:
+        self.vaultTokenAmounts[_vaultToken] -= _vaultTokenAmountBurned
+
+    # handle asset tracking
+    trackedAssetAmount: uint256 = self.depositedAmounts[_vaultToken]
+    if adjAssetAmountReceived > trackedAssetAmount:
+        assetProfitAmount = adjAssetAmountReceived - trackedAssetAmount
+        self.depositedAmounts[_vaultToken] = 0
+    elif shouldZeroOut:
+        self.depositedAmounts[_vaultToken] = 0
+    else:
+        self.depositedAmounts[_vaultToken] -= adjAssetAmountReceived
+
+    # handle profit
+    amountRemoved: uint256 = 0
+    if assetProfitAmount != 0:
+        pass
+        # amountRemoved = 
+        # TODO: handle profit
+
+    return amountRemoved
 
 
 #############
