@@ -381,7 +381,7 @@ def getUnderlyingForUser(_user: address, _asset: address) -> uint256:
 def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address):
     """
     @notice Get the lego ID and address for a given vault token
-    @dev Returns (0, empty(address)) if vault token is not registered
+    @dev Returns (0, empty(address)) if vault token is not valid
     @param _vaultToken The address of the vault token to query
     @return The lego ID and address
     """
@@ -394,7 +394,30 @@ def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address):
         legoAddr: address = registry.addyInfo[i].addr
         if staticcall LegoYield(legoAddr).isVaultToken(_vaultToken):
             return i, legoAddr
+
     return 0, empty(address)
+
+
+@view
+@external
+def isVaultToken(_vaultToken: address) -> bool:
+    """
+    @notice Check if a given address is a registered vault token
+    @dev Returns False if not a vault token
+    @param _vaultToken The address of the vault token to query
+    @return True if the address is a vault token, False otherwise
+    """
+    numLegos: uint256 = registry.numAddys
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoType: LegoType = self.legoIdToType[i]
+        if legoType != LegoType.YIELD_OPP:
+            continue
+
+        legoAddr: address = registry.addyInfo[i].addr
+        if staticcall LegoYield(legoAddr).isVaultToken(_vaultToken):
+            return True
+
+    return False
 
 
 ###############
