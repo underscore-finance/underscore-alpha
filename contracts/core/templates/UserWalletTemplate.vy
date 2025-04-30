@@ -29,6 +29,10 @@ interface LegoRegistry:
     def getUnderlyingAsset(_vaultToken: address) -> address: view
     def getLegoAddr(_legoId: uint256) -> address: view
 
+interface PriceSheets:
+    def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256): view
+    def getYieldProfitShareFeeAndData() -> (uint256, uint256, address): view
+
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
     def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -36,9 +40,6 @@ interface OracleRegistry:
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
-
-interface PriceSheets:
-    def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256): view
 
 interface AgentFactory:
     def agentBlacklist(_agentAddr: address) -> bool: view
@@ -115,6 +116,14 @@ event UserWalletWithdrawal:
     legoId: uint256
     legoAddr: address
     isSignerAgent: bool
+
+event UserWalletYieldProfitShared:
+    asset: indexed(address)
+    protocolRecipient: indexed(address)
+    protocolAmount: uint256
+    ambassadorRecipient: indexed(address)
+    ambassadorAmount: uint256
+    yieldProfitShareFee: uint256
 
 event UserWalletSwap:
     signer: indexed(address)
@@ -484,7 +493,7 @@ def _withdrawTokens(
     self._updateVaultTokenAmountOnEntry(_asset, assetAmountReceived, _cd.legoRegistry)
 
     # check for profits
-    amountRemoved: uint256 = self._updateVaultTokenAmountOnWithdrawal(_vaultToken, vaultTokenAmountBurned, assetAmountReceived)
+    amountRemoved: uint256 = self._updateVaultTokenAmountOnWithdrawal(_vaultToken, vaultTokenAmountBurned, _asset, assetAmountReceived, _cd.priceSheets)
     assetAmountReceived -= amountRemoved
 
     # zero out approvals
@@ -523,7 +532,9 @@ def _updateVaultTokenAmountOnEntry(
 def _updateVaultTokenAmountOnWithdrawal(
     _vaultToken: address,
     _vaultTokenAmountBurned: uint256,
+    _asset: address,
     _assetAmountReceived: uint256,
+    _priceSheets: address,
 ) -> uint256:
     if _vaultToken == empty(address) or not self.isVaultToken[_vaultToken]:
         return 0
@@ -551,13 +562,40 @@ def _updateVaultTokenAmountOnWithdrawal(
     else:
         self.depositedAmounts[_vaultToken] -= adjAssetAmountReceived
 
-    # handle profit
-    amountRemoved: uint256 = 0
-    if assetProfitAmount != 0:
-        pass
-        # amountRemoved = 
-        # TODO: handle profit
+    if assetProfitAmount == 0:
+        return 0
 
+    # handle profit
+    yieldProfitShareFee: uint256 = 0
+    ambassadorRatio: uint256 = 0
+    protocolRecipient: address = empty(address)
+    yieldProfitShareFee, ambassadorRatio, protocolRecipient = staticcall PriceSheets(_priceSheets).getYieldProfitShareFeeAndData()
+    if yieldProfitShareFee == 0:
+        return 0
+
+    # calc profit share
+    totalProfitShare: uint256 = min(assetProfitAmount * yieldProfitShareFee // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
+    if totalProfitShare == 0:
+        return 0
+
+    protocolAmount: uint256 = totalProfitShare
+    ambassadorAmount: uint256 = 0
+    amountRemoved: uint256 = 0
+
+    # pay ambassador proceeds
+    ambassadorRecipient: address = empty(address)
+    if ambassadorRatio != 0:
+        ambassadorAmount, ambassadorRecipient = self._payAmbassadorTxFee(_asset, protocolAmount, ambassadorRatio)
+        if ambassadorAmount != 0:
+            protocolAmount = min(protocolAmount - ambassadorAmount, staticcall IERC20(_asset).balanceOf(self))
+            amountRemoved += ambassadorAmount
+
+    # pay protocol proceeds
+    if protocolAmount != 0 and protocolRecipient != empty(address):
+        assert extcall IERC20(_asset).transfer(protocolRecipient, protocolAmount, default_return_value=True) # dev: protocol tx fee payment failed
+        amountRemoved += protocolAmount
+
+    log UserWalletYieldProfitShared(asset=_asset, protocolRecipient=protocolRecipient, protocolAmount=protocolAmount, ambassadorRecipient=ambassadorRecipient, ambassadorAmount=ambassadorAmount, yieldProfitShareFee=yieldProfitShareFee)
     return amountRemoved
 
 

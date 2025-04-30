@@ -124,6 +124,9 @@ event ProtocolTxPriceSheetRemoved:
     borrowFee: uint256
     repayFee: uint256
 
+event YieldProfitShareFeeSet:
+    fee: uint256
+
 event ProtocolRecipientSet:
     recipient: indexed(address)
 
@@ -135,6 +138,9 @@ event AmbassadorRatioSet:
 
 event PriceSheetsActivated:
     isActivated: bool
+
+# yield profit
+yieldProfitShareFee: public(uint256)
 
 # protocol pricing
 protocolRecipient: public(address) # protocol recipient
@@ -668,6 +674,37 @@ def removeProtocolTxPriceSheet() -> bool:
     prevInfo: TxPriceSheet = self.protocolTxPriceData
     self.protocolTxPriceData = empty(TxPriceSheet)
     log ProtocolTxPriceSheetRemoved(depositFee=prevInfo.depositFee, withdrawalFee=prevInfo.withdrawalFee, rebalanceFee=prevInfo.rebalanceFee, transferFee=prevInfo.transferFee, swapFee=prevInfo.swapFee, addLiqFee=prevInfo.addLiqFee, removeLiqFee=prevInfo.removeLiqFee, claimRewardsFee=prevInfo.claimRewardsFee, borrowFee=prevInfo.borrowFee, repayFee=prevInfo.repayFee)
+    return True
+
+
+######################
+# Yield Profit Share #
+######################
+
+
+@view
+@external
+def getYieldProfitShareFeeAndData() -> (uint256, uint256, address):
+    """
+    @notice Get the profit share fee and ambassador ratio
+    @return The profit share fee
+    @return The ambassador ratio
+    @return The protocol recipient
+    """
+    return self.yieldProfitShareFee, self.ambassadorRatio, self.protocolRecipient
+
+
+@external
+def setYieldProfitShareFee(_fee: uint256) -> bool:
+    """
+    @notice Set the profit share fee
+    @dev Only callable by governor
+    @param _fee The fee percentage for profit share
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    assert _fee <= HUNDRED_PERCENT # dev: invalid fee
+    self.yieldProfitShareFee = _fee
+    log YieldProfitShareFeeSet(fee=_fee)
     return True
 
 
