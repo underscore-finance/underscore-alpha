@@ -34,16 +34,9 @@ flag ActionType:
     REPAY
 
 struct TxPriceSheet:
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
+    yieldFee: uint256
     swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
     claimRewardsFee: uint256
-    borrowFee: uint256
-    repayFee: uint256
 
 struct SubscriptionInfo:
     asset: address
@@ -101,31 +94,14 @@ event AgentSubPricingEnabled:
     isEnabled: bool
 
 event ProtocolTxPriceSheetSet:
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
+    yieldFee: uint256
     swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
     claimRewardsFee: uint256
-    borrowFee: uint256
-    repayFee: uint256
 
 event ProtocolTxPriceSheetRemoved:
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
+    yieldFee: uint256
     swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
     claimRewardsFee: uint256
-    borrowFee: uint256
-    repayFee: uint256
-
-event YieldProfitShareFeeSet:
-    fee: uint256
 
 event ProtocolRecipientSet:
     recipient: indexed(address)
@@ -138,9 +114,6 @@ event AmbassadorRatioSet:
 
 event PriceSheetsActivated:
     isActivated: bool
-
-# yield profit
-yieldProfitShareFee: public(uint256)
 
 # protocol pricing
 protocolRecipient: public(address) # protocol recipient
@@ -172,7 +145,7 @@ MAX_PAY_PERIOD: public(immutable(uint256))
 MIN_PRICE_CHANGE_BUFFER: public(immutable(uint256))
 
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
-MAX_TX_FEE: constant(uint256) = 10_00 # 10.00%
+MAX_TX_FEE: constant(uint256) = 20_00 # 20.00%
 
 
 @deploy
@@ -202,7 +175,6 @@ def __init__(
 def _isRegisteredAgent(_agent: address) -> bool:
     agentFactory: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(AGENT_FACTORY_ID)
     return staticcall AgentFactory(agentFactory).isAgent(_agent)
-
 
 
 ######################
@@ -531,26 +503,12 @@ def getTransactionFeeData(_user: address, _action: ActionType) -> (uint256, addr
 @view
 @internal
 def _getTxFeeForAction(_action: ActionType, _prices: TxPriceSheet) -> uint256:
-    if _action == ActionType.DEPOSIT:
-        return _prices.depositFee
-    elif _action == ActionType.WITHDRAWAL:
-        return _prices.withdrawalFee
-    elif _action == ActionType.REBALANCE:
-        return _prices.rebalanceFee
-    elif _action == ActionType.TRANSFER:
-        return _prices.transferFee
+    if _action == ActionType.WITHDRAWAL:
+        return _prices.yieldFee
     elif _action == ActionType.SWAP:
         return _prices.swapFee
-    elif _action == ActionType.ADD_LIQ:
-        return _prices.addLiqFee
-    elif _action == ActionType.REMOVE_LIQ:
-        return _prices.removeLiqFee
     elif _action == ActionType.CLAIM_REWARDS:
         return _prices.claimRewardsFee
-    elif _action == ActionType.BORROW:
-        return _prices.borrowFee
-    elif _action == ActionType.REPAY:
-        return _prices.repayFee
     else:
         return 0
 
@@ -561,101 +519,59 @@ def _getTxFeeForAction(_action: ActionType, _prices: TxPriceSheet) -> uint256:
 @view
 @external
 def isValidTxPriceSheet(
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
+    _yieldFee: uint256,
     _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
     _claimRewardsFee: uint256,
-    _borrowFee: uint256,
-    _repayFee: uint256,
 ) -> bool:
     """
     @notice Check if transaction price sheet parameters are valid
     @dev Validates fee percentages against constraints
-    @param _depositFee The fee percentage for deposits
-    @param _withdrawalFee The fee percentage for withdrawals
-    @param _rebalanceFee The fee percentage for rebalances
-    @param _transferFee The fee percentage for transfers
+    @param _yieldFee The fee percentage for yield profit
     @param _swapFee The fee percentage for swaps
-    @param _addLiqFee The fee percentage for adding liquidity
-    @param _removeLiqFee The fee percentage for removing liquidity
     @param _claimRewardsFee The fee percentage for claiming rewards
-    @param _borrowFee The fee percentage for borrowing
-    @param _repayFee The fee percentage for repaying
     @return bool True if all parameters are valid
     """
-    return self._isValidTxPriceSheet(_depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, _claimRewardsFee, _borrowFee, _repayFee)
+    return self._isValidTxPriceSheet(_yieldFee, _swapFee, _claimRewardsFee)
 
 
 @view
 @internal
 def _isValidTxPriceSheet(
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
+    _yieldFee: uint256,
     _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
     _claimRewardsFee: uint256,
-    _borrowFee: uint256,
-    _repayFee: uint256,
 ) -> bool:
-    return _depositFee <= MAX_TX_FEE and _withdrawalFee <= MAX_TX_FEE and _rebalanceFee <= MAX_TX_FEE and _transferFee <= MAX_TX_FEE and _swapFee <= MAX_TX_FEE and _addLiqFee <= MAX_TX_FEE and _removeLiqFee <= MAX_TX_FEE and _claimRewardsFee <= MAX_TX_FEE and _borrowFee <= MAX_TX_FEE and _repayFee <= MAX_TX_FEE
+    return _yieldFee <= MAX_TX_FEE and _swapFee <= MAX_TX_FEE and _claimRewardsFee <= MAX_TX_FEE
 
 
 @external
 def setProtocolTxPriceSheet(
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
+    _yieldFee: uint256,
     _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
     _claimRewardsFee: uint256,
-    _borrowFee: uint256,
-    _repayFee: uint256,
 ) -> bool:
     """
     @notice Set transaction price sheet for the protocol
     @dev Only callable by governor
-    @param _depositFee The fee percentage for deposits
-    @param _withdrawalFee The fee percentage for withdrawals
-    @param _rebalanceFee The fee percentage for rebalances
-    @param _transferFee The fee percentage for transfers
+    @param _yieldFee The fee percentage for yield profit
     @param _swapFee The fee percentage for swaps
-    @param _addLiqFee The fee percentage for adding liquidity
-    @param _removeLiqFee The fee percentage for removing liquidity
     @param _claimRewardsFee The fee percentage for claiming rewards
-    @param _borrowFee The fee percentage for borrowing
-    @param _repayFee The fee percentage for repaying
     @return bool True if protocol price sheet was set successfully
     """
     assert gov._canGovern(msg.sender) # dev: no perms
 
     # validation
-    if not self._isValidTxPriceSheet(_depositFee, _withdrawalFee, _rebalanceFee, _transferFee, _swapFee, _addLiqFee, _removeLiqFee, _claimRewardsFee, _borrowFee, _repayFee):
+    if not self._isValidTxPriceSheet(_yieldFee, _swapFee, _claimRewardsFee):
         return False
 
     # save data
     self.protocolTxPriceData = TxPriceSheet(
-        depositFee=_depositFee,
-        withdrawalFee=_withdrawalFee,
-        rebalanceFee=_rebalanceFee,
-        transferFee=_transferFee,
+        yieldFee=_yieldFee,
         swapFee=_swapFee,
-        addLiqFee=_addLiqFee,
-        removeLiqFee=_removeLiqFee,
         claimRewardsFee=_claimRewardsFee,
-        borrowFee=_borrowFee,
-        repayFee=_repayFee,
     )
 
-    log ProtocolTxPriceSheetSet(depositFee=_depositFee, withdrawalFee=_withdrawalFee, rebalanceFee=_rebalanceFee, transferFee=_transferFee, swapFee=_swapFee, addLiqFee=_addLiqFee, removeLiqFee=_removeLiqFee, claimRewardsFee=_claimRewardsFee, borrowFee=_borrowFee, repayFee=_repayFee)
+    log ProtocolTxPriceSheetSet(yieldFee=_yieldFee, swapFee=_swapFee, claimRewardsFee=_claimRewardsFee)
     return True
 
 
@@ -673,38 +589,7 @@ def removeProtocolTxPriceSheet() -> bool:
 
     prevInfo: TxPriceSheet = self.protocolTxPriceData
     self.protocolTxPriceData = empty(TxPriceSheet)
-    log ProtocolTxPriceSheetRemoved(depositFee=prevInfo.depositFee, withdrawalFee=prevInfo.withdrawalFee, rebalanceFee=prevInfo.rebalanceFee, transferFee=prevInfo.transferFee, swapFee=prevInfo.swapFee, addLiqFee=prevInfo.addLiqFee, removeLiqFee=prevInfo.removeLiqFee, claimRewardsFee=prevInfo.claimRewardsFee, borrowFee=prevInfo.borrowFee, repayFee=prevInfo.repayFee)
-    return True
-
-
-######################
-# Yield Profit Share #
-######################
-
-
-@view
-@external
-def getYieldProfitShareFeeAndData() -> (uint256, uint256, address):
-    """
-    @notice Get the profit share fee and ambassador ratio
-    @return The profit share fee
-    @return The ambassador ratio
-    @return The protocol recipient
-    """
-    return self.yieldProfitShareFee, self.ambassadorRatio, self.protocolRecipient
-
-
-@external
-def setYieldProfitShareFee(_fee: uint256) -> bool:
-    """
-    @notice Set the profit share fee
-    @dev Only callable by governor
-    @param _fee The fee percentage for profit share
-    """
-    assert gov._canGovern(msg.sender) # dev: no perms
-    assert _fee <= HUNDRED_PERCENT # dev: invalid fee
-    self.yieldProfitShareFee = _fee
-    log YieldProfitShareFeeSet(fee=_fee)
+    log ProtocolTxPriceSheetRemoved(yieldFee=prevInfo.yieldFee, swapFee=prevInfo.swapFee, claimRewardsFee=prevInfo.claimRewardsFee)
     return True
 
 

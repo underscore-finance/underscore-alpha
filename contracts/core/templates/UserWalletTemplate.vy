@@ -30,10 +30,6 @@ interface LegoRegistry:
     def isVaultToken(_vaultToken: address) -> bool: view
     def getLegoAddr(_legoId: uint256) -> address: view
 
-interface PriceSheets:
-    def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256): view
-    def getYieldProfitShareFeeAndData() -> (uint256, uint256, address): view
-
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
     def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
@@ -41,6 +37,9 @@ interface OracleRegistry:
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
+
+interface PriceSheets:
+    def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256): view
 
 interface AgentFactory:
     def agentBlacklist(_agentAddr: address) -> bool: view

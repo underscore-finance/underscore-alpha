@@ -1,7 +1,7 @@
 import pytest
 import boa
 
-from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, DEPOSIT_UINT256, WITHDRAWAL_UINT256, REBALANCE_UINT256, TRANSFER_UINT256, SWAP_UINT256, ADD_LIQ_UINT256, REMOVE_LIQ_UINT256, CLAIM_REWARDS_UINT256, BORROW_UINT256, REPAY_UINT256
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS, WITHDRAWAL_UINT256, SWAP_UINT256, CLAIM_REWARDS_UINT256
 from conf_utils import filter_logs
 
 
@@ -200,153 +200,74 @@ def test_transaction_price_validation(price_sheets):
     """Test transaction price validation"""
     # Valid case
     assert price_sheets.isValidTxPriceSheet(
-        100,    # depositFee
-        200,    # withdrawalFee
-        300,    # rebalanceFee
-        400,    # transferFee
-        500,    # swapFee
-        600,    # addLiqFee
-        700,    # removeLiqFee
-        800,    # claimRewardsFee
-        900,    # borrowFee
-        1000    # repayFee
+        100,    # yieldFee
+        200,    # swapFee
+        300,    # claimRewardsFee
     )
     
-    # Invalid cases - fees too high (>10.00%)
+    # Invalid cases - fees too high (>20.00%)
     assert not price_sheets.isValidTxPriceSheet(
-        1001,   # depositFee too high (>10.00%)
+        2001,   # yieldFee too high (>20.00%)
         200,
-        300,
-        400,
-        500,
-        600,
-        700,
-        800,
-        900,
-        1000
+        300
+    )
+    
+    assert not price_sheets.isValidTxPriceSheet(
+        100,
+        2001,   # swapFee too high (>20.00%)
+        300
     )
     
     assert not price_sheets.isValidTxPriceSheet(
         100,
         200,
-        300,
-        400,
-        500,
-        600,
-        700,
-        800,
-        900,
-        1001    # repayFee too high (>10.00%)
+        2001    # claimRewardsFee too high (>20.00%)
     )
 
 
 def test_protocol_transaction_price(price_sheets, governor, bob):
     """Test protocol transaction price management"""
-
     # Set valid price sheet
     assert price_sheets.setProtocolTxPriceSheet(
-        50,     # depositFee (0.50%)
-        100,    # withdrawalFee (1.00%)
-        150,    # rebalanceFee (1.50%)
-        200,    # transferFee (2.00%)
-        250,    # swapFee (2.50%)
-        300,    # addLiqFee (3.00%)
-        350,    # removeLiqFee (3.50%)
-        400,    # claimRewardsFee (4.00%)
-        450,    # borrowFee (4.50%)
-        500,    # repayFee (5.00%)
+        100,    # yieldFee (1.00%)
+        200,    # swapFee (2.00%)
+        300,    # claimRewardsFee (3.00%)
         sender=governor
     )
     log = filter_logs(price_sheets, "ProtocolTxPriceSheetSet")[0]
-    assert log.depositFee == 50
-    assert log.withdrawalFee == 100
-    assert log.rebalanceFee == 150
-    assert log.transferFee == 200
-    assert log.swapFee == 250
-    assert log.addLiqFee == 300
-    assert log.removeLiqFee == 350
-    assert log.claimRewardsFee == 400
-    assert log.borrowFee == 450
-    assert log.repayFee == 500
+    assert log.yieldFee == 100
+    assert log.swapFee == 200
+    assert log.claimRewardsFee == 300
     
     sheet = price_sheets.protocolTxPriceData()
-    assert sheet.depositFee == 50
-    assert sheet.withdrawalFee == 100
-    assert sheet.rebalanceFee == 150
-    assert sheet.transferFee == 200
-    assert sheet.swapFee == 250
-    assert sheet.addLiqFee == 300
-    assert sheet.removeLiqFee == 350
-    assert sheet.claimRewardsFee == 400
-    assert sheet.borrowFee == 450
-    assert sheet.repayFee == 500
+    assert sheet.yieldFee == 100
+    assert sheet.swapFee == 200
+    assert sheet.claimRewardsFee == 300
     
     # Test fee calculations
-    fee, recipient = price_sheets.getTransactionFeeData(bob, DEPOSIT_UINT256)
-    assert fee == 50  # 0.50%
-    assert recipient == price_sheets.protocolRecipient()
-    
     fee, recipient = price_sheets.getTransactionFeeData(bob, WITHDRAWAL_UINT256)
     assert fee == 100  # 1.00%
     assert recipient == price_sheets.protocolRecipient()
     
-    fee, recipient = price_sheets.getTransactionFeeData(bob, REBALANCE_UINT256)
-    assert fee == 150  # 1.50%
-    assert recipient == price_sheets.protocolRecipient()
-    
-    fee, recipient = price_sheets.getTransactionFeeData(bob, TRANSFER_UINT256)
+    fee, recipient = price_sheets.getTransactionFeeData(bob, SWAP_UINT256)
     assert fee == 200  # 2.00%
     assert recipient == price_sheets.protocolRecipient()
     
-    fee, recipient = price_sheets.getTransactionFeeData(bob, SWAP_UINT256)
-    assert fee == 250  # 2.50%
-    assert recipient == price_sheets.protocolRecipient()
-
-    fee, recipient = price_sheets.getTransactionFeeData(bob, ADD_LIQ_UINT256)
-    assert fee == 300  # 3.00%
-    assert recipient == price_sheets.protocolRecipient()
-
-    fee, recipient = price_sheets.getTransactionFeeData(bob, REMOVE_LIQ_UINT256)
-    assert fee == 350  # 3.50%
-    assert recipient == price_sheets.protocolRecipient()
-    
     fee, recipient = price_sheets.getTransactionFeeData(bob, CLAIM_REWARDS_UINT256)
-    assert fee == 400  # 4.00%
-    assert recipient == price_sheets.protocolRecipient()
-    
-    fee, recipient = price_sheets.getTransactionFeeData(bob, BORROW_UINT256)
-    assert fee == 450  # 4.50%
-    assert recipient == price_sheets.protocolRecipient()
-    
-    fee, recipient = price_sheets.getTransactionFeeData(bob, REPAY_UINT256)
-    assert fee == 500  # 5.00%
+    assert fee == 300  # 3.00%
     assert recipient == price_sheets.protocolRecipient()
     
     # Remove price sheet
     assert price_sheets.removeProtocolTxPriceSheet(sender=governor)
     log = filter_logs(price_sheets, "ProtocolTxPriceSheetRemoved")[0]
-    assert log.depositFee == 50
-    assert log.withdrawalFee == 100
-    assert log.rebalanceFee == 150
-    assert log.transferFee == 200
-    assert log.swapFee == 250
-    assert log.addLiqFee == 300
-    assert log.removeLiqFee == 350
-    assert log.claimRewardsFee == 400
-    assert log.borrowFee == 450
-    assert log.repayFee == 500
+    assert log.yieldFee == 100
+    assert log.swapFee == 200
+    assert log.claimRewardsFee == 300
 
     sheet = price_sheets.protocolTxPriceData()
-    assert sheet.depositFee == 0
-    assert sheet.withdrawalFee == 0
-    assert sheet.rebalanceFee == 0
-    assert sheet.transferFee == 0
+    assert sheet.yieldFee == 0
     assert sheet.swapFee == 0
-    assert sheet.addLiqFee == 0
-    assert sheet.removeLiqFee == 0
     assert sheet.claimRewardsFee == 0
-    assert sheet.borrowFee == 0
-    assert sheet.repayFee == 0
 
 
 def test_deactivated_state(price_sheets, governor, bob_agent, bob_agent_dev, alpha_token, sally):
@@ -376,7 +297,7 @@ def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, sally):
     
     # Set and then remove protocol tx price sheet
     price_sheets.setProtocolTxPriceSheet(
-        50, 100, 150, 200, 250, 300, 350, 400, 450, 500,
+        100, 200, 300,
         sender=governor
     )
     
@@ -385,16 +306,9 @@ def test_edge_cases(price_sheets, governor, bob_agent, alpha_token, sally):
     
     # Check that the price sheet is empty
     sheet = price_sheets.protocolTxPriceData()
-    assert sheet.depositFee == 0
-    assert sheet.withdrawalFee == 0
-    assert sheet.rebalanceFee == 0
-    assert sheet.transferFee == 0
+    assert sheet.yieldFee == 0
     assert sheet.swapFee == 0
-    assert sheet.addLiqFee == 0
-    assert sheet.removeLiqFee == 0
     assert sheet.claimRewardsFee == 0
-    assert sheet.borrowFee == 0
-    assert sheet.repayFee == 0
     
     # Second removal should also work (the function always returns True)
     price_sheets.removeProtocolTxPriceSheet(sender=governor)
@@ -863,22 +777,15 @@ def test_unknown_action_type(price_sheets, governor, bob):
     
     # Set up protocol transaction price sheet
     price_sheets.setProtocolTxPriceSheet(
-        50,     # depositFee (0.50%)
-        100,    # withdrawalFee (1.00%)
-        150,    # rebalanceFee (1.50%)
-        200,    # transferFee (2.00%)
-        250,    # swapFee (2.50%)
-        300,    # addLiqFee (3.00%)
-        350,    # removeLiqFee (3.50%)
-        400,    # claimRewardsFee (4.00%)
-        450,    # borrowFee (4.50%)
-        500,    # repayFee (5.00%)
+        100,    # yieldFee (1.00%)
+        200,    # swapFee (2.00%)
+        300,    # claimRewardsFee (3.00%)
         sender=governor
     )
     
     # Test with a valid action type
-    fee, recipient = price_sheets.getTransactionFeeData(bob, DEPOSIT_UINT256)
-    assert fee == 50  # 0.50%
+    fee, recipient = price_sheets.getTransactionFeeData(bob, WITHDRAWAL_UINT256)
+    assert fee == 100  # 1.00%
     assert recipient == price_sheets.protocolRecipient()
     
     # Test with an unknown action type (using a value outside the defined enum range)
@@ -985,35 +892,28 @@ def test_transaction_fee_calculation_with_different_user_addresses(price_sheets,
     """Test transaction fee calculation with different user addresses"""
     # Set protocol transaction fees
     price_sheets.setProtocolTxPriceSheet(
-        50,     # depositFee (0.50%)
-        100,    # withdrawalFee (1.00%)
-        150,    # rebalanceFee (1.50%)
-        200,    # transferFee (2.00%)
-        250,    # swapFee (2.50%)
-        300,    # addLiqFee (3.00%)
-        350,    # removeLiqFee (3.50%)
-        400,    # claimRewardsFee (4.00%)
-        450,    # borrowFee (4.50%)
-        500,    # repayFee (5.00%)
+        100,    # yieldFee (1.00%)
+        200,    # swapFee (2.00%)
+        300,    # claimRewardsFee (3.00%)
         sender=governor
     )
     
     # Test fee calculation for different users
-    fee_bob, recipient_bob = price_sheets.getTransactionFeeData(bob, DEPOSIT_UINT256)
-    fee_sally, recipient_sally = price_sheets.getTransactionFeeData(sally, DEPOSIT_UINT256)
+    fee_bob, recipient_bob = price_sheets.getTransactionFeeData(bob, WITHDRAWAL_UINT256)
+    fee_sally, recipient_sally = price_sheets.getTransactionFeeData(sally, WITHDRAWAL_UINT256)
     
     # Verify fees are the same regardless of user
-    assert fee_bob == 50  # 0.50%
-    assert fee_sally == 50  # 0.50%
+    assert fee_bob == 100  # 1.00%
+    assert fee_sally == 100  # 1.00%
     assert recipient_bob == price_sheets.protocolRecipient()
     assert recipient_sally == price_sheets.protocolRecipient()
     
     # Test with different transaction types
-    fee_bob_withdrawal, _ = price_sheets.getTransactionFeeData(bob, WITHDRAWAL_UINT256)
-    fee_sally_withdrawal, _ = price_sheets.getTransactionFeeData(sally, WITHDRAWAL_UINT256)
+    fee_bob_swap, _ = price_sheets.getTransactionFeeData(bob, SWAP_UINT256)
+    fee_sally_swap, _ = price_sheets.getTransactionFeeData(sally, SWAP_UINT256)
     
-    assert fee_bob_withdrawal == 100  # 1.00%
-    assert fee_sally_withdrawal == 100  # 1.00%
+    assert fee_bob_swap == 200  # 2.00%
+    assert fee_sally_swap == 200  # 2.00%
 
 
 def test_combined_subscription_data_with_multiple_agents(price_sheets, governor, bob_agent, sally, oracle_registry):
