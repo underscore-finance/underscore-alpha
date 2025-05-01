@@ -4,6 +4,7 @@
 # @version 0.4.1
 
 from ethereum.ercs import IERC20
+from ethereum.ercs import IERC20Detailed
 
 event Transfer:
     sender: indexed(address)
@@ -31,35 +32,80 @@ def __init__(_asset: address):
 
 @external
 def deposit(_amount: uint256, _receiver: address) -> uint256:
+    shares: uint256 = self._calcSharesOnDeposit(_amount)
     assert extcall IERC20(self.asset).transferFrom(msg.sender, self, _amount, default_return_value=True) # dev: transfer failed
-    self.balanceOf[_receiver] += _amount
-    self.totalSupply += _amount
-    return _amount
+    self.balanceOf[_receiver] += shares
+    self.totalSupply += shares
+    return shares
 
 
 @external
 def redeem(_shares: uint256, _receiver: address, _owner: address) -> uint256:
     shares: uint256 = min(_shares, self.balanceOf[_owner])
-    amount: uint256 = min(shares, staticcall IERC20(self.asset).balanceOf(self))
+    amount: uint256 = min(self._sharesToAmount(shares), staticcall IERC20(self.asset).balanceOf(self))
     assert extcall IERC20(self.asset).transfer(_receiver, amount, default_return_value=True) # dev: transfer failed
     self.balanceOf[_owner] -= shares
     self.totalSupply -= shares
     return amount
 
 
+@view
 @external
-def convertToAssets(_vaultTokenAmount: uint256) -> uint256:
-    return _vaultTokenAmount
+def convertToAssets(_shares: uint256) -> uint256:
+    return self._sharesToAmount(_shares)
 
 
+@view
+@internal
+def _sharesToAmount(_shares: uint256) -> uint256:
+    if _shares == 0:
+        return 0
+    totalShares: uint256 = self.totalSupply
+    if totalShares == 0:
+        return _shares
+    totalBalance: uint256 = staticcall IERC20(self.asset).balanceOf(self)
+    if _shares == totalShares:
+        return totalBalance
+    return totalBalance * _shares // totalShares
+
+
+@view
 @external
-def convertToShares(_assetAmount: uint256) -> uint256:
-    return _assetAmount
+def convertToShares(_amount: uint256) -> uint256:
+    return self._amountToShares(_amount)
+
+
+@view
+@internal
+def _calcSharesOnDeposit(_amount: uint256) -> uint256:
+    # Note: share decimals are same as underlying asset decimals
+    totalShares: uint256 = self.totalSupply
+    shares: uint256 = 0
+    if totalShares == 0:
+        shares = _amount
+         # see https://code4rena.com/reports/2022-01-sherlock/#h-01-first-user-can-steal-everyone-elses-tokens
+        assert shares > 10 ** convert(staticcall IERC20Detailed(self.asset).decimals() // 2, uint256) # dev: amount too small
+    else:
+        shares = _amount * totalShares // staticcall IERC20(self.asset).balanceOf(self)
+    assert shares != 0 # dev: did not calc shares
+    return shares
 
 
 @external
 def totalAssets() -> uint256:
     return staticcall IERC20(self.asset).balanceOf(self)
+
+
+@view
+@internal
+def _amountToShares(_amount: uint256) -> uint256:
+    if _amount == 0:
+        return 0
+    totalBalance: uint256 = staticcall IERC20(self.asset).balanceOf(self)
+    totalShares: uint256 = self.totalSupply
+    if totalBalance == 0 or totalShares == 0:
+        return 0
+    return _amount * totalShares // totalBalance
 
 
 # erc20 methods

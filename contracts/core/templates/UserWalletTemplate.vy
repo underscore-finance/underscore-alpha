@@ -586,6 +586,9 @@ def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTION
     # make sure they still have enough trial funds
     self._checkTrialFundsPostTx(isTrialFundsVaultToken, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
 
+    # yield tracking
+    self._updateYieldTrackingOnEntry(lastTokenOut, lastTokenOutAmount, cd.legoRegistry)
+
     # handle tx fees
     if isSignerAgent:
         self._handleTransactionFees(ActionType.SWAP, lastTokenOut, lastTokenOutAmount, cd.priceSheets)
@@ -1243,30 +1246,37 @@ def _updateYieldTrackingOnWithdrawal(
     if _vaultToken == empty(address) or not self.isVaultToken[_vaultToken]:
         return 0
 
-    trackedVaultTokenAmount: uint256 = self.vaultTokenAmounts[_vaultToken]
-    adjAssetAmountReceived: uint256 = _assetAmountReceived
-    assetProfitAmount: uint256 = 0
+    actualVaultTokenBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
+    trackedVaultTokenBalance: uint256 = self.vaultTokenAmounts[_vaultToken]
 
-    # handle vault tokens
+    # nothing to change, still sufficient balance
+    if actualVaultTokenBalance >= trackedVaultTokenBalance:
+        return 0
+
+    # reduce the tracked balance
+    vaultTokenToReduce: uint256 = trackedVaultTokenBalance - actualVaultTokenBalance
+    assetAmountToReduce: uint256 = _assetAmountReceived * vaultTokenToReduce // _vaultTokenAmountBurned
+
+    # adjust vault token amount
     shouldZeroOut: bool = False
-    if _vaultTokenAmountBurned >= trackedVaultTokenAmount:
+    if vaultTokenToReduce >= trackedVaultTokenBalance:
         self.vaultTokenAmounts[_vaultToken] = 0
-        adjAssetAmountReceived = _assetAmountReceived * trackedVaultTokenAmount // _vaultTokenAmountBurned
         shouldZeroOut = True
     else:
-        self.vaultTokenAmounts[_vaultToken] -= _vaultTokenAmountBurned
+        self.vaultTokenAmounts[_vaultToken] -= vaultTokenToReduce
 
     # handle asset tracking
+    profitAmount: uint256 = 0
     trackedAssetAmount: uint256 = self.depositedAmounts[_vaultToken]
-    if adjAssetAmountReceived > trackedAssetAmount:
-        assetProfitAmount = adjAssetAmountReceived - trackedAssetAmount
+    if assetAmountToReduce > trackedAssetAmount:
+        profitAmount = assetAmountToReduce - trackedAssetAmount
         self.depositedAmounts[_vaultToken] = 0
     elif shouldZeroOut:
         self.depositedAmounts[_vaultToken] = 0
     else:
-        self.depositedAmounts[_vaultToken] -= adjAssetAmountReceived
+        self.depositedAmounts[_vaultToken] -= assetAmountToReduce
 
-    return assetProfitAmount
+    return profitAmount
 
 
 #############
