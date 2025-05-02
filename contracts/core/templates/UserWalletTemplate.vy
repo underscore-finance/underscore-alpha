@@ -34,15 +34,16 @@ interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
     def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
+interface AgentFactory:
+    def payAmbassadorYieldBonus(_ambassador: address, _asset: address, _amount: uint256) -> bool: nonpayable
+    def agentBlacklist(_agentAddr: address) -> bool: view
+
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
     def deposit(): payable
 
 interface PriceSheets:
     def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256): view
-
-interface AgentFactory:
-    def agentBlacklist(_agentAddr: address) -> bool: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -68,6 +69,7 @@ struct CoreData:
     wallet: address
     walletConfig: address
     addyRegistry: address
+    agentFactory: address
     legoRegistry: address
     priceSheets: address
     oracleRegistry: address
@@ -476,7 +478,7 @@ def _withdrawTokens(
 
     # handle yield profit
     if assetProfitAmount != 0:
-        sentProfit: uint256 = self._handleTransactionFees(ActionType.WITHDRAWAL, _asset, assetProfitAmount, _cd.priceSheets)
+        sentProfit: uint256 = self._handleTransactionFees(ActionType.WITHDRAWAL, _asset, assetProfitAmount, _cd.priceSheets, _cd.agentFactory)
         assetAmountReceived -= sentProfit
 
     log UserWalletWithdrawal(signer=_signer, asset=_asset, vaultToken=_vaultToken, assetAmountReceived=assetAmountReceived, vaultTokenAmountBurned=vaultTokenAmountBurned, refundVaultTokenAmount=refundVaultTokenAmount, usdValue=usdValue, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=_isSignerAgent)
@@ -591,7 +593,7 @@ def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTION
 
     # handle tx fees
     if isSignerAgent:
-        self._handleTransactionFees(ActionType.SWAP, lastTokenOut, lastTokenOutAmount, cd.priceSheets)
+        self._handleTransactionFees(ActionType.SWAP, lastTokenOut, lastTokenOutAmount, cd.priceSheets, cd.agentFactory)
 
     return initialAmountIn, lastTokenOutAmount, lastUsdValue
 
@@ -816,7 +818,7 @@ def claimRewards(
 
     # handle tx fees
     if isSignerAgent:
-        self._handleTransactionFees(ActionType.CLAIM_REWARDS, _rewardToken, rewardAmount, cd.priceSheets)
+        self._handleTransactionFees(ActionType.CLAIM_REWARDS, _rewardToken, rewardAmount, cd.priceSheets, cd.agentFactory)
 
     usdValue: uint256 = 0
     if rewardAmount != 0:
@@ -1294,6 +1296,7 @@ def _getCoreData() -> CoreData:
         wallet=self,
         walletConfig=walletConfig,
         addyRegistry=addyRegistry,
+        agentFactory=staticcall AddyRegistry(addyRegistry).getAddy(AGENT_FACTORY_ID),
         legoRegistry=staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID),
         priceSheets=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_SHEETS_ID),
         oracleRegistry=staticcall AddyRegistry(addyRegistry).getAddy(ORACLE_REGISTRY_ID),
@@ -1319,8 +1322,7 @@ def _checkPermsAndHandleSubs(
 
     # check if agent is blacklisted
     if agent != empty(address):
-        agentFactory: address = staticcall AddyRegistry(_cd.addyRegistry).getAddy(AGENT_FACTORY_ID)
-        assert not staticcall AgentFactory(agentFactory).agentBlacklist(agent) # dev: agent is blacklisted
+        assert not staticcall AgentFactory(_cd.agentFactory).agentBlacklist(agent) # dev: agent is blacklisted
 
     # handle subscriptions and permissions
     protocolSub: SubPaymentInfo = empty(SubPaymentInfo)
@@ -1346,10 +1348,18 @@ def _handleTransactionFees(
     _asset: address,
     _amount: uint256,
     _priceSheets: address,
+    _agentFactory: address,
 ) -> uint256:
     if _amount == 0 or _asset == empty(address):
         return 0
 
+    # pay ambassador yield bonus first (we do early return once we get into tx fees)
+    ambassadorRecipient: address = empty(address)
+    if _action == ActionType.WITHDRAWAL:
+        ambassadorRecipient = self._getAmbassadorProceedsAddr(empty(address))
+        extcall AgentFactory(_agentFactory).payAmbassadorYieldBonus(ambassadorRecipient, _asset, _amount)
+
+    # get transaction fees
     fee: uint256 = 0
     protocolRecipient: address = empty(address)
     ambassadorRatio: uint256 = 0
@@ -1358,17 +1368,17 @@ def _handleTransactionFees(
         return 0
 
     adjFee: uint256 = min(fee, HUNDRED_PERCENT)
-    totalAmount: uint256 = min(_amount * adjFee // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
-    if totalAmount == 0:
+    feeTotalAmount: uint256 = min(_amount * adjFee // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
+    if feeTotalAmount == 0:
         return 0
 
-    protocolAmount: uint256 = totalAmount
+    protocolAmount: uint256 = feeTotalAmount
     ambassadorAmount: uint256 = 0
 
     # pay ambassador proceeds
-    ambassadorRecipient: address = empty(address)
     if ambassadorRatio != 0:
-        ambassadorAmount, ambassadorRecipient = self._payAmbassadorTxFee(_asset, protocolAmount, ambassadorRatio)
+        ambassadorRecipient = self._getAmbassadorProceedsAddr(ambassadorRecipient)
+        ambassadorAmount = self._payAmbassadorTxFee(_asset, protocolAmount, ambassadorRatio, ambassadorRecipient)
         if ambassadorAmount != 0:
             protocolAmount = min(protocolAmount - ambassadorAmount, staticcall IERC20(_asset).balanceOf(self))
 
@@ -1377,7 +1387,23 @@ def _handleTransactionFees(
         assert extcall IERC20(_asset).transfer(protocolRecipient, protocolAmount, default_return_value=True) # dev: protocol tx fee payment failed
 
     log UserWalletTransactionFeePaid(asset=_asset, protocolRecipient=protocolRecipient, protocolAmount=protocolAmount, ambassadorRecipient=ambassadorRecipient, ambassadorAmount=ambassadorAmount, fee=fee, action=_action)
-    return totalAmount
+    return feeTotalAmount
+
+
+# ambassador
+
+
+@view
+@internal
+def _getAmbassadorProceedsAddr(_maybeAmbassador: address) -> address:
+    if _maybeAmbassador != empty(address):
+        return _maybeAmbassador
+
+    myAmbassador: address = staticcall WalletConfig(self.walletConfig).myAmbassador()
+    if myAmbassador == empty(address):
+        return empty(address)
+    ambassadorWalletConfig: address = staticcall UserWallet(myAmbassador).walletConfig()
+    return staticcall WalletConfig(ambassadorWalletConfig).getProceedsAddr()
 
 
 @internal
@@ -1385,23 +1411,17 @@ def _payAmbassadorTxFee(
     _asset: address,
     _amount: uint256,
     _ambassadorRatio: uint256,
-) -> (uint256, address):
-    myAmbassador: address = staticcall WalletConfig(self.walletConfig).myAmbassador()
-    if myAmbassador == empty(address):
-        return 0, empty(address)
+    _ambassadorAddr: address,
+) -> uint256:
+    if _ambassadorAddr == empty(address):
+        return 0
 
-    ambassadorWalletConfig: address = staticcall UserWallet(myAmbassador).walletConfig()
-    proceedsAddr: address = staticcall WalletConfig(ambassadorWalletConfig).getProceedsAddr()
-    if proceedsAddr == empty(address):
-        return 0, empty(address)
-
-    # transfer ambassador proceeds
     ambassadorRatio: uint256 = min(_ambassadorRatio, HUNDRED_PERCENT)
     amount: uint256 = min(_amount * ambassadorRatio // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
     if amount != 0:
-        assert extcall IERC20(_asset).transfer(proceedsAddr, amount, default_return_value=True) # dev: ambassador tx fee payment failed
+        assert extcall IERC20(_asset).transfer(_ambassadorAddr, amount, default_return_value=True) # dev: ambassador tx fee payment failed
 
-    return min(_amount, amount), proceedsAddr
+    return min(_amount, amount)
 
 
 # allow lego to perform action
@@ -1492,8 +1512,7 @@ def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -
     @return bool True if trial funds were recovered successfully
     """
     cd: CoreData = self._getCoreData()
-    agentFactory: address = staticcall AddyRegistry(cd.addyRegistry).getAddy(AGENT_FACTORY_ID)
-    assert msg.sender == agentFactory # dev: no perms
+    assert msg.sender == cd.agentFactory # dev: no perms
 
     # validation
     assert cd.trialFundsAsset != empty(address) # dev: no trial funds asset
@@ -1515,18 +1534,18 @@ def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -
         assetAmountReceived: uint256 = 0
         na1: uint256 = 0
         na2: uint256 = 0
-        assetAmountReceived, na1, na2 = self._withdrawTokens(agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, vaultTokenBal, False, cd)
+        assetAmountReceived, na1, na2 = self._withdrawTokens(cd.agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, vaultTokenBal, False, cd)
         balanceAvail += assetAmountReceived
 
         # deposit any extra balance back lego
         if balanceAvail > cd.trialFundsInitialAmount:
-            self._depositTokens(agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, balanceAvail - cd.trialFundsInitialAmount, False, cd)
+            self._depositTokens(cd.agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, balanceAvail - cd.trialFundsInitialAmount, False, cd)
             break
 
     # transfer back to agent factory
     amountRecovered: uint256 = min(cd.trialFundsInitialAmount, staticcall IERC20(cd.trialFundsAsset).balanceOf(self))
     assert amountRecovered != 0 # dev: no funds to transfer
-    assert extcall IERC20(cd.trialFundsAsset).transfer(agentFactory, amountRecovered, default_return_value=True) # dev: trial funds transfer failed
+    assert extcall IERC20(cd.trialFundsAsset).transfer(cd.agentFactory, amountRecovered, default_return_value=True) # dev: trial funds transfer failed
 
     # update trial funds data
     remainingTrialFunds: uint256 = cd.trialFundsInitialAmount - amountRecovered

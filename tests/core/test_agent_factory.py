@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from conf_utils import filter_logs
-from constants import ZERO_ADDRESS
+from constants import ZERO_ADDRESS, EIGHTEEN_DECIMALS
 from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 from contracts.core import AgentFactory
 from utils.BluePrint import PARAMS
@@ -424,4 +424,94 @@ def test_create_wallet_with_non_ambassador_wallet(agent_factory, owner, agent, b
     assert log.agent == agent
     assert log.creator == owner
     assert log.ambassador == ZERO_ADDRESS  # Ambassador should be empty since canBeAmbassador is false
+
+
+def test_set_ambassador_bonus_ratio(agent_factory, governor, bob):
+    """Test setting ambassador bonus ratio"""
+    # Test setting by governor
+    assert agent_factory.setAmbassadorBonusRatio(10_00, sender=governor)  # 10%
+    
+    log = filter_logs(agent_factory, "AmbassadorBonusRatioSet")[0]
+    assert log.ratio == 10_00
+
+    assert agent_factory.ambassadorBonusRatio() == 10_00
+
+    # Test setting by non-governor
+    with boa.reverts("no perms"):
+        agent_factory.setAmbassadorBonusRatio(20_00, sender=bob)
+
+    # Test setting invalid ratio (over 100%)
+    with boa.reverts("invalid ratio"):
+        agent_factory.setAmbassadorBonusRatio(100_01, sender=governor)
+
+
+def test_pay_ambassador_yield_bonus(agent_factory, owner, governor, bob_ai_wallet, alpha_token, alpha_token_whale):
+    """Test paying ambassador yield bonus with valid inputs"""
+    # Set up ambassador bonus ratio
+    agent_factory.setAmbassadorBonusRatio(10_00, sender=governor)  # 10%
+    
+    # Create wallet with ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, ZERO_ADDRESS, bob_ai_wallet.address, sender=owner)
+    
+    # Transfer alpha tokens to factory
+    alpha_token.transfer(agent_factory.address, 200 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
+    
+    # Pay ambassador bonus
+    assert agent_factory.payAmbassadorYieldBonus(bob_ai_wallet.address, alpha_token.address, 200 * EIGHTEEN_DECIMALS, sender=wallet_addr)
+    
+    # Verify bonus was paid (10% of 200 = 20)
+    assert alpha_token.balanceOf(bob_ai_wallet.address) == 20 * EIGHTEEN_DECIMALS
+    
+    log = filter_logs(agent_factory, "AmbassadorYieldBonusPaid")[0]
+    assert log.user == wallet_addr
+    assert log.ambassador == bob_ai_wallet.address
+    assert log.asset == alpha_token.address
+    assert log.amount == 20 * EIGHTEEN_DECIMALS
+    assert log.ratio == 10_00
+
+
+def test_pay_ambassador_yield_bonus_failures(agent_factory, owner, governor, bob_ai_wallet, alpha_token, alpha_token_whale):
+    """Test various failure cases for paying ambassador yield bonus"""
+    # Set up ambassador bonus ratio
+    agent_factory.setAmbassadorBonusRatio(10_00, sender=governor)  # 10%
+    
+    # Create wallet with ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, ZERO_ADDRESS, bob_ai_wallet.address, sender=owner)
+    
+    # Test with zero ambassador address
+    assert not agent_factory.payAmbassadorYieldBonus(ZERO_ADDRESS, alpha_token.address, 100 * EIGHTEEN_DECIMALS, sender=wallet_addr)
+    
+    # Test with zero asset address
+    assert not agent_factory.payAmbassadorYieldBonus(bob_ai_wallet.address, ZERO_ADDRESS, 100 * EIGHTEEN_DECIMALS, sender=wallet_addr)
+    
+    # Test with zero amount
+    assert not agent_factory.payAmbassadorYieldBonus(bob_ai_wallet.address, alpha_token.address, 0, sender=wallet_addr)
+    
+    # Test with non-wallet caller
+    assert not agent_factory.payAmbassadorYieldBonus(bob_ai_wallet.address, alpha_token.address, 100 * EIGHTEEN_DECIMALS, sender=owner)
+    
+    # Test with zero bonus ratio
+    agent_factory.setAmbassadorBonusRatio(0, sender=governor)
+    assert not agent_factory.payAmbassadorYieldBonus(bob_ai_wallet.address, alpha_token.address, 100 * EIGHTEEN_DECIMALS, sender=wallet_addr)
+
+
+def test_pay_ambassador_yield_bonus_insufficient_balance(agent_factory, owner, governor, bob_ai_wallet, alpha_token, alpha_token_whale):
+    """Test paying ambassador yield bonus with insufficient balance"""
+    # Set up ambassador bonus ratio
+    agent_factory.setAmbassadorBonusRatio(10_00, sender=governor)  # 10%
+    
+    # Create wallet with ambassador
+    wallet_addr = agent_factory.createUserWallet(owner, ZERO_ADDRESS, bob_ai_wallet.address, sender=owner)
+    
+    # Transfer small amount of alpha tokens
+    alpha_token.transfer(agent_factory.address, 5 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
+    
+    # Try to pay bonus larger than available balance
+    assert agent_factory.payAmbassadorYieldBonus(bob_ai_wallet.address, alpha_token.address, 100 * EIGHTEEN_DECIMALS, sender=wallet_addr)
+    
+    # Verify only available balance was paid (50 tokens)
+    assert alpha_token.balanceOf(bob_ai_wallet.address) == 5 * EIGHTEEN_DECIMALS
+    
+    log = filter_logs(agent_factory, "AmbassadorYieldBonusPaid")[0]
+    assert log.amount == 5 * EIGHTEEN_DECIMALS
 

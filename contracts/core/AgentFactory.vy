@@ -64,6 +64,16 @@ event AgentTemplateSet:
     template: indexed(address)
     version: uint256
 
+event AmbassadorYieldBonusPaid:
+    user: indexed(address)
+    ambassador: indexed(address)
+    asset: indexed(address)
+    amount: uint256
+    ratio: uint256
+
+event AmbassadorBonusRatioSet:
+    ratio: uint256
+
 event TrialFundsDataSet:
     asset: indexed(address)
     amount: uint256
@@ -125,6 +135,9 @@ shouldEnforceWhitelist: public(bool)
 # safety
 canCriticalCancel: public(HashMap[address, bool])
 
+# ambassador bonus
+ambassadorBonusRatio: public(uint256)
+
 # config
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
@@ -133,6 +146,7 @@ WETH_ADDR: public(immutable(address))
 MAX_RECOVERIES: constant(uint256) = 100
 MAX_LEGOS: constant(uint256) = 20
 MAX_LEGACY_AGENT_FACTORIES: constant(uint256) = 20
+HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 
 LEGACY_AGENT_FACTORIES: public(immutable(DynArray[address, MAX_LEGACY_AGENT_FACTORIES]))
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
@@ -520,6 +534,58 @@ def _setAgentTemplate(_addr: address) -> bool:
     )
     self.agentTemplateInfo = newData
     log AgentTemplateSet(template=_addr, version=newData.version)
+    return True
+
+
+####################
+# Ambassador Bonus #
+####################
+
+
+@external
+def payAmbassadorYieldBonus(_ambassador: address, _asset: address, _amount: uint256) -> bool:
+    """
+    @notice Pay an ambassador yield bonus
+    @dev Only callable by a wallet, transfers bonus to ambassador
+    @param _ambassador The address of the ambassador to pay the bonus to
+    @param _asset The address of the asset to pay the bonus from
+    @param _amount The amount of the bonus to pay
+    """
+    # make sure have correct inputs
+    if _ambassador == empty(address) or _asset == empty(address) or _amount == 0:
+        return False
+
+    # make sure sender is a wallet
+    wallet: address = msg.sender
+    if not self._isUserWallet(wallet):
+        return False
+
+    # check if bonus ratio is set
+    ambassadorBonusRatio: uint256 = self.ambassadorBonusRatio
+    if ambassadorBonusRatio == 0:
+        return False
+
+    # calculate bonus amount, transfer to ambassador
+    bonusAmount: uint256 = min(_amount * ambassadorBonusRatio // HUNDRED_PERCENT, staticcall IERC20(_asset).balanceOf(self))
+    if bonusAmount == 0:
+        return False
+
+    assert extcall IERC20(_asset).transfer(_ambassador, bonusAmount, default_return_value=True) # dev: bonus transfer failed
+    log AmbassadorYieldBonusPaid(user=wallet, ambassador=_ambassador, asset=_asset, amount=bonusAmount, ratio=ambassadorBonusRatio)
+    return True
+
+
+@external
+def setAmbassadorBonusRatio(_bonusRatio: uint256) -> bool:
+    """
+    @notice Set the bonus ratio for ambassadors
+    @dev Only callable by governor
+    @param _bonusRatio The bonus ratio for ambassadors
+    """
+    assert gov._canGovern(msg.sender) # dev: no perms
+    assert _bonusRatio <= HUNDRED_PERCENT # dev: invalid ratio
+    self.ambassadorBonusRatio = _bonusRatio
+    log AmbassadorBonusRatioSet(ratio=_bonusRatio)
     return True
 
 

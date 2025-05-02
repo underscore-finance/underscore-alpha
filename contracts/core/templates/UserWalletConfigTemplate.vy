@@ -66,6 +66,7 @@ struct CoreData:
     wallet: address
     walletConfig: address
     addyRegistry: address
+    agentFactory: address
     legoRegistry: address
     priceSheets: address
     oracleRegistry: address
@@ -499,6 +500,7 @@ def _getCoreData() -> CoreData:
         wallet=wallet,
         walletConfig=self,
         addyRegistry=addyRegistry,
+        agentFactory=staticcall AddyRegistry(addyRegistry).getAddy(AGENT_FACTORY_ID),
         legoRegistry=staticcall AddyRegistry(addyRegistry).getAddy(LEGO_REGISTRY_ID),
         priceSheets=staticcall AddyRegistry(addyRegistry).getAddy(PRICE_SHEETS_ID),
         oracleRegistry=staticcall AddyRegistry(addyRegistry).getAddy(ORACLE_REGISTRY_ID),
