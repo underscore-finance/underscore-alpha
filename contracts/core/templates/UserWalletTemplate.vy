@@ -391,8 +391,7 @@ def _depositTokens(
     amount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_asset, _amount, False, _cd)
     assert extcall IERC20(_asset).approve(legoAddr, amount, default_return_value=True) # dev: approval failed
 
-    # if asset is the vault token (i.e. Ripe collateral), update yield tracking
-    self._updateYieldTrackingOnExit(_asset, amount)
+
 
     # deposit into lego partner
     assetAmountDeposited: uint256 = 0
@@ -404,6 +403,8 @@ def _depositTokens(
     assert extcall IERC20(_asset).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # update yield tracking
+    if self.isVaultToken[_asset]: # if asset is the vault token (i.e. Ripe collateral)
+        self._updateYieldTrackingOnExit(_asset)
     self._updateYieldTrackingOnDeposit(vaultToken, vaultTokenAmountReceived, assetAmountDeposited, _cd.legoRegistry)
 
     log UserWalletDeposit(signer=_signer, asset=_asset, vaultToken=vaultToken, assetAmountDeposited=assetAmountDeposited, vaultTokenAmountReceived=vaultTokenAmountReceived, refundAssetAmount=refundAssetAmount, usdValue=usdValue, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=_isSignerAgent)
@@ -473,13 +474,15 @@ def _withdrawTokens(
         assert extcall IERC20(_vaultToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # yield tracking
-    self._updateYieldTrackingOnEntry(_asset, assetAmountReceived, _cd.legoRegistry) # vault token may be withdrawn asset (Ripe collateral)
-    assetProfitAmount: uint256 = self._updateYieldTrackingOnWithdrawal(_vaultToken, vaultTokenAmountBurned, assetAmountReceived)
+    if self.isVaultToken[_asset]: # if asset is the vault token (i.e. Ripe collateral)
+        self._updateYieldTrackingOnEntry(_asset, assetAmountReceived, _cd.legoRegistry)
+    if self.isVaultToken[_vaultToken]:
+        assetProfitAmount: uint256 = self._updateYieldTrackingOnWithdrawal(_vaultToken, vaultTokenAmountBurned, assetAmountReceived)
 
-    # handle yield profit
-    if assetProfitAmount != 0:
-        sentProfit: uint256 = self._handleTransactionFees(ActionType.WITHDRAWAL, _asset, assetProfitAmount, _cd.priceSheets, _cd.agentFactory)
-        assetAmountReceived -= sentProfit
+        # handle yield profit
+        if assetProfitAmount != 0:
+            sentProfit: uint256 = self._handleTransactionFees(ActionType.WITHDRAWAL, _asset, assetProfitAmount, _cd.priceSheets, _cd.agentFactory)
+            assetAmountReceived -= sentProfit
 
     log UserWalletWithdrawal(signer=_signer, asset=_asset, vaultToken=_vaultToken, assetAmountReceived=assetAmountReceived, vaultTokenAmountBurned=vaultTokenAmountBurned, refundVaultTokenAmount=refundVaultTokenAmount, usdValue=usdValue, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=_isSignerAgent)
     return assetAmountReceived, vaultTokenAmountBurned, usdValue
@@ -566,9 +569,6 @@ def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTION
     # check if swap token is trial funds asset
     isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(tokenIn, cd.trialFundsAsset, cd.legoRegistry)
 
-    # yield tracking
-    self._updateYieldTrackingOnExit(tokenIn, initialAmountIn)
-
     # perform swap instructions
     amountIn: uint256 = initialAmountIn
     lastTokenOut: address = empty(address)
@@ -588,8 +588,11 @@ def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTION
     # make sure they still have enough trial funds
     self._checkTrialFundsPostTx(isTrialFundsVaultToken, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
 
-    # yield tracking
-    self._updateYieldTrackingOnEntry(lastTokenOut, lastTokenOutAmount, cd.legoRegistry)
+     # yield tracking
+    if self.isVaultToken[tokenIn]: # swap out of vault token
+        self._updateYieldTrackingOnExit(tokenIn)
+    if self.isVaultToken[lastTokenOut]: # swap into vault token
+        self._updateYieldTrackingOnEntry(lastTokenOut, lastTokenOutAmount, cd.legoRegistry)
 
     # handle tx fees
     if isSignerAgent:
@@ -752,9 +755,6 @@ def repayDebt(
     # check if payment asset is trial funds asset
     isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_paymentAsset, cd.trialFundsAsset, cd.legoRegistry)
 
-    # yield tracking
-    self._updateYieldTrackingOnExit(_paymentAsset, paymentAmount)
-
     # repay debt via lego partner
     paymentAsset: address = empty(address)
     usdValue: uint256 = 0
@@ -765,6 +765,10 @@ def repayDebt(
 
     # make sure they still have enough trial funds
     self._checkTrialFundsPostTx(isTrialFundsVaultToken, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
+
+     # yield tracking -- paying back debt with vault token
+    if self.isVaultToken[_paymentAsset]:
+        self._updateYieldTrackingOnExit(_paymentAsset)
 
     log UserWalletRepayDebt(signer=msg.sender, paymentAsset=paymentAsset, paymentAmount=paymentAmount, usdValue=usdValue, remainingDebt=remainingDebt, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
     return paymentAsset, paymentAmount, usdValue, remainingDebt
@@ -881,7 +885,6 @@ def addLiquidity(
     isTrialFundsVaultTokenA: bool = False
     if _amountA != 0:
         amountA = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenA, _amountA, True, cd)
-        self._updateYieldTrackingOnExit(_tokenA, amountA)
         assert extcall IERC20(_tokenA).approve(legoAddr, amountA, default_return_value=True) # dev: approval failed
         isTrialFundsVaultTokenA = self._isTrialFundsVaultToken(_tokenA, cd.trialFundsAsset, cd.legoRegistry)
 
@@ -890,7 +893,6 @@ def addLiquidity(
     isTrialFundsVaultTokenB: bool = False
     if _amountB != 0:
         amountB = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenB, _amountB, True, cd)
-        self._updateYieldTrackingOnExit(_tokenB, amountB)
         assert extcall IERC20(_tokenB).approve(legoAddr, amountB, default_return_value=True) # dev: approval failed
         isTrialFundsVaultTokenB = self._isTrialFundsVaultToken(_tokenB, cd.trialFundsAsset, cd.legoRegistry)
 
@@ -917,11 +919,15 @@ def addLiquidity(
     self._checkTrialFundsPostTx(isTrialFundsVaultTokenA, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
     if amountA != 0:
         assert extcall IERC20(_tokenA).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+        if self.isVaultToken[_tokenA]:
+            self._updateYieldTrackingOnExit(_tokenA)
 
     # token b
     self._checkTrialFundsPostTx(isTrialFundsVaultTokenB, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
     if amountB != 0:
         assert extcall IERC20(_tokenB).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
+        if self.isVaultToken[_tokenB]:
+            self._updateYieldTrackingOnExit(_tokenB)
 
     log UserWalletLiquidityAdded(signer=msg.sender, tokenA=_tokenA, tokenB=_tokenB, liqAmountA=liqAmountA, liqAmountB=liqAmountB, liquidityAdded=liquidityAdded, pool=_pool, usdValue=usdValue, refundAssetAmountA=refundAssetAmountA, refundAssetAmountB=refundAssetAmountB, nftTokenId=nftTokenId, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
     return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId
@@ -998,6 +1004,12 @@ def removeLiquidity(
     else:
         assert extcall IERC20(lpToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
+    # yield tracking -- if vault tokens are what is removed from liquidity
+    if self.isVaultToken[_tokenA]:
+        self._updateYieldTrackingOnEntry(_tokenA, amountA, cd.legoRegistry)
+    if self.isVaultToken[_tokenB]:
+        self._updateYieldTrackingOnEntry(_tokenB, amountB, cd.legoRegistry)
+
     log UserWalletLiquidityRemoved(signer=msg.sender, tokenA=_tokenA, tokenB=_tokenB, removedAmountA=amountA, removedAmountB=amountB, usdValue=usdValue, isDepleted=isDepleted, liquidityRemoved=liquidityRemoved, lpToken=lpToken, refundedLpAmount=refundedLpAmount, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
     return amountA, amountB, usdValue, isDepleted
 
@@ -1058,14 +1070,15 @@ def _transferFunds(
         isTrialFundsVaultToken: bool = self._isTrialFundsVaultToken(_asset, _cd.trialFundsAsset, _cd.legoRegistry)
         transferAmount = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_asset, _amount, True, _cd)
 
-        # yield tracking
-        self._updateYieldTrackingOnExit(_asset, transferAmount)
-
         assert extcall IERC20(_asset).transfer(_recipient, transferAmount, default_return_value=True) # dev: transfer failed
         usdValue = staticcall OracleRegistry(_cd.oracleRegistry).getUsdValue(_asset, transferAmount)
 
         # make sure they still have enough trial funds
         self._checkTrialFundsPostTx(isTrialFundsVaultToken, _cd.trialFundsAsset, _cd.trialFundsInitialAmount, _cd.legoRegistry)
+
+        # yield tracking -- transferring out vault token
+        if self.isVaultToken[_asset]:
+            self._updateYieldTrackingOnExit(_asset)
 
     log UserWalletFundsTransferred(signer=_signer, recipient=_recipient, asset=_asset, amount=transferAmount, usdValue=usdValue, isSignerAgent=_isSignerAgent)
     return transferAmount, usdValue
@@ -1174,35 +1187,28 @@ def _updateYieldTrackingOnDeposit(
     if _vaultToken == empty(address):
         return
 
-    # make sure it's actually a vault token
+    # validate vault token
     isVaultToken: bool = self.isVaultToken[_vaultToken]
     if not isVaultToken and staticcall LegoRegistry(_legoRegistry).isVaultToken(_vaultToken):
         self.isVaultToken[_vaultToken] = True
         isVaultToken = True
 
-    # update tracking
     if isVaultToken:
         self.vaultTokenAmounts[_vaultToken] += _vaultTokenAmountReceived
         self.depositedAmounts[_vaultToken] += _assetAmountDeposited
 
 
 @internal
-def _updateYieldTrackingOnExit(_vaultToken: address, _vaultTokenAmount: uint256):
-    if not self.isVaultToken[_vaultToken] or _vaultTokenAmount == 0:
-        return
-
+def _updateYieldTrackingOnExit(_vaultToken: address):
     actualVaultTokenBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
     trackedVaultTokenBalance: uint256 = self.vaultTokenAmounts[_vaultToken]
 
-    untrackedBalance: uint256 = 0
-    if actualVaultTokenBalance > trackedVaultTokenBalance:
-        untrackedBalance = actualVaultTokenBalance - trackedVaultTokenBalance
-
-    # nothing to do here, amount moving is surplus anyway
-    if _vaultTokenAmount <= untrackedBalance:
+    # nothing to change, still sufficient balance
+    if actualVaultTokenBalance >= trackedVaultTokenBalance:
         return
-
-    vaultTokenToReduce: uint256 = _vaultTokenAmount - untrackedBalance
+    
+    # reduce the tracked balance
+    vaultTokenToReduce: uint256 = trackedVaultTokenBalance - actualVaultTokenBalance
 
     # zero out the tracked balance
     if vaultTokenToReduce >= trackedVaultTokenBalance:
@@ -1225,7 +1231,7 @@ def _updateYieldTrackingOnEntry(
     _amount: uint256,
     _legoRegistry: address,
 ):
-    if not self.isVaultToken[_asset] or _amount == 0:
+    if _amount == 0:
         return
 
     # get lego details for vault token
@@ -1245,9 +1251,6 @@ def _updateYieldTrackingOnWithdrawal(
     _vaultTokenAmountBurned: uint256,
     _assetAmountReceived: uint256,
 ) -> uint256:
-    if _vaultToken == empty(address) or not self.isVaultToken[_vaultToken]:
-        return 0
-
     actualVaultTokenBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self)
     trackedVaultTokenBalance: uint256 = self.vaultTokenAmounts[_vaultToken]
 
