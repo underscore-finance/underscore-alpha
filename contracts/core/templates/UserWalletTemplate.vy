@@ -17,26 +17,37 @@ from ethereum.ercs import IERC721
 interface WalletConfig:
     def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo): nonpayable
     def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData = empty(CoreData)) -> uint256: view
+    def setWhitelistAddrFromMigration(_addr: address) -> bool: nonpayable
     def canTransferToRecipient(_recipient: address) -> bool: view
+    def isRecipientAllowed(_recipient: address) -> bool: view
     def canWalletBeAmbassador() -> bool: view
+    def hasPendingOwnerChange() -> bool: view
     def getProceedsAddr() -> address: view
     def myAmbassador() -> address: view
     def owner() -> address: view
 
 interface LegoRegistry:
+    def getVaultTokensForUser(_user: address, _asset: address) -> DynArray[address, MAX_VAULTS_FOR_USER]: view
     def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
     def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address): view
     def getUnderlyingAsset(_vaultToken: address) -> address: view
     def isVaultToken(_vaultToken: address) -> bool: view
     def getLegoAddr(_legoId: uint256) -> address: view
 
-interface OracleRegistry:
-    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
-    def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
+interface UserWallet:
+    def finishMigrationIn(_assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS], _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST], _trialFundsVaultTokens: DynArray[address, MAX_VAULTS_FOR_USER], _trialFundsAsset: address, _trialFundsInitialAmount: uint256) -> bool: nonpayable
+    def trialFundsInitialAmount() -> uint256: view
+    def trialFundsAsset() -> address: view
+    def walletConfig() -> address: view
 
 interface AgentFactory:
     def payAmbassadorYieldBonus(_ambassador: address, _asset: address, _amount: uint256) -> bool: nonpayable
     def agentBlacklist(_agentAddr: address) -> bool: view
+    def isUserWallet(_wallet: address) -> bool: view
+
+interface OracleRegistry:
+    def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+    def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256: view
 
 interface WethContract:
     def withdraw(_amount: uint256): nonpayable
@@ -47,9 +58,6 @@ interface PriceSheets:
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
-
-interface UserWallet:
-    def walletConfig() -> address: view
 
 flag ActionType:
     DEPOSIT
@@ -249,8 +257,20 @@ event UserWalletNftRecovered:
     nftTokenId: uint256
     owner: indexed(address)
 
-# core
+event UserWalletMigratedOut:
+    newWallet: indexed(address)
+    numAssetsMigrated: uint256
+    numWhitelistMigrated: uint256
+    trialFundsAsset: address
+    trialFundsInitialAmount: uint256
+    numTrialFundsVaultTokens: uint256
+
+# core 
 walletConfig: public(address)
+
+# migration
+didMigrateIn: public(bool)
+didMigrateOut: public(bool)
 
 # trial funds info
 trialFundsAsset: public(address)
@@ -273,6 +293,9 @@ ORACLE_REGISTRY_ID: constant(uint256) = 4
 MAX_SWAP_INSTRUCTIONS: constant(uint256) = 5
 MAX_TOKEN_PATH: constant(uint256) = 5
 MAX_ASSETS: constant(uint256) = 25
+MAX_MIGRATION_ASSETS: constant(uint256) = 40
+MAX_MIGRATION_WHITELIST: constant(uint256) = 20
+MAX_VAULTS_FOR_USER: constant(uint256) = 30
 MAX_LEGOS: constant(uint256) = 20
 HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 
@@ -390,8 +413,6 @@ def _depositTokens(
     # finalize amount
     amount: uint256 = staticcall WalletConfig(_cd.walletConfig).getAvailableTxAmount(_asset, _amount, False, _cd)
     assert extcall IERC20(_asset).approve(legoAddr, amount, default_return_value=True) # dev: approval failed
-
-
 
     # deposit into lego partner
     assetAmountDeposited: uint256 = 0
@@ -1510,57 +1531,57 @@ def _checkTrialFundsPostTx(_isTrialFundsVaultToken: bool, _trialFundsAsset: addr
     assert postUnderlying >= _trialFundsInitialAmount # dev: cannot transfer trial funds vault token
 
 
-@external
-def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
-    """
-    @notice Recovers trial funds from the wallet
-    @param _opportunities Array of trial funds opportunities
-    @return bool True if trial funds were recovered successfully
-    """
-    cd: CoreData = self._getCoreData()
-    assert msg.sender == cd.agentFactory # dev: no perms
+# @external
+# def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS] = []) -> bool:
+#     """
+#     @notice Recovers trial funds from the wallet
+#     @param _opportunities Array of trial funds opportunities
+#     @return bool True if trial funds were recovered successfully
+#     """
+#     cd: CoreData = self._getCoreData()
+#     assert msg.sender == cd.agentFactory # dev: no perms
 
-    # validation
-    assert cd.trialFundsAsset != empty(address) # dev: no trial funds asset
-    assert cd.trialFundsInitialAmount != 0 # dev: no trial funds amount
+#     # validation
+#     assert cd.trialFundsAsset != empty(address) # dev: no trial funds asset
+#     assert cd.trialFundsInitialAmount != 0 # dev: no trial funds amount
 
-    # iterate through clawback data
-    balanceAvail: uint256 = staticcall IERC20(cd.trialFundsAsset).balanceOf(self)
-    for i: uint256 in range(len(_opportunities), bound=MAX_LEGOS):
-        if balanceAvail >= cd.trialFundsInitialAmount:
-            break
+#     # iterate through clawback data
+#     balanceAvail: uint256 = staticcall IERC20(cd.trialFundsAsset).balanceOf(self)
+#     for i: uint256 in range(len(_opportunities), bound=MAX_LEGOS):
+#         if balanceAvail >= cd.trialFundsInitialAmount:
+#             break
 
-        # get vault token data
-        opp: TrialFundsOpp = _opportunities[i]
-        vaultTokenBal: uint256 = staticcall IERC20(opp.vaultToken).balanceOf(self)
-        if vaultTokenBal == 0:
-            continue
+#         # get vault token data
+#         opp: TrialFundsOpp = _opportunities[i]
+#         vaultTokenBal: uint256 = staticcall IERC20(opp.vaultToken).balanceOf(self)
+#         if vaultTokenBal == 0:
+#             continue
 
-        # withdraw from lego partner
-        assetAmountReceived: uint256 = 0
-        na1: uint256 = 0
-        na2: uint256 = 0
-        assetAmountReceived, na1, na2 = self._withdrawTokens(cd.agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, vaultTokenBal, False, cd)
-        balanceAvail += assetAmountReceived
+#         # withdraw from lego partner
+#         assetAmountReceived: uint256 = 0
+#         na1: uint256 = 0
+#         na2: uint256 = 0
+#         assetAmountReceived, na1, na2 = self._withdrawTokens(cd.agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, vaultTokenBal, False, cd)
+#         balanceAvail += assetAmountReceived
 
-        # deposit any extra balance back lego
-        if balanceAvail > cd.trialFundsInitialAmount:
-            self._depositTokens(cd.agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, balanceAvail - cd.trialFundsInitialAmount, False, cd)
-            break
+#         # deposit any extra balance back lego
+#         if balanceAvail > cd.trialFundsInitialAmount:
+#             self._depositTokens(cd.agentFactory, opp.legoId, cd.trialFundsAsset, opp.vaultToken, balanceAvail - cd.trialFundsInitialAmount, False, cd)
+#             break
 
-    # transfer back to agent factory
-    amountRecovered: uint256 = min(cd.trialFundsInitialAmount, staticcall IERC20(cd.trialFundsAsset).balanceOf(self))
-    assert amountRecovered != 0 # dev: no funds to transfer
-    assert extcall IERC20(cd.trialFundsAsset).transfer(cd.agentFactory, amountRecovered, default_return_value=True) # dev: trial funds transfer failed
+#     # transfer back to agent factory
+#     amountRecovered: uint256 = min(cd.trialFundsInitialAmount, staticcall IERC20(cd.trialFundsAsset).balanceOf(self))
+#     assert amountRecovered != 0 # dev: no funds to transfer
+#     assert extcall IERC20(cd.trialFundsAsset).transfer(cd.agentFactory, amountRecovered, default_return_value=True) # dev: trial funds transfer failed
 
-    # update trial funds data
-    remainingTrialFunds: uint256 = cd.trialFundsInitialAmount - amountRecovered
-    self.trialFundsInitialAmount = remainingTrialFunds
-    if remainingTrialFunds == 0:
-        self.trialFundsAsset = empty(address)
+#     # update trial funds data
+#     remainingTrialFunds: uint256 = cd.trialFundsInitialAmount - amountRecovered
+#     self.trialFundsInitialAmount = remainingTrialFunds
+#     if remainingTrialFunds == 0:
+#         self.trialFundsAsset = empty(address)
 
-    log UserWalletTrialFundsRecovered(asset=cd.trialFundsAsset, amountRecovered=amountRecovered, remainingAmount=remainingTrialFunds)
-    return True
+#     log UserWalletTrialFundsRecovered(asset=cd.trialFundsAsset, amountRecovered=amountRecovered, remainingAmount=remainingTrialFunds)
+#     return True
 
 
 # recover nft
@@ -1583,3 +1604,116 @@ def recoverNft(_collection: address, _nftTokenId: uint256) -> bool:
     extcall IERC721(_collection).safeTransferFrom(self, owner, _nftTokenId)
     log UserWalletNftRecovered(collection=_collection, nftTokenId=_nftTokenId, owner=owner)
     return True
+
+
+####################
+# Wallet Migration #
+####################
+
+
+@external
+def migrateWalletOut(
+    _newWallet: address,
+    _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS] = [],
+    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST] = [],
+) -> bool:
+    cd: CoreData = self._getCoreData()
+    assert msg.sender == cd.owner # dev: no perms
+    assert not self.didMigrateOut # dev: already migrated out
+
+    # validate migration
+    self._validateAltWalletDuringMigration(_newWallet, cd)
+
+    # if trial funds are set, make sure asset is the same
+    hasTrialFunds: bool = False
+    if cd.trialFundsAsset != empty(address) and cd.trialFundsInitialAmount != 0:
+        hasTrialFunds = True
+        if staticcall UserWallet(_newWallet).trialFundsInitialAmount() != 0:
+            assert cd.trialFundsAsset == staticcall UserWallet(_newWallet).trialFundsAsset() # dev: new wallet has different trial funds asset
+
+    # validate valid whitelist
+    for r: address in _whitelistToMigrate:
+        assert staticcall WalletConfig(cd.walletConfig).isRecipientAllowed(r) # dev: new wallet has different whitelist
+
+    # iterate over each asset, get full balance, transfer to new wallet
+    assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS] = []
+    for a: address in _assetsToMigrate:
+        assetBal: uint256 = staticcall IERC20(a).balanceOf(self)
+        if assetBal != 0:
+            assert extcall IERC20(a).transfer(_newWallet, assetBal, default_return_value=True) # dev: asset transfer failed
+            assetsMigrated.append(a)
+
+    # migrate any trial funds related vault tokens
+    trialFundsVaultTokens: DynArray[address, MAX_VAULTS_FOR_USER] = []
+    if hasTrialFunds:
+        trialFundsVaultTokens = staticcall LegoRegistry(cd.legoRegistry).getVaultTokensForUser(self, cd.trialFundsAsset)
+        if len(trialFundsVaultTokens) != 0:
+            for v: address in trialFundsVaultTokens:
+                vaultBal: uint256 = staticcall IERC20(v).balanceOf(self)
+                assert extcall IERC20(v).transfer(_newWallet, vaultBal, default_return_value=True) # dev: vault transfer failed
+
+    # update local storage
+    self.trialFundsAsset = empty(address)
+    self.trialFundsInitialAmount = 0
+    self.didMigrateOut = True
+
+    # call new wallet to finish migration
+    assert extcall UserWallet(_newWallet).finishMigrationIn(assetsMigrated, _whitelistToMigrate, trialFundsVaultTokens, cd.trialFundsAsset, cd.trialFundsInitialAmount) # dev: migration failed
+
+    log UserWalletMigratedOut(newWallet=_newWallet, numAssetsMigrated=len(assetsMigrated), numWhitelistMigrated=len(_whitelistToMigrate), trialFundsAsset=cd.trialFundsAsset, trialFundsInitialAmount=cd.trialFundsInitialAmount, numTrialFundsVaultTokens=len(trialFundsVaultTokens))
+    return True
+
+
+@external
+def finishMigrationIn(
+    _assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS],
+    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST],
+    _trialFundsVaultTokens: DynArray[address, MAX_VAULTS_FOR_USER],
+    _trialFundsAsset: address,
+    _trialFundsInitialAmount: uint256,
+) -> bool:
+    cd: CoreData = self._getCoreData()
+    assert not self.didMigrateIn # dev: already migrated
+
+    # validate migration
+    oldWallet: address = msg.sender
+    self._validateAltWalletDuringMigration(oldWallet, cd)
+
+    # validate trial funds asset
+    if _trialFundsInitialAmount != 0:
+        assert _trialFundsAsset != empty(address) # dev: trial funds asset is 0x0
+        if cd.trialFundsAsset != empty(address):
+            assert _trialFundsAsset == cd.trialFundsAsset # dev: different trial funds asset
+        self.trialFundsAsset = _trialFundsAsset
+        self.trialFundsInitialAmount += _trialFundsInitialAmount
+
+    # validate valid whitelist
+    if len(_whitelistToMigrate) != 0:
+        oldWalletConfig: address = staticcall UserWallet(oldWallet).walletConfig()
+        for r: address in _whitelistToMigrate:
+            assert staticcall WalletConfig(oldWalletConfig).isRecipientAllowed(r) # dev: new wallet has different whitelist
+            assert extcall WalletConfig(cd.walletConfig).setWhitelistAddrFromMigration(r) # dev: failed to set whitelist address
+
+    # yield tracking
+    # check assets migrated (any vault tokens?)
+    # track yield on migrated trial funds vault tokens
+
+    self.didMigrateIn = True
+    return True
+
+
+@view
+@internal
+def _validateAltWalletDuringMigration(_altWallet: address, _cd: CoreData):
+    assert staticcall AgentFactory(_cd.agentFactory).isUserWallet(_altWallet) # dev: must be Underscore wallet
+
+    # make sure owner is the same
+    altWalletConfig: address = staticcall UserWallet(_altWallet).walletConfig()
+    assert staticcall WalletConfig(altWalletConfig).owner() == _cd.owner # dev: alt wallet has different owner
+
+    # cannot have any pending owner changes
+    assert not staticcall WalletConfig(_cd.walletConfig).hasPendingOwnerChange() # dev: this wallet has pending owner change
+    assert not staticcall WalletConfig(altWalletConfig).hasPendingOwnerChange() # dev: alt wallet has pending owner change
+
+    # make sure ambassador is the same
+    assert staticcall WalletConfig(altWalletConfig).myAmbassador() == staticcall WalletConfig(_cd.walletConfig).myAmbassador() # dev: ambassador doesn't match

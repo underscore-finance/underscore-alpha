@@ -167,6 +167,9 @@ event WhitelistAddrCancelled:
 event WhitelistAddrRemoved:
     addr: indexed(address)
 
+event WhitelistAddrSetViaMigration:
+    addr: indexed(address)
+
 event ReserveAssetSet:
     asset: indexed(address)
     amount: uint256
@@ -968,6 +971,20 @@ def removeWhitelistAddr(_addr: address):
 
     self.isRecipientAllowed[_addr] = False
     log WhitelistAddrRemoved(addr=_addr)
+
+
+@external
+def setWhitelistAddrFromMigration(_addr: address) -> bool:
+    """
+    @notice Sets a whitelist address from a migration
+    @dev Can only be called by the wallet
+    @param _addr The address to set
+    @return bool True if the whitelist address was successfully set
+    """
+    assert msg.sender == self.wallet # dev: only wallet can confirm
+    self.isRecipientAllowed[_addr] = True
+    log WhitelistAddrSetViaMigration(addr=_addr)
+    return True
 
 
 ##################

@@ -29,6 +29,7 @@ legoIdToType: public(HashMap[uint256, LegoType]) # legoId -> lego type
 legoHelper: public(address)
 
 MAX_VAULTS: constant(uint256) = 15
+MAX_VAULTS_FOR_USER: constant(uint256) = 30
 
 
 @deploy
@@ -374,6 +375,40 @@ def getUnderlyingForUser(_user: address, _asset: address) -> uint256:
                 totalDeposited += staticcall LegoYield(legoAddr).getUnderlyingAmount(vaultToken, vaultTokenBal)
 
     return totalDeposited
+
+
+@view
+@external
+def getVaultTokensForUser(_user: address, _asset: address) -> DynArray[address, MAX_VAULTS_FOR_USER]:
+    """
+    @notice Get all vault tokens for a user in a given asset
+    @dev Returns empty array if user or asset is empty
+    @param _user The address of the user to query
+    @param _asset The address of the asset to query
+    """
+    if empty(address) in [_user, _asset]:
+        return []
+
+    vaultTokens: DynArray[address, MAX_VAULTS_FOR_USER] = []
+
+    numLegos: uint256 = registry.numAddys
+    for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
+        legoType: LegoType = self.legoIdToType[i]
+        if legoType != LegoType.YIELD_OPP:
+            continue
+
+        legoAddr: address = registry.addyInfo[i].addr
+        legoVaultTokens: DynArray[address, MAX_VAULTS] = staticcall LegoYield(legoAddr).getAssetOpportunities(_asset)
+        if len(legoVaultTokens) == 0:
+            continue
+
+        for vaultToken: address in legoVaultTokens:
+            if vaultToken == empty(address):
+                continue
+            if staticcall IERC20(vaultToken).balanceOf(_user) != 0:
+                vaultTokens.append(vaultToken)
+
+    return vaultTokens
 
 
 @view

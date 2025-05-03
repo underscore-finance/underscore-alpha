@@ -271,13 +271,19 @@ def _isValidUserWalletSetup(_mainTemplate: address, _configTemplate: address, _o
 
 
 @external
-def createUserWallet(_owner: address = msg.sender, _agent: address = empty(address), _ambassador: address = empty(address)) -> address:
+def createUserWallet(
+    _owner: address = msg.sender,
+    _agent: address = empty(address),
+    _ambassador: address = empty(address),
+    _shouldUseTrialFunds: bool = True,
+) -> address:
     """
     @notice Create a new User Wallet with specified owner and optional agent
     @dev Creates a minimal proxy of the current template and initializes it
     @param _owner The address that will own the wallet (defaults to msg.sender)
     @param _agent The address that will be the agent (defaults to empty address, can add this later)
     @param _ambassador The address of the ambassador who invited the user (defaults to empty address)
+    @param _shouldUseTrialFunds Whether to use trial funds (defaults to True)
     @return The address of the newly created wallet, or empty address if setup is invalid
     """
     assert self.isActivated # dev: not activated
@@ -303,7 +309,7 @@ def createUserWallet(_owner: address = msg.sender, _agent: address = empty(addre
 
     # initial trial funds asset + amount
     trialFundsData: TrialFundsData = self.trialFundsData
-    if trialFundsData.asset != empty(address):
+    if _shouldUseTrialFunds and trialFundsData.asset != empty(address):
         trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
 
     # create wallet contracts
