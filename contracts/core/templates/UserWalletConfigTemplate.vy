@@ -11,10 +11,19 @@ import contracts.modules.Ownership as own
 from ethereum.ercs import IERC20
 
 interface UserWallet:
+    def migrateWalletOut(_newWallet: address, _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS], _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST]) -> bool: nonpayable
+    def updateYieldTrackingOnMigrationIn(_vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS]) -> bool: nonpayable
     def trialFundsInitialAmount() -> uint256: view
+    def recoverTrialFunds() -> bool: nonpayable
     def trialFundsAsset() -> address: view
     def walletConfig() -> address: view
     def canBeAmbassador() -> bool: view
+
+interface WalletConfig:
+    def isRecipientAllowed(_addr: address) -> bool: view
+    def hasPendingOwnerChange() -> bool: view
+    def myAmbassador() -> address: view
+    def owner() -> address: view
 
 interface PriceSheets:
     def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
@@ -28,10 +37,6 @@ interface LegoRegistry:
 interface AgentFactory:
     def canCancelCriticalAction(_addr: address) -> bool: view
     def isUserWallet(_wallet: address) -> bool: view
-
-interface WalletConfig:
-    def hasPendingOwnerChange() -> bool: view
-    def owner() -> address: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -185,6 +190,17 @@ event FundsRecovered:
     recipient: indexed(address)
     balance: uint256
 
+event UserWalletStartMigration:
+    newWallet: indexed(address)
+    numAssetsToMigrate: uint256
+    numWhitelistToMigrate: uint256
+
+event UserWalletFinishMigration:
+    oldWallet: indexed(address)
+    numWhitelistMigrated: uint256
+    numVaultTokensMigrated: uint256
+    numAssetsMigrated: uint256
+
 # core
 wallet: public(address)
 didSetWallet: public(bool)
@@ -204,12 +220,19 @@ canWalletBeAmbassador: public(bool)
 ambassadorForwarder: public(address)
 myAmbassador: public(address) # cannot be edited -- inviter of THIS user wallet
 
+# migration
+didMigrateIn: public(bool)
+didMigrateOut: public(bool)
+
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
 PRICE_SHEETS_ID: constant(uint256) = 3
 ORACLE_REGISTRY_ID: constant(uint256) = 4
 
+MAX_MIGRATION_ASSETS: constant(uint256) = 40
+MAX_MIGRATION_WHITELIST: constant(uint256) = 20
+MAX_VAULTS_FOR_USER: constant(uint256) = 30
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
 API_VERSION: constant(String[28]) = "0.0.3"
@@ -973,15 +996,8 @@ def removeWhitelistAddr(_addr: address):
     log WhitelistAddrRemoved(addr=_addr)
 
 
-@external
-def setWhitelistAddrFromMigration(_addr: address) -> bool:
-    """
-    @notice Sets a whitelist address from a migration
-    @dev Can only be called by the wallet
-    @param _addr The address to set
-    @return bool True if the whitelist address was successfully set
-    """
-    assert msg.sender == self.wallet # dev: only wallet can confirm
+@internal
+def _setWhitelistAddrFromMigration(_addr: address) -> bool:
     self.isRecipientAllowed[_addr] = True
     log WhitelistAddrSetViaMigration(addr=_addr)
     return True
@@ -1120,3 +1136,80 @@ def recoverFunds(_asset: address) -> bool:
     assert extcall IERC20(_asset).transfer(wallet, balance, default_return_value=True) # dev: recovery failed
     log FundsRecovered(asset=_asset, recipient=wallet, balance=balance)
     return True
+
+
+####################
+# Wallet Migration #
+####################
+
+
+@external
+def startMigrationOut(
+    _newWallet: address,
+    _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS] = [],
+    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST] = [],
+) -> bool:
+    cd: CoreData = self._getCoreData()
+    assert msg.sender == cd.owner # dev: no perms
+    assert not self.didMigrateOut # dev: already migrated out
+
+    # validate migration
+    newWalletConfig: address = staticcall UserWallet(_newWallet).walletConfig()
+    self._validateAltWalletDuringMigration(_newWallet, newWalletConfig, cd.agentFactory)
+    for r: address in _whitelistToMigrate:
+        assert self.isRecipientAllowed[r] # dev: new wallet has different whitelist
+
+    # recover trial funds first
+    extcall UserWallet(cd.wallet).recoverTrialFunds() # not asserting True, may have already been done
+
+    # migrate wallet
+    assert extcall UserWallet(cd.wallet).migrateWalletOut(_newWallet, _assetsToMigrate, _whitelistToMigrate) # dev: migration failed
+
+    self.didMigrateOut = True
+    log UserWalletStartMigration(newWallet=_newWallet, numAssetsToMigrate=len(_assetsToMigrate), numWhitelistToMigrate=len(_whitelistToMigrate))
+    return True
+
+
+@external
+def finishMigrationIn(
+    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST],
+    _assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS],
+    _vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS],
+) -> bool:
+    cd: CoreData = self._getCoreData()
+    assert not self.didMigrateIn # dev: already migrated
+
+    # validate migration
+    oldWallet: address = msg.sender
+    oldWalletConfig: address = staticcall UserWallet(oldWallet).walletConfig()
+    self._validateAltWalletDuringMigration(oldWallet, oldWalletConfig, cd.agentFactory)
+
+    # validate valid whitelist
+    if len(_whitelistToMigrate) != 0:
+        for r: address in _whitelistToMigrate:
+            assert staticcall WalletConfig(oldWalletConfig).isRecipientAllowed(r) # dev: old wallet has different whitelist
+            assert self._setWhitelistAddrFromMigration(r) # dev: failed to set whitelist address
+
+    # update yield tracking
+    if len(_vaultTokensMigrated) != 0:
+        assert extcall UserWallet(cd.wallet).updateYieldTrackingOnMigrationIn(_vaultTokensMigrated) # dev: yield tracking failed
+
+    self.didMigrateIn = True
+    log UserWalletFinishMigration(oldWallet=oldWallet, numWhitelistMigrated=len(_whitelistToMigrate), numVaultTokensMigrated=len(_vaultTokensMigrated), numAssetsMigrated=len(_assetsMigrated))
+    return True
+
+
+@view
+@internal
+def _validateAltWalletDuringMigration(_altWallet: address, _altWalletConfig: address, _agentFactory: address):
+    assert staticcall AgentFactory(_agentFactory).isUserWallet(_altWallet) # dev: must be Underscore wallet
+
+    # make sure owner is the same
+    assert staticcall WalletConfig(_altWalletConfig).owner() == own.owner # dev: alt wallet has different owner
+
+    # cannot have any pending owner changes
+    assert not own._hasPendingOwnerChange() # dev: this wallet has pending owner change
+    assert not staticcall WalletConfig(_altWalletConfig).hasPendingOwnerChange() # dev: alt wallet has pending owner change
+
+    # make sure ambassador is the same
+    assert staticcall WalletConfig(_altWalletConfig).myAmbassador() == self.myAmbassador # dev: ambassador doesn't match

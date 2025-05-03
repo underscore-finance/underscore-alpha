@@ -19,6 +19,10 @@ flag LegoType:
     YIELD_OPP
     DEX
 
+struct VaultTokenInfo:
+    legoId: uint256
+    vaultToken: address
+
 event LegoHelperSet:
     helperAddr: indexed(address)
 
@@ -379,17 +383,18 @@ def getUnderlyingForUser(_user: address, _asset: address) -> uint256:
 
 @view
 @external
-def getVaultTokensForUser(_user: address, _asset: address) -> DynArray[address, MAX_VAULTS_FOR_USER]:
+def getVaultTokensForUser(_user: address, _asset: address) -> DynArray[VaultTokenInfo, MAX_VAULTS_FOR_USER]:
     """
     @notice Get all vault tokens for a user in a given asset
     @dev Returns empty array if user or asset is empty
     @param _user The address of the user to query
     @param _asset The address of the asset to query
+    @return Array of VaultTokenInfo structs containing legoId and vaultToken address
     """
     if empty(address) in [_user, _asset]:
         return []
 
-    vaultTokens: DynArray[address, MAX_VAULTS_FOR_USER] = []
+    vaultTokens: DynArray[VaultTokenInfo, MAX_VAULTS_FOR_USER] = []
 
     numLegos: uint256 = registry.numAddys
     for i: uint256 in range(1, numLegos, bound=max_value(uint256)):
@@ -406,7 +411,10 @@ def getVaultTokensForUser(_user: address, _asset: address) -> DynArray[address, 
             if vaultToken == empty(address):
                 continue
             if staticcall IERC20(vaultToken).balanceOf(_user) != 0:
-                vaultTokens.append(vaultToken)
+                vaultTokens.append(VaultTokenInfo(
+                    legoId=i,
+                    vaultToken=vaultToken
+                ))
 
     return vaultTokens
 
