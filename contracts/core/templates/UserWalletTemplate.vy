@@ -1507,7 +1507,13 @@ def migrateWalletOut(
         else:
             assetsMigrated.append(asset)
 
-    # finish migration
+    # finish migration of new wallet
     newWalletConfig: address = staticcall UserWallet(_newWallet).walletConfig()
     assert extcall WalletConfig(newWalletConfig).finishMigrationIn(_whitelistToMigrate, assetsMigrated, vaultTokensMigrated) # dev: migration failed
+    
+    # update yield tracking for this wallet
+    if len(vaultTokensMigrated) != 0:
+        for vaultToken: address in vaultTokensMigrated:
+            extcall WalletConfig(cd.walletConfig).updateYieldTrackingOnExit(vaultToken, cd.legoRegistry)
+
     return True

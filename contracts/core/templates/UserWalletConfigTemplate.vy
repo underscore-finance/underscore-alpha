@@ -19,17 +19,19 @@ interface UserWallet:
     def walletConfig() -> address: view
     def canBeAmbassador() -> bool: view
 
+interface WalletConfig:
+    def vaultTokenAmounts(_vaultToken: address) -> uint256: view
+    def depositedAmounts(_vaultToken: address) -> uint256: view
+    def isRecipientAllowed(_addr: address) -> bool: view
+    def hasPendingOwnerChange() -> bool: view
+    def myAmbassador() -> address: view
+    def owner() -> address: view
+
 interface LegoRegistry:
     def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address): view
     def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
     def isVaultToken(_vaultToken: address) -> bool: view
     def isValidLegoId(_legoId: uint256) -> bool: view
-
-interface WalletConfig:
-    def isRecipientAllowed(_addr: address) -> bool: view
-    def hasPendingOwnerChange() -> bool: view
-    def myAmbassador() -> address: view
-    def owner() -> address: view
 
 interface PriceSheets:
     def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
@@ -888,7 +890,8 @@ def finishMigrationIn(
     if len(_vaultTokensMigrated) != 0:
         for vaultToken: address in _vaultTokensMigrated:
             self.isVaultToken[vaultToken] = True
-            self._updateYieldTrackingOnEntry(vaultToken, max_value(uint256), cd.legoRegistry)
+            self.vaultTokenAmounts[vaultToken] += staticcall WalletConfig(oldWalletConfig).vaultTokenAmounts(vaultToken)
+            self.depositedAmounts[vaultToken] += staticcall WalletConfig(oldWalletConfig).depositedAmounts(vaultToken)
 
     self.didMigrateIn = True
     log UserWalletFinishMigration(oldWallet=oldWallet, numWhitelistMigrated=len(_whitelistToMigrate), numVaultTokensMigrated=len(_vaultTokensMigrated), numAssetsMigrated=len(_assetsMigrated))
