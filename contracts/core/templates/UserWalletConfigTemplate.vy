@@ -9,15 +9,21 @@ exports: own.__interface__
 
 import contracts.modules.Ownership as own
 from ethereum.ercs import IERC20
+from interfaces import LegoYield
 
 interface UserWallet:
     def migrateWalletOut(_newWallet: address, _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS], _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST]) -> bool: nonpayable
-    def updateYieldTrackingOnMigrationIn(_vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS]) -> bool: nonpayable
     def trialFundsInitialAmount() -> uint256: view
     def recoverTrialFunds() -> bool: nonpayable
     def trialFundsAsset() -> address: view
     def walletConfig() -> address: view
     def canBeAmbassador() -> bool: view
+
+interface LegoRegistry:
+    def getLegoFromVaultToken(_vaultToken: address) -> (uint256, address): view
+    def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
+    def isVaultToken(_vaultToken: address) -> bool: view
+    def isValidLegoId(_legoId: uint256) -> bool: view
 
 interface WalletConfig:
     def isRecipientAllowed(_addr: address) -> bool: view
@@ -29,10 +35,6 @@ interface PriceSheets:
     def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo): view
     def getAgentSubPriceData(_agent: address) -> SubscriptionInfo: view
     def protocolSubPriceData() -> SubscriptionInfo: view
-
-interface LegoRegistry:
-    def getUnderlyingForUser(_user: address, _asset: address) -> uint256: view
-    def isValidLegoId(_legoId: uint256) -> bool: view
 
 interface AgentFactory:
     def canCancelCriticalAction(_addr: address) -> bool: view
@@ -224,6 +226,11 @@ myAmbassador: public(address) # cannot be edited -- inviter of THIS user wallet
 didMigrateIn: public(bool)
 didMigrateOut: public(bool)
 
+# yield tracking
+isVaultToken: public(HashMap[address, bool]) # asset -> is vault token
+vaultTokenAmounts: public(HashMap[address, uint256]) # vault token -> vault token amount
+depositedAmounts: public(HashMap[address, uint256]) # vault token -> underlying asset amount
+
 # registry ids
 AGENT_FACTORY_ID: constant(uint256) = 1
 LEGO_REGISTRY_ID: constant(uint256) = 2
@@ -232,7 +239,6 @@ ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 MAX_MIGRATION_ASSETS: constant(uint256) = 40
 MAX_MIGRATION_WHITELIST: constant(uint256) = 20
-MAX_VAULTS_FOR_USER: constant(uint256) = 30
 MAX_ASSETS: constant(uint256) = 25
 MAX_LEGOS: constant(uint256) = 20
 API_VERSION: constant(String[28]) = "0.0.3"
@@ -628,6 +634,281 @@ def _getAvailBalAfterTrialFunds(
         availAmount = _trialFundsCurrentBal - lockedAmount
 
     return availAmount
+
+
+##################
+# Yield Tracking #
+##################
+
+
+# deposits
+
+
+@external
+def updateYieldTrackingOnDeposit(
+    _asset: address,
+    _vaultToken: address,
+    _vaultTokenAmountReceived: uint256,
+    _assetAmountDeposited: uint256,
+    _legoRegistry: address,
+):
+    assert msg.sender == self.wallet # dev: no perms
+
+    if self.isVaultToken[_asset]: # if asset is the vault token (i.e. Ripe collateral)
+        self._updateYieldTrackingOnExit(_asset, _legoRegistry)
+    self._updateYieldTrackingOnDeposit(_vaultToken, _vaultTokenAmountReceived, _assetAmountDeposited, _legoRegistry)
+
+
+@internal
+def _updateYieldTrackingOnDeposit(
+    _vaultToken: address,
+    _vaultTokenAmountReceived: uint256,
+    _assetAmountDeposited: uint256,
+    _legoRegistry: address,
+):
+    if _vaultToken == empty(address):
+        return
+
+    # validate vault token
+    isVaultToken: bool = self.isVaultToken[_vaultToken]
+    if not isVaultToken and staticcall LegoRegistry(_legoRegistry).isVaultToken(_vaultToken):
+        self.isVaultToken[_vaultToken] = True
+        isVaultToken = True
+
+    if isVaultToken:
+        self.vaultTokenAmounts[_vaultToken] += _vaultTokenAmountReceived
+        self.depositedAmounts[_vaultToken] += _assetAmountDeposited
+
+
+# withdrawals
+
+
+@external
+def updateYieldTrackingOnWithdrawal(
+    _vaultToken: address,
+    _vaultTokenAmountBurned: uint256,
+    _asset: address,
+    _assetAmountReceived: uint256,
+    _legoRegistry: address,
+) -> uint256:
+    assert msg.sender == self.wallet # dev: no perms
+
+    # if asset is the vault token (i.e. Ripe collateral)
+    if self.isVaultToken[_asset]: 
+        self._updateYieldTrackingOnEntry(_asset, _assetAmountReceived, _legoRegistry)
+    
+    # check if there are any yield profits
+    assetProfitAmount: uint256 = 0
+    if self.isVaultToken[_vaultToken]:
+        assetProfitAmount = self._updateYieldTrackingOnWithdrawal(_vaultToken, _vaultTokenAmountBurned, _assetAmountReceived, _legoRegistry)
+
+    return assetProfitAmount
+
+
+@internal
+def _updateYieldTrackingOnWithdrawal(
+    _vaultToken: address,
+    _vaultTokenAmountBurned: uint256,
+    _assetAmountReceived: uint256,
+    _legoRegistry: address,
+) -> uint256:
+    actualVaultTokenBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self.wallet)
+    trackedVaultTokenBalance: uint256 = self.vaultTokenAmounts[_vaultToken]
+
+    # sufficient balance, see if we need to actually ADD to the tracked balance
+    if actualVaultTokenBalance >= trackedVaultTokenBalance:
+        self._updateYieldTrackingOnEntry(_vaultToken, actualVaultTokenBalance - trackedVaultTokenBalance, _legoRegistry)
+        return 0
+
+    # reduce the tracked balance
+    vaultTokenToReduce: uint256 = trackedVaultTokenBalance - actualVaultTokenBalance
+    assetAmountToReduce: uint256 = _assetAmountReceived * vaultTokenToReduce // _vaultTokenAmountBurned
+
+    # adjust vault token amount
+    shouldZeroOut: bool = False
+    if vaultTokenToReduce >= trackedVaultTokenBalance:
+        self.vaultTokenAmounts[_vaultToken] = 0
+        shouldZeroOut = True
+    else:
+        self.vaultTokenAmounts[_vaultToken] -= vaultTokenToReduce
+
+    # handle asset tracking
+    profitAmount: uint256 = 0
+    trackedAssetAmount: uint256 = self.depositedAmounts[_vaultToken]
+    if assetAmountToReduce > trackedAssetAmount:
+        profitAmount = assetAmountToReduce - trackedAssetAmount
+        self.depositedAmounts[_vaultToken] = 0
+    elif shouldZeroOut:
+        self.depositedAmounts[_vaultToken] = 0
+    else:
+        self.depositedAmounts[_vaultToken] -= assetAmountToReduce
+
+    return profitAmount
+
+
+# other
+
+
+@external
+def updateYieldTrackingOnSwap(_tokenIn: address, _tokenOut: address, _tokenOutAmount: uint256, _legoRegistry: address):
+    assert msg.sender == self.wallet # dev: no perms
+
+    # someone may have swapped out of a vault token
+    if self.isVaultToken[_tokenIn]:
+        self._updateYieldTrackingOnExit(_tokenIn, _legoRegistry)
+
+    # someone may have swapped into a vault token
+    if self.isVaultToken[_tokenOut]:
+        self._updateYieldTrackingOnEntry(_tokenOut, _tokenOutAmount, _legoRegistry)
+
+
+@external
+def updateYieldTrackingOnEntry(
+    _asset: address,
+    _amount: uint256,
+    _legoRegistry: address,
+):
+    assert msg.sender == self.wallet # dev: no perms
+
+    if self.isVaultToken[_asset]:
+        self._updateYieldTrackingOnEntry(_asset, _amount, _legoRegistry)
+
+
+@internal
+def _updateYieldTrackingOnEntry(
+    _vaultToken: address,
+    _vaultTokenAmount: uint256,
+    _legoRegistry: address,
+):
+    if _vaultTokenAmount == 0:
+        return
+
+    # get lego details for vault token
+    na: uint256 = 0
+    legoAddr: address = empty(address)
+    na, legoAddr = staticcall LegoRegistry(_legoRegistry).getLegoFromVaultToken(_vaultToken)
+    if legoAddr == empty(address):
+        return
+
+    actualVaultTokenAmount: uint256 = min(_vaultTokenAmount, staticcall IERC20(_vaultToken).balanceOf(self.wallet))
+    if actualVaultTokenAmount != 0:
+        self.vaultTokenAmounts[_vaultToken] += actualVaultTokenAmount
+        self.depositedAmounts[_vaultToken] += staticcall LegoYield(legoAddr).getUnderlyingAmount(_vaultToken, actualVaultTokenAmount)
+
+
+@external
+def updateYieldTrackingOnExit(_asset: address, _legoRegistry: address):
+    assert msg.sender == self.wallet # dev: no perms
+
+    if self.isVaultToken[_asset]:
+        self._updateYieldTrackingOnExit(_asset, _legoRegistry)
+
+
+@internal
+def _updateYieldTrackingOnExit(_vaultToken: address, _legoRegistry: address):
+    actualVaultTokenBalance: uint256 = staticcall IERC20(_vaultToken).balanceOf(self.wallet)
+    trackedVaultTokenBalance: uint256 = self.vaultTokenAmounts[_vaultToken]
+
+    # sufficient balance, see if we need to actually ADD to the tracked balance
+    if actualVaultTokenBalance >= trackedVaultTokenBalance:
+        self._updateYieldTrackingOnEntry(_vaultToken, actualVaultTokenBalance - trackedVaultTokenBalance, _legoRegistry)
+        return
+    
+    # reduce the tracked balance
+    vaultTokenToReduce: uint256 = trackedVaultTokenBalance - actualVaultTokenBalance
+
+    # zero out the tracked balance
+    if vaultTokenToReduce >= trackedVaultTokenBalance:
+        self.vaultTokenAmounts[_vaultToken] = 0
+        self.depositedAmounts[_vaultToken] = 0
+
+    else:
+        self.vaultTokenAmounts[_vaultToken] -= vaultTokenToReduce
+
+        # reduce the tracked asset amount
+        trackedAssetAmount: uint256 = self.depositedAmounts[_vaultToken]
+        if trackedAssetAmount != 0:
+            assetAmountToReduce: uint256 = trackedAssetAmount * vaultTokenToReduce // trackedVaultTokenBalance
+            self.depositedAmounts[_vaultToken] -= assetAmountToReduce
+
+
+####################
+# Wallet Migration #
+####################
+
+
+@external
+def startMigrationOut(
+    _newWallet: address,
+    _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS] = [],
+    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST] = [],
+) -> bool:
+    cd: CoreData = self._getCoreData()
+    assert msg.sender == cd.owner # dev: no perms
+    assert not self.didMigrateOut # dev: already migrated out
+
+    # validate migration
+    newWalletConfig: address = staticcall UserWallet(_newWallet).walletConfig()
+    self._validateAltWalletDuringMigration(_newWallet, newWalletConfig, cd.agentFactory)
+    for r: address in _whitelistToMigrate:
+        assert self.isRecipientAllowed[r] # dev: new wallet has different whitelist
+
+    # recover trial funds first
+    extcall UserWallet(cd.wallet).recoverTrialFunds() # not asserting True, may have already been done
+
+    # migrate wallet
+    assert extcall UserWallet(cd.wallet).migrateWalletOut(_newWallet, _assetsToMigrate, _whitelistToMigrate) # dev: migration failed
+
+    self.didMigrateOut = True
+    log UserWalletStartMigration(newWallet=_newWallet, numAssetsToMigrate=len(_assetsToMigrate), numWhitelistToMigrate=len(_whitelistToMigrate))
+    return True
+
+
+@external
+def finishMigrationIn(
+    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST],
+    _assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS],
+    _vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS],
+) -> bool:
+    cd: CoreData = self._getCoreData()
+    assert not self.didMigrateIn # dev: already migrated
+
+    # validate migration
+    oldWallet: address = msg.sender
+    oldWalletConfig: address = staticcall UserWallet(oldWallet).walletConfig()
+    self._validateAltWalletDuringMigration(oldWallet, oldWalletConfig, cd.agentFactory)
+
+    # validate valid whitelist
+    if len(_whitelistToMigrate) != 0:
+        for r: address in _whitelistToMigrate:
+            assert staticcall WalletConfig(oldWalletConfig).isRecipientAllowed(r) # dev: old wallet has different whitelist
+            assert self._setWhitelistAddrFromMigration(r) # dev: failed to set whitelist address
+
+    # update yield tracking
+    if len(_vaultTokensMigrated) != 0:
+        for vaultToken: address in _vaultTokensMigrated:
+            self.isVaultToken[vaultToken] = True
+            self._updateYieldTrackingOnEntry(vaultToken, max_value(uint256), cd.legoRegistry)
+
+    self.didMigrateIn = True
+    log UserWalletFinishMigration(oldWallet=oldWallet, numWhitelistMigrated=len(_whitelistToMigrate), numVaultTokensMigrated=len(_vaultTokensMigrated), numAssetsMigrated=len(_assetsMigrated))
+    return True
+
+
+@view
+@internal
+def _validateAltWalletDuringMigration(_altWallet: address, _altWalletConfig: address, _agentFactory: address):
+    assert staticcall AgentFactory(_agentFactory).isUserWallet(_altWallet) # dev: must be Underscore wallet
+
+    # make sure owner is the same
+    assert staticcall WalletConfig(_altWalletConfig).owner() == own.owner # dev: alt wallet has different owner
+
+    # cannot have any pending owner changes
+    assert not own._hasPendingOwnerChange() # dev: this wallet has pending owner change
+    assert not staticcall WalletConfig(_altWalletConfig).hasPendingOwnerChange() # dev: alt wallet has pending owner change
+
+    # make sure ambassador is the same
+    assert staticcall WalletConfig(_altWalletConfig).myAmbassador() == self.myAmbassador # dev: ambassador doesn't match
 
 
 ##################
@@ -1136,80 +1417,3 @@ def recoverFunds(_asset: address) -> bool:
     assert extcall IERC20(_asset).transfer(wallet, balance, default_return_value=True) # dev: recovery failed
     log FundsRecovered(asset=_asset, recipient=wallet, balance=balance)
     return True
-
-
-####################
-# Wallet Migration #
-####################
-
-
-@external
-def startMigrationOut(
-    _newWallet: address,
-    _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS] = [],
-    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST] = [],
-) -> bool:
-    cd: CoreData = self._getCoreData()
-    assert msg.sender == cd.owner # dev: no perms
-    assert not self.didMigrateOut # dev: already migrated out
-
-    # validate migration
-    newWalletConfig: address = staticcall UserWallet(_newWallet).walletConfig()
-    self._validateAltWalletDuringMigration(_newWallet, newWalletConfig, cd.agentFactory)
-    for r: address in _whitelistToMigrate:
-        assert self.isRecipientAllowed[r] # dev: new wallet has different whitelist
-
-    # recover trial funds first
-    extcall UserWallet(cd.wallet).recoverTrialFunds() # not asserting True, may have already been done
-
-    # migrate wallet
-    assert extcall UserWallet(cd.wallet).migrateWalletOut(_newWallet, _assetsToMigrate, _whitelistToMigrate) # dev: migration failed
-
-    self.didMigrateOut = True
-    log UserWalletStartMigration(newWallet=_newWallet, numAssetsToMigrate=len(_assetsToMigrate), numWhitelistToMigrate=len(_whitelistToMigrate))
-    return True
-
-
-@external
-def finishMigrationIn(
-    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST],
-    _assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS],
-    _vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS],
-) -> bool:
-    cd: CoreData = self._getCoreData()
-    assert not self.didMigrateIn # dev: already migrated
-
-    # validate migration
-    oldWallet: address = msg.sender
-    oldWalletConfig: address = staticcall UserWallet(oldWallet).walletConfig()
-    self._validateAltWalletDuringMigration(oldWallet, oldWalletConfig, cd.agentFactory)
-
-    # validate valid whitelist
-    if len(_whitelistToMigrate) != 0:
-        for r: address in _whitelistToMigrate:
-            assert staticcall WalletConfig(oldWalletConfig).isRecipientAllowed(r) # dev: old wallet has different whitelist
-            assert self._setWhitelistAddrFromMigration(r) # dev: failed to set whitelist address
-
-    # update yield tracking
-    if len(_vaultTokensMigrated) != 0:
-        assert extcall UserWallet(cd.wallet).updateYieldTrackingOnMigrationIn(_vaultTokensMigrated) # dev: yield tracking failed
-
-    self.didMigrateIn = True
-    log UserWalletFinishMigration(oldWallet=oldWallet, numWhitelistMigrated=len(_whitelistToMigrate), numVaultTokensMigrated=len(_vaultTokensMigrated), numAssetsMigrated=len(_assetsMigrated))
-    return True
-
-
-@view
-@internal
-def _validateAltWalletDuringMigration(_altWallet: address, _altWalletConfig: address, _agentFactory: address):
-    assert staticcall AgentFactory(_agentFactory).isUserWallet(_altWallet) # dev: must be Underscore wallet
-
-    # make sure owner is the same
-    assert staticcall WalletConfig(_altWalletConfig).owner() == own.owner # dev: alt wallet has different owner
-
-    # cannot have any pending owner changes
-    assert not own._hasPendingOwnerChange() # dev: this wallet has pending owner change
-    assert not staticcall WalletConfig(_altWalletConfig).hasPendingOwnerChange() # dev: alt wallet has pending owner change
-
-    # make sure ambassador is the same
-    assert staticcall WalletConfig(_altWalletConfig).myAmbassador() == self.myAmbassador # dev: ambassador doesn't match
