@@ -14,7 +14,7 @@ from interfaces import LegoYield
 interface UserWallet:
     def migrateWalletOut(_newWallet: address, _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS], _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST]) -> bool: nonpayable
     def trialFundsInitialAmount() -> uint256: view
-    def recoverTrialFunds() -> bool: nonpayable
+    def clawBackTrialFunds() -> bool: nonpayable
     def trialFundsAsset() -> address: view
     def walletConfig() -> address: view
     def canBeAmbassador() -> bool: view
@@ -856,7 +856,7 @@ def startMigrationOut(
         assert self.isRecipientAllowed[r] # dev: new wallet has different whitelist
 
     # recover trial funds first
-    extcall UserWallet(cd.wallet).recoverTrialFunds() # not asserting True, may have already been done
+    extcall UserWallet(cd.wallet).clawBackTrialFunds() # not asserting True, may have already been done
 
     # migrate wallet
     assert extcall UserWallet(cd.wallet).migrateWalletOut(_newWallet, _assetsToMigrate, _whitelistToMigrate) # dev: migration failed

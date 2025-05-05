@@ -33,13 +33,13 @@ def test_agent_management(ai_wallet_config, owner, agent, mock_lego_alpha, mock_
     # Add asset for agent
     assert ai_wallet_config.addAssetForAgent(agent, alpha_token, sender=owner)
     log = filter_logs(ai_wallet_config, "AssetAddedToAgent")[0]
-    assert log.agent == agent
+    assert log.agent == agent.address
     assert log.asset == alpha_token.address
 
     # Add lego id for agent
     assert ai_wallet_config.addLegoIdForAgent(agent, lego_id, sender=owner)
     log = filter_logs(ai_wallet_config, "LegoIdAddedToAgent")[0]
-    assert log.agent == agent
+    assert log.agent == agent.address
     assert log.legoId == lego_id
 
     # Verify agent settings
@@ -53,7 +53,7 @@ def test_agent_management(ai_wallet_config, owner, agent, mock_lego_alpha, mock_
     new_lego_ids = [lego_id, lego_id_another]
     assert ai_wallet_config.addOrModifyAgent(agent, new_assets, new_lego_ids, sender=owner)
     log = filter_logs(ai_wallet_config, "AgentModified")[0]
-    assert log.agent == agent
+    assert log.agent == agent.address
     assert log.allowedAssets == 2
     assert log.allowedLegoIds == 2
 
@@ -83,7 +83,7 @@ def test_agent_management(ai_wallet_config, owner, agent, mock_lego_alpha, mock_
     # Test disabling agent
     assert ai_wallet_config.disableAgent(agent, sender=owner)
     log = filter_logs(ai_wallet_config, "AgentDisabled")[0]
-    assert log.agent == agent
+    assert log.agent == agent.address
     assert log.prevAllowedAssets == 2
     assert log.prevAllowedLegoIds == 2
 
@@ -153,7 +153,7 @@ def test_reserve_assets(ai_wallet, ai_wallet_config, owner, agent, alpha_token, 
     assert ai_wallet_config.reserveAssets(bravo_token) == reserve_amount
 
     # Test successful transfer respecting reserve
-    assert ai_wallet.transferFunds(owner, MAX_UINT256, alpha_token, sender=agent)
+    assert ai_wallet.transferFunds(owner, MAX_UINT256, alpha_token, sender=agent.address)
     assert alpha_token.balanceOf(ai_wallet) == reserve_amount
 
     # Test removing reserve
@@ -163,12 +163,12 @@ def test_reserve_assets(ai_wallet, ai_wallet_config, owner, agent, alpha_token, 
     assert log.amount == 0
 
     # Test transfer after removing reserve
-    assert ai_wallet.transferFunds(owner, reserve_amount, alpha_token, sender=agent)
+    assert ai_wallet.transferFunds(owner, reserve_amount, alpha_token, sender=agent.address)
     assert alpha_token.balanceOf(ai_wallet) == 0
 
     # Test non-owner cannot set reserve
     with boa.reverts("no perms"):
-        ai_wallet_config.setReserveAsset(alpha_token, reserve_amount, sender=agent)
+        ai_wallet_config.setReserveAsset(alpha_token, reserve_amount, sender=agent.address)
 
 
 def test_cancel_pending_whitelist_critical(ai_wallet_config, owner, agent_factory, governor, sally, bob):

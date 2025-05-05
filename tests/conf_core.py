@@ -48,10 +48,10 @@ def lego_registry(addy_registry_deploy, fork):
 
 
 @pytest.fixture(scope="session")
-def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, governor, fork):
+def agent_factory(addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, governor, fork, agent):
     min_owner_change_delay = PARAMS[fork]["USER_MIN_OWNER_CHANGE_DELAY"]
     max_owner_change_delay = PARAMS[fork]["USER_MAX_OWNER_CHANGE_DELAY"]
-    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, min_owner_change_delay, max_owner_change_delay, [], name="agent_factory")
+    f = boa.load("contracts/core/AgentFactory.vy", addy_registry_deploy, weth, wallet_funds_template, wallet_config_template, agent_template, agent, min_owner_change_delay, max_owner_change_delay, name="agent_factory")
     assert f.setNumUserWalletsAllowed(MAX_UINT256, sender=governor)
     assert f.setNumAgentsAllowed(MAX_UINT256, sender=governor)
     return f

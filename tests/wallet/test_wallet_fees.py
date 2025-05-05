@@ -6,12 +6,23 @@ from constants import EIGHTEEN_DECIMALS, ZERO_ADDRESS, DEPOSIT_UINT256, WITHDRAW
 from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 
 
+@pytest.fixture(scope="session")
+def costly_agent(owner, agent_factory):
+    w = agent_factory.createAgent(owner, sender=owner)
+    assert w != ZERO_ADDRESS
+    assert agent_factory.isAgent(w)
+    return w
+
+
 @pytest.fixture(scope="module")
-def new_ai_wallet(agent_factory, owner, bob_agent, ambassador):
-    w = agent_factory.createUserWallet(owner, bob_agent, ambassador, sender=owner)
+def new_ai_wallet(agent_factory, owner, ambassador, costly_agent):
+    w = agent_factory.createUserWallet(owner, ambassador, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
-    return UserWalletTemplate.at(w)
+    wallet = UserWalletTemplate.at(w)
+    w_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+    w_config.addOrModifyAgent(costly_agent, sender=owner)
+    return wallet
 
 
 @pytest.fixture(scope="module")
@@ -20,15 +31,15 @@ def new_ai_wallet_config(new_ai_wallet):
 
 
 @pytest.fixture(scope="module")
-def ambassador(agent_factory, owner, bob_agent):
-    w = agent_factory.createUserWallet(owner, bob_agent, sender=owner)
+def ambassador(agent_factory, owner):
+    w = agent_factory.createUserWallet(owner, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
     return UserWalletTemplate.at(w)
 
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_pricing(price_sheets, governor, alpha_token, bob_agent, oracle_custom, oracle_registry):
+def setup_pricing(price_sheets, governor, alpha_token, costly_agent, oracle_custom, oracle_registry):
     oracle_custom.setPrice(alpha_token.address, 1 * EIGHTEEN_DECIMALS, sender=governor)
     assert oracle_registry.getPrice(alpha_token.address) == 1 * EIGHTEEN_DECIMALS
 
@@ -51,13 +62,13 @@ def setup_pricing(price_sheets, governor, alpha_token, bob_agent, oracle_custom,
         sender=governor
     )
 
-    """Setup bob_agent pricing for tests"""
-    # Enable bob_agent pricing
+    """Setup agent pricing for tests"""
+    # Enable agent pricing
     assert price_sheets.setAgentSubPricingEnabled(True, sender=governor)
 
-    # Set bob_agent subscription pricing (instead of transaction fees)
+    # Set agent subscription pricing (instead of transaction fees)
     assert price_sheets.setAgentSubPrice(
-        bob_agent,
+        costly_agent,
         alpha_token,
         5 * EIGHTEEN_DECIMALS,  # usdValue
         43_200,                   # trialPeriod (1 day)
@@ -73,9 +84,9 @@ def setup_pricing(price_sheets, governor, alpha_token, bob_agent, oracle_custom,
 #########
 
 
-def test_agent_subscription_trial(new_ai_wallet_config, bob_agent):
-    """Test bob_agent subscription trial period"""
-    agent_info = new_ai_wallet_config.agentSettings(bob_agent)
+def test_agent_subscription_trial(new_ai_wallet_config, costly_agent):
+    """Test costly_agent subscription trial period"""
+    agent_info = new_ai_wallet_config.agentSettings(costly_agent)
     assert agent_info.isActive
     assert agent_info.installBlock > 0
     assert agent_info.paidThroughBlock > agent_info.installBlock
@@ -90,20 +101,20 @@ def test_protocol_subscription_trial(new_ai_wallet_config):
     assert protocol_sub.paidThroughBlock == protocol_sub.installBlock + 43_200  # trial period
 
 
-def test_agent_subscription_payment(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, oracle_registry):
-    """Test bob_agent subscription payment after trial"""
+def test_agent_subscription_payment(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, oracle_registry):
+    """Test costly_agent subscription payment after trial"""
 
     # remove protocol sub pricing and tx pricing
     assert price_sheets.removeProtocolSubPrice(sender=governor)
     assert price_sheets.setAgentSubPricingEnabled(False, sender=governor)
 
-    orig_paid_through_block = new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock
+    orig_paid_through_block = new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock
 
     # Fast forward past trial period
     boa.env.time_travel(blocks=43_200 + 1)
 
     # cannot pay
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert canPayProtocol
     assert not canPayAgent
 
@@ -111,35 +122,35 @@ def test_agent_subscription_payment(new_ai_wallet, new_ai_wallet_config, bob_age
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
 
     # can make payment
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert canPayProtocol
     assert canPayAgent
 
-    assert alpha_token.balanceOf(bob_agent) == 0
+    assert alpha_token.balanceOf(costly_agent) == 0
 
     # Trigger subscription check with a deposit
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     assert a != 0 and d != 0
 
     log = filter_logs(new_ai_wallet, "UserWalletSubscriptionPaid")[0]
-    assert log.recipient == bob_agent
+    assert log.recipient == costly_agent
     assert log.asset == alpha_token.address
     assert log.amount == 5 * EIGHTEEN_DECIMALS
     assert log.usdValue == 5 * EIGHTEEN_DECIMALS
     assert log.isAgent
 
-    agent_info = new_ai_wallet_config.agentSettings(bob_agent)
+    agent_info = new_ai_wallet_config.agentSettings(costly_agent)
     assert log.paidThroughBlock == agent_info.paidThroughBlock
 
     # Verify subscription payment
     assert agent_info.paidThroughBlock == log.paidThroughBlock  # Don't check exact block number, just verify it matches the event
 
 
-def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alpha_token, alpha_token_whale, governor, price_sheets, bob_agent, mock_lego_alpha, alpha_token_erc4626_vault):
+def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alpha_token, alpha_token_whale, governor, price_sheets, costly_agent, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test protocol subscription payment after trial"""
 
-    # remove bob_agent sub pricing and tx pricing
-    assert price_sheets.removeAgentSubPrice(bob_agent, sender=governor)
+    # remove costly_agent sub pricing and tx pricing
+    assert price_sheets.removeAgentSubPrice(costly_agent, sender=governor)
     assert price_sheets.setAgentSubPricingEnabled(False, sender=governor)
 
     orig_paid_through_block = new_ai_wallet_config.protocolSub().paidThroughBlock
@@ -148,7 +159,7 @@ def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alph
     boa.env.time_travel(blocks=43_200 + 1)
 
     # cannot pay
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert not canPayProtocol
     assert canPayAgent
 
@@ -156,12 +167,12 @@ def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alph
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
 
     # can make payment
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert canPayProtocol
     assert canPayAgent
 
     # Trigger subscription check with a deposit
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     assert a != 0 and d != 0
 
     log = filter_logs(new_ai_wallet, "UserWalletSubscriptionPaid")[0]
@@ -180,74 +191,74 @@ def test_protocol_subscription_payment(new_ai_wallet, new_ai_wallet_config, alph
     assert protocol_sub.paidThroughBlock == current_block + 302_400  # pay period
 
 
-def test_subscription_payment_checks(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale):
+def test_subscription_payment_checks(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale):
     """Test canMakeSubscriptionPayments function"""
 
     # Initially both should be true since in trial period
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert canPayAgent and canPayProtocol
 
     # Fast forward past trial period
     boa.env.time_travel(blocks=43_200 + 1)
 
     # Should be false for both since no funds
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert not canPayAgent and not canPayProtocol
 
-    # Fund wallet with just enough for bob_agent subscription
+    # Fund wallet with just enough for costly_agent subscription
     alpha_token.transfer(new_ai_wallet, 5 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
     
-    # Should be true for bob_agent but false for protocol
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    # Should be true for costly_agent but false for protocol
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert canPayAgent and not canPayProtocol
 
     # Fund wallet with enough for protocol subscription
     alpha_token.transfer(new_ai_wallet, 10 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
     
     # Should be true for both
-    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    canPayProtocol, canPayAgent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert canPayAgent and canPayProtocol
 
 
-def test_subscription_pricing_removal(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets):
+def test_subscription_pricing_removal(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets):
     """Test subscription behavior when pricing is removed and re-added"""
     # Initial state check
-    agent_info = new_ai_wallet_config.agentSettings(bob_agent)
+    agent_info = new_ai_wallet_config.agentSettings(costly_agent)
     protocol_sub = new_ai_wallet_config.protocolSub()
     assert agent_info.paidThroughBlock > 0
     assert protocol_sub.paidThroughBlock > 0
 
     # Remove both subscription prices
-    assert price_sheets.removeAgentSubPrice(bob_agent, sender=governor)
+    assert price_sheets.removeAgentSubPrice(costly_agent, sender=governor)
     assert price_sheets.removeProtocolSubPrice(sender=governor)
 
     # Trigger subscription check
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     assert a != 0 and d != 0
 
     # Verify subscriptions are cleared
-    agent_info = new_ai_wallet_config.agentSettings(bob_agent)
+    agent_info = new_ai_wallet_config.agentSettings(costly_agent)
     protocol_sub = new_ai_wallet_config.protocolSub()
     assert agent_info.paidThroughBlock == 0
     assert protocol_sub.paidThroughBlock == 0
 
     # Re-add subscription prices
-    assert price_sheets.setAgentSubPrice(bob_agent, alpha_token, 5 * EIGHTEEN_DECIMALS, 43_200, 302_400, sender=governor)
+    assert price_sheets.setAgentSubPrice(costly_agent, alpha_token, 5 * EIGHTEEN_DECIMALS, 43_200, 302_400, sender=governor)
     assert price_sheets.setProtocolSubPrice(alpha_token, 5 * EIGHTEEN_DECIMALS, 43_200, 302_400, sender=governor)
 
     # Trigger subscription check
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     assert a != 0 and d != 0
 
     # Verify new trial periods started
-    agent_info = new_ai_wallet_config.agentSettings(bob_agent)
+    agent_info = new_ai_wallet_config.agentSettings(costly_agent)
     protocol_sub = new_ai_wallet_config.protocolSub()
     assert agent_info.paidThroughBlock > 0
     assert protocol_sub.paidThroughBlock > 0
 
 
-def test_subscription_payment_insufficient_balance(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, oracle_custom):
+def test_subscription_payment_insufficient_balance(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, oracle_custom):
     """Test subscription payment behavior with insufficient balance"""
     # Fast forward past trial period
     boa.env.time_travel(blocks=43_200 + 1)
@@ -256,32 +267,32 @@ def test_subscription_payment_insufficient_balance(new_ai_wallet, new_ai_wallet_
     alpha_token.transfer(new_ai_wallet, 2 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
 
     # Verify cannot make payments
-    can_pay_protocol, can_pay_agent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    can_pay_protocol, can_pay_agent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert not can_pay_agent and not can_pay_protocol
 
     # Try to trigger subscription payment - should still work but not pay subscription
-    orig_agent_paid_through = new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock
+    orig_agent_paid_through = new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock
     orig_protocol_paid_through = new_ai_wallet_config.protocolSub().paidThroughBlock
 
     with boa.reverts("insufficient balance for protocol subscription payment"):
-        new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+        new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
 
     # remove price, will allow transaction through
     oracle_custom.setPrice(alpha_token.address, 0, sender=governor)
 
     # trigger subscription check
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 2 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 2 * EIGHTEEN_DECIMALS, sender=costly_agent)
     assert a != 0
 
     # Verify paid through blocks haven't changed
-    assert new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock == orig_agent_paid_through
+    assert new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock == orig_agent_paid_through
     assert new_ai_wallet_config.protocolSub().paidThroughBlock == orig_protocol_paid_through
 
 
-def test_subscription_status_view_functions(new_ai_wallet_config, bob_agent, governor, price_sheets):
+def test_subscription_status_view_functions(new_ai_wallet_config, costly_agent, governor, price_sheets):
     """Test getAgentSubscriptionStatus and getProtocolSubscriptionStatus view functions"""
     # Check during trial period
-    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(bob_agent)
+    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(costly_agent)
     protocol_data = new_ai_wallet_config.getProtocolSubscriptionStatus()
     
     assert agent_data.amount == 0  # No payment needed during trial
@@ -295,7 +306,7 @@ def test_subscription_status_view_functions(new_ai_wallet_config, bob_agent, gov
     boa.env.time_travel(blocks=43_200 + 1)
     
     # Check after trial period
-    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(bob_agent)
+    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(costly_agent)
     protocol_data = new_ai_wallet_config.getProtocolSubscriptionStatus()
     
     assert agent_data.amount == 5 * EIGHTEEN_DECIMALS  # Payment needed
@@ -304,10 +315,10 @@ def test_subscription_status_view_functions(new_ai_wallet_config, bob_agent, gov
     assert protocol_data.didChange  # State will change when paid
 
     # Remove pricing and check status
-    assert price_sheets.removeAgentSubPrice(bob_agent, sender=governor)
+    assert price_sheets.removeAgentSubPrice(costly_agent, sender=governor)
     assert price_sheets.removeProtocolSubPrice(sender=governor)
     
-    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(bob_agent)
+    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(costly_agent)
     protocol_data = new_ai_wallet_config.getProtocolSubscriptionStatus()
     
     assert agent_data.amount == 0  # No payment needed when no pricing
@@ -316,7 +327,7 @@ def test_subscription_status_view_functions(new_ai_wallet_config, bob_agent, gov
     assert protocol_data.didChange  # State will change to clear paid through
 
 
-def test_multiple_subscription_payments(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault):
+def test_multiple_subscription_payments(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test multiple subscription payments in sequence"""
     # Fund wallet
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
@@ -325,16 +336,16 @@ def test_multiple_subscription_payments(new_ai_wallet, new_ai_wallet_config, bob
     boa.env.time_travel(blocks=43_200 + 1)
     
     # First payment
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
-    first_agent_paid_through = new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
+    first_agent_paid_through = new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock
     first_protocol_paid_through = new_ai_wallet_config.protocolSub().paidThroughBlock
     
     # Fast forward past first payment period
     boa.env.time_travel(blocks=302_400 + 1)
     
     # Second payment
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
-    second_agent_paid_through = new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
+    second_agent_paid_through = new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock
     second_protocol_paid_through = new_ai_wallet_config.protocolSub().paidThroughBlock
     
     # Verify paid through blocks increased correctly
@@ -344,29 +355,29 @@ def test_multiple_subscription_payments(new_ai_wallet, new_ai_wallet_config, bob
     assert second_protocol_paid_through == first_protocol_paid_through + 302_400 + 1
 
 
-def test_subscription_state_transitions(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets):
+def test_subscription_state_transitions(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets):
     """Test subscription state transitions and edge cases"""
     # Initial state - in trial
-    assert new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock > 0
+    assert new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock > 0
     assert new_ai_wallet_config.protocolSub().paidThroughBlock > 0
     
     # Remove pricing during trial
-    assert price_sheets.removeAgentSubPrice(bob_agent, sender=governor)
+    assert price_sheets.removeAgentSubPrice(costly_agent, sender=governor)
     assert price_sheets.removeProtocolSubPrice(sender=governor)
     
     # Trigger check - should clear paid through
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
-    assert new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock == 0
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
+    assert new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock == 0
     assert new_ai_wallet_config.protocolSub().paidThroughBlock == 0
     
     # Re-add pricing with different amounts
-    assert price_sheets.setAgentSubPrice(bob_agent, alpha_token, 7 * EIGHTEEN_DECIMALS, 43_200, 302_400, sender=governor)
+    assert price_sheets.setAgentSubPrice(costly_agent, alpha_token, 7 * EIGHTEEN_DECIMALS, 43_200, 302_400, sender=governor)
     assert price_sheets.setProtocolSubPrice(alpha_token, 12 * EIGHTEEN_DECIMALS, 43_200, 302_400, sender=governor)
     
     # Trigger check - should start new trial
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
-    trial_agent_paid_through = new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
+    trial_agent_paid_through = new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock
     trial_protocol_paid_through = new_ai_wallet_config.protocolSub().paidThroughBlock
     assert trial_agent_paid_through > 0
     assert trial_protocol_paid_through > 0
@@ -375,7 +386,7 @@ def test_subscription_state_transitions(new_ai_wallet, new_ai_wallet_config, bob
     boa.env.time_travel(blocks=43_200 + 1)
     
     # Trigger payment with new amounts
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     
     # Verify new payment amounts in logs
     agent_log = filter_logs(new_ai_wallet, "UserWalletSubscriptionPaid")[1]
@@ -384,44 +395,44 @@ def test_subscription_state_transitions(new_ai_wallet, new_ai_wallet_config, bob
     assert protocol_log.amount == 12 * EIGHTEEN_DECIMALS
 
 
-def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, bob_agent):
-    """Test bob_agent transaction fees"""
-    # Remove protocol pricing to isolate bob_agent fees
+def test_agent_transaction_fees(new_ai_wallet, new_ai_wallet_config, owner, alpha_token, alpha_token_whale, bravo_token, bravo_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, price_sheets, costly_agent):
+    """Test costly_agent transaction fees"""
+    # Remove protocol pricing to isolate costly_agent fees
     assert price_sheets.removeProtocolTxPriceSheet(sender=governor)
-    assert price_sheets.removeAgentSubPrice(bob_agent, sender=governor)
+    assert price_sheets.removeAgentSubPrice(costly_agent, sender=governor)
     assert price_sheets.removeProtocolSubPrice(sender=governor)
 
     # Fund wallet
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
 
-    pre_agent_wallet = alpha_token.balanceOf(bob_agent)
+    pre_agent_wallet = alpha_token.balanceOf(costly_agent)
 
     # Test deposit - no agent transaction fees should be charged
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 200 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 200 * EIGHTEEN_DECIMALS, sender=costly_agent)
     logs = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")
     # No agent transaction fees should be charged
     assert len(logs) == 0
 
-    new_agent_wallet = alpha_token.balanceOf(bob_agent)
+    new_agent_wallet = alpha_token.balanceOf(costly_agent)
     # Agent wallet balance should remain unchanged since no fees are charged
     assert new_agent_wallet == pre_agent_wallet
     pre_agent_wallet = new_agent_wallet
 
     # Test withdrawal - no agent transaction fees should be charged
-    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c = new_ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     logs = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")
     # No agent transaction fees should be charged
     assert len(logs) == 0
 
-    new_agent_wallet = alpha_token.balanceOf(bob_agent)
+    new_agent_wallet = alpha_token.balanceOf(costly_agent)
     # Agent wallet balance should remain unchanged since no fees are charged
     assert new_agent_wallet == pre_agent_wallet
 
 
-def test_subscription_status_during_trial(new_ai_wallet_config, bob_agent):
+def test_subscription_status_during_trial(new_ai_wallet_config, costly_agent):
     """Test subscription status checks during trial period"""
     # Check initial trial period status
-    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(bob_agent)
+    agent_data = new_ai_wallet_config.getAgentSubscriptionStatus(costly_agent)
     protocol_data = new_ai_wallet_config.getProtocolSubscriptionStatus()
     
     # During trial period, no payment should be needed
@@ -431,13 +442,13 @@ def test_subscription_status_during_trial(new_ai_wallet_config, bob_agent):
     assert not protocol_data.didChange
     
     # Verify trial period end blocks
-    agent_info = new_ai_wallet_config.agentSettings(bob_agent)
+    agent_info = new_ai_wallet_config.agentSettings(costly_agent)
     protocol_sub = new_ai_wallet_config.protocolSub()
     assert agent_data.paidThroughBlock == agent_info.paidThroughBlock
     assert protocol_data.paidThroughBlock == protocol_sub.paidThroughBlock
 
 
-def test_subscription_payment_zero_price(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, oracle_custom):
+def test_subscription_payment_zero_price(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, oracle_custom):
     """Test subscription payment behavior when price feed returns zero"""
     # Fast forward past trial period
     boa.env.time_travel(blocks=43_200 + 1)
@@ -449,11 +460,11 @@ def test_subscription_payment_zero_price(new_ai_wallet, new_ai_wallet_config, bo
     alpha_token.transfer(new_ai_wallet, 1000 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
     
     # Get original paid through blocks
-    orig_agent_paid_through = new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock
+    orig_agent_paid_through = new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock
     orig_protocol_paid_through = new_ai_wallet_config.protocolSub().paidThroughBlock
     
     # Trigger subscription check
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     assert a != 0
 
     # Verify no subscription events were emitted
@@ -461,7 +472,7 @@ def test_subscription_payment_zero_price(new_ai_wallet, new_ai_wallet_config, bo
     assert len(logs) == 0
 
     # Verify no subscription payments were made
-    assert new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock == orig_agent_paid_through
+    assert new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock == orig_agent_paid_through
     assert new_ai_wallet_config.protocolSub().paidThroughBlock == orig_protocol_paid_through
 
 
@@ -494,7 +505,7 @@ def test_maximum_fee_boundary(price_sheets, governor):
     assert sheet.yieldFee == 1000  # Still at 10.00%
 
 
-def test_subscription_payment_failure(new_ai_wallet, new_ai_wallet_config, bob_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, oracle_custom):
+def test_subscription_payment_failure(new_ai_wallet, new_ai_wallet_config, costly_agent, alpha_token, alpha_token_whale, mock_lego_alpha, alpha_token_erc4626_vault, governor, oracle_custom):
     """Test behavior when subscription payments fail due to insufficient balance"""
     # Fast forward past trial period
     boa.env.time_travel(blocks=43_200 + 1)
@@ -503,42 +514,42 @@ def test_subscription_payment_failure(new_ai_wallet, new_ai_wallet_config, bob_a
     alpha_token.transfer(new_ai_wallet, 2 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
 
     # Verify cannot make payments
-    can_pay_protocol, can_pay_agent = new_ai_wallet_config.canMakeSubscriptionPayments(bob_agent)
+    can_pay_protocol, can_pay_agent = new_ai_wallet_config.canMakeSubscriptionPayments(costly_agent)
     assert not can_pay_agent and not can_pay_protocol
 
     # Try to trigger subscription payment - should still work but not pay subscription
-    orig_agent_paid_through = new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock
+    orig_agent_paid_through = new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock
     orig_protocol_paid_through = new_ai_wallet_config.protocolSub().paidThroughBlock
 
     with boa.reverts("insufficient balance for protocol subscription payment"):
-        new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+        new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
 
     # remove price, will allow transaction through
     oracle_custom.setPrice(alpha_token.address, 0, sender=governor)
 
     # trigger subscription check
-    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 2 * EIGHTEEN_DECIMALS, sender=bob_agent)
+    a, b, c, d = new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 2 * EIGHTEEN_DECIMALS, sender=costly_agent)
     assert a != 0
 
     # Verify paid through blocks haven't changed
-    assert new_ai_wallet_config.agentSettings(bob_agent).paidThroughBlock == orig_agent_paid_through
+    assert new_ai_wallet_config.agentSettings(costly_agent).paidThroughBlock == orig_agent_paid_through
     assert new_ai_wallet_config.protocolSub().paidThroughBlock == orig_protocol_paid_through
 
 
-def test_transaction_fee_calculation_with_zero_balance(new_ai_wallet, bob_agent, alpha_token, mock_lego_alpha, alpha_token_erc4626_vault):
+def test_transaction_fee_calculation_with_zero_balance(new_ai_wallet, costly_agent, alpha_token, mock_lego_alpha, alpha_token_erc4626_vault):
     """Test transaction fee calculation when token balance is zero"""
     # Don't fund the wallet, so balance is zero
     
     # Attempt a transaction
     with boa.reverts():  # Should revert due to insufficient balance
-        new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=bob_agent)
+        new_ai_wallet.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=costly_agent)
     
     # No transaction fee events should be emitted
     logs = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")
     assert len(logs) == 0
 
 
-def test_swap_fees_to_protocol(new_ai_wallet, bob_agent, mock_lego_alpha, alpha_token, price_sheets, alpha_token_whale, bravo_token, bravo_token_whale):
+def test_swap_fees_to_protocol(new_ai_wallet, costly_agent, mock_lego_alpha, alpha_token, price_sheets, alpha_token_whale, bravo_token, bravo_token_whale):
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 100 * EIGHTEEN_DECIMALS
     alpha_token.transfer(new_ai_wallet, deposit_amount, sender=alpha_token_whale)
@@ -557,7 +568,7 @@ def test_swap_fees_to_protocol(new_ai_wallet, bob_agent, mock_lego_alpha, alpha_
     pre_protocol_balance = bravo_token.balanceOf(price_sheets.protocolRecipient())
 
     # swap
-    actualSwapAmount, toAmount, usdValue = new_ai_wallet.swapTokens([instruction], sender=bob_agent)
+    actualSwapAmount, toAmount, usdValue = new_ai_wallet.swapTokens([instruction], sender=costly_agent)
     
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.asset == bravo_token.address
@@ -570,7 +581,7 @@ def test_swap_fees_to_protocol(new_ai_wallet, bob_agent, mock_lego_alpha, alpha_
     assert bravo_token.balanceOf(log.protocolRecipient) == pre_protocol_balance + log.protocolAmount
     
 
-def test_swap_fees_with_ambassador(new_ai_wallet, bob_agent, governor, mock_lego_alpha, alpha_token, price_sheets, alpha_token_whale, bravo_token, bravo_token_whale, ambassador):
+def test_swap_fees_with_ambassador(new_ai_wallet, costly_agent, governor, mock_lego_alpha, alpha_token, price_sheets, alpha_token_whale, bravo_token, bravo_token_whale, ambassador):
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 1000 * EIGHTEEN_DECIMALS
     alpha_token.transfer(new_ai_wallet, deposit_amount, sender=alpha_token_whale)
@@ -593,7 +604,7 @@ def test_swap_fees_with_ambassador(new_ai_wallet, bob_agent, governor, mock_lego
     pre_ambassador_balance = bravo_token.balanceOf(ambassador.address)
 
     # swap
-    actualSwapAmount, toAmount, usdValue = new_ai_wallet.swapTokens([instruction], sender=bob_agent)
+    actualSwapAmount, toAmount, usdValue = new_ai_wallet.swapTokens([instruction], sender=costly_agent)
     
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
     assert log.asset == bravo_token.address
@@ -607,7 +618,7 @@ def test_swap_fees_with_ambassador(new_ai_wallet, bob_agent, governor, mock_lego
     assert bravo_token.balanceOf(ambassador.address) == pre_ambassador_balance + log.ambassadorAmount
 
 
-def test_ambassador_on_yield_fees(mock_lego_alpha, ambassador, governor, alpha_token, alpha_token_whale, new_ai_wallet, bob_agent, alpha_token_erc4626_vault, price_sheets):
+def test_ambassador_on_yield_fees(mock_lego_alpha, ambassador, governor, alpha_token, alpha_token_whale, new_ai_wallet, costly_agent, alpha_token_erc4626_vault, price_sheets):
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
 
@@ -620,7 +631,7 @@ def test_ambassador_on_yield_fees(mock_lego_alpha, ambassador, governor, alpha_t
 
     # deposit
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = new_ai_wallet.depositTokens(
-        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=bob_agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=costly_agent)
 
     # send more to vault
     alpha_token.transfer(alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
@@ -631,7 +642,7 @@ def test_ambassador_on_yield_fees(mock_lego_alpha, ambassador, governor, alpha_t
 
     # withdraw
     assetAmountReceived, vaultTokenAmountBurned, usdValue = new_ai_wallet.withdrawTokens(
-        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=bob_agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=costly_agent)
 
     log = filter_logs(new_ai_wallet, "UserWalletTransactionFeePaid")[0]
 
@@ -645,7 +656,7 @@ def test_ambassador_on_yield_fees(mock_lego_alpha, ambassador, governor, alpha_t
     assert log.fee == 10_00 # 10.00%
 
 
-def test_ambassador_bonus(mock_lego_alpha, agent_factory, ambassador, governor, alpha_token, alpha_token_whale, new_ai_wallet, bob_agent, alpha_token_erc4626_vault, price_sheets):
+def test_ambassador_bonus(mock_lego_alpha, agent_factory, ambassador, governor, alpha_token, alpha_token_whale, new_ai_wallet, costly_agent, alpha_token_erc4626_vault, price_sheets):
     lego_id = mock_lego_alpha.legoId()
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
 
@@ -662,7 +673,7 @@ def test_ambassador_bonus(mock_lego_alpha, agent_factory, ambassador, governor, 
 
     # deposit
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = new_ai_wallet.depositTokens(
-        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=bob_agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=costly_agent)
 
     # send more to vault
     alpha_token.transfer(alpha_token_erc4626_vault, 100 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
@@ -677,7 +688,7 @@ def test_ambassador_bonus(mock_lego_alpha, agent_factory, ambassador, governor, 
 
     # withdraw
     assetAmountReceived, vaultTokenAmountBurned, usdValue = new_ai_wallet.withdrawTokens(
-        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=bob_agent)
+        lego_id, alpha_token, alpha_token_erc4626_vault, MAX_UINT256, sender=costly_agent)
 
     log = filter_logs(new_ai_wallet, "AmbassadorYieldBonusPaid")[0]
 

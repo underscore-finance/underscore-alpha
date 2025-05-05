@@ -12,6 +12,10 @@ exports: registry.__interface__
 import contracts.modules.LocalGov as gov
 import contracts.modules.Registry as registry
 
+# wallets / agents
+isUserWallet: public(HashMap[address, bool])
+isAgent: public(HashMap[address, bool])
+
 
 @deploy
 def __init__(
@@ -26,6 +30,19 @@ def __init__(
 
     # initialize registry
     registry.__init__(_minRegistryChangeDelay, _maxRegistryChangeDelay, "AddyRegistry.vy")
+
+
+@external
+def setIsUserWalletOrAgent(_addr: address, _isThing: bool, _setUserWalletMap: bool) -> bool:
+    assert registry._isValidAddyAddr(msg.sender) # dev: sender unknown
+    assert msg.sender == registry._getAddy(1) # dev: sender must be agent factory
+    if _addr == empty(address) or not _addr.is_contract: 
+        return False
+    if _setUserWalletMap:
+        self.isUserWallet[_addr] = _isThing
+    else:
+        self.isAgent[_addr] = _isThing
+    return True
 
 
 ############
@@ -168,5 +185,3 @@ def setAddyChangeDelay(_numBlocks: uint256) -> bool:
     """
     assert msg.sender == gov.governance # dev: no perms
     return registry._setAddyChangeDelay(_numBlocks)
-
-

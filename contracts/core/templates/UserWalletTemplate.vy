@@ -1376,16 +1376,16 @@ def _checkTrialFundsPostTx(_isTrialFundsVaultToken: bool, _trialFundsAsset: addr
 
 
 @external
-def recoverTrialFunds() -> bool:
+def clawBackTrialFunds() -> bool:
     """
-    @notice Recovers trial funds from the wallet by withdrawing from vault tokens and transferring to the agent factory
+    @notice Claw back trial funds from the wallet by withdrawing from vault tokens and transferring to the agent factory
     @dev This function can only be called by the agent factory, owner, or wallet config. It will:
         1. Check if there are trial funds to recover
         2. Calculate target recovery amount with 2% buffer
         3. Transfer any available balance directly
         4. Withdraw from vault tokens if needed
         5. Update trial funds tracking data
-    @return bool True if trial funds were recovered successfully, False otherwise
+    @return bool True if trial funds were clawed back successfully, False otherwise
     """
     cd: CoreData = self._getCoreData()
     assert msg.sender in [cd.agentFactory, cd.owner, cd.walletConfig] # dev: no perms

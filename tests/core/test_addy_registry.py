@@ -669,3 +669,40 @@ def test_last_addy_after_disable(addy_registry, new_addy, new_addy_b, governor):
     assert addy_registry.getLastAddyAddr() == ZERO_ADDRESS
     assert addy_registry.getLastAddyId() == addy_id_b
 
+
+def test_set_is_user_wallet_or_agent(addy_registry, agent_factory, bob, lego_registry, agent):
+    """Test setIsUserWalletOrAgent function"""
+    # Test non-registered address can't call the function
+    with boa.reverts("sender unknown"):
+        addy_registry.setIsUserWalletOrAgent(agent, True, True, sender=bob)
+    
+    with boa.reverts("sender must be agent factory"):
+        addy_registry.setIsUserWalletOrAgent(agent, True, True, sender=lego_registry.address)
+
+    # must be a contract
+    assert not addy_registry.setIsUserWalletOrAgent(bob, True, True, sender=agent_factory.address)
+
+    # Test setting user wallet flag
+    assert addy_registry.setIsUserWalletOrAgent(agent, True, True, sender=agent_factory.address)
+    assert addy_registry.isUserWallet(agent)
+    assert not addy_registry.isAgent(agent)
+    
+    # Test setting agent flag
+    assert addy_registry.setIsUserWalletOrAgent(agent, True, False, sender=agent_factory.address)
+    assert addy_registry.isUserWallet(agent)
+    assert addy_registry.isAgent(agent)
+    
+    # Test unsetting both flags
+    assert addy_registry.setIsUserWalletOrAgent(agent, False, True, sender=agent_factory.address)
+    assert not addy_registry.isUserWallet(agent)
+    assert addy_registry.isAgent(agent)
+    
+    assert addy_registry.setIsUserWalletOrAgent(agent, False, False, sender=agent_factory.address)
+    assert not addy_registry.isUserWallet(agent)
+    assert not addy_registry.isAgent(agent)
+    
+    # Test with empty address
+    assert not addy_registry.setIsUserWalletOrAgent(ZERO_ADDRESS, True, True, sender=agent_factory.address)
+    assert not addy_registry.isUserWallet(ZERO_ADDRESS)
+    assert not addy_registry.isAgent(ZERO_ADDRESS)
+

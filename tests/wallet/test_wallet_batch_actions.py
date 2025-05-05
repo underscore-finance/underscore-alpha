@@ -133,11 +133,11 @@ def test_batch_action_withdraw_swap(special_ai_wallet, special_agent, owner, leg
 #     ]
 
 #     # Test batch actions by owner
-#     assert ai_wallet.performManyActions(instructions, sender=agent)
+#     assert ai_wallet.performManyActions(instructions, sender=agent.address)
 
 #     # deposit
 #     log = filter_logs(ai_wallet, "UserWalletDeposit")[0]
-#     assert log.signer == agent
+#     assert log.signer == agent.address
 #     assert log.asset == alpha_token.address
 #     assert log.vaultToken == alpha_token_erc4626_vault.address
 #     assert log.assetAmountDeposited == amount
@@ -149,7 +149,7 @@ def test_batch_action_withdraw_swap(special_ai_wallet, special_agent, owner, leg
 
 #     # withdrawal
 #     log = filter_logs(ai_wallet, "UserWalletWithdrawal")[0]
-#     assert log.signer == agent
+#     assert log.signer == agent.address
 #     assert log.asset == alpha_token.address
 #     assert log.vaultToken == alpha_token_erc4626_vault.address
 #     assert log.assetAmountReceived == amount // 2
@@ -161,7 +161,7 @@ def test_batch_action_withdraw_swap(special_ai_wallet, special_agent, owner, leg
 
 #     # rebalance
 #     log = filter_logs(ai_wallet, "UserWalletWithdrawal")[1]
-#     assert log.signer == agent
+#     assert log.signer == agent.address
 #     assert log.asset == alpha_token.address
 #     assert log.vaultToken == alpha_token_erc4626_vault.address
 #     assert log.assetAmountReceived == amount // 2
@@ -172,7 +172,7 @@ def test_batch_action_withdraw_swap(special_ai_wallet, special_agent, owner, leg
 #     assert log.isSignerAgent
 
 #     log = filter_logs(ai_wallet, "UserWalletDeposit")[1]
-#     assert log.signer == agent
+#     assert log.signer == agent.address
 #     assert log.asset == alpha_token.address
 #     assert log.vaultToken == alpha_token_erc4626_vault_another.address
 #     assert log.assetAmountDeposited == amount // 2
@@ -245,7 +245,7 @@ def test_batch_action_withdraw_swap(special_ai_wallet, special_agent, owner, leg
 #     ]
 
 #     # Test batch actions by owner
-#     assert ai_wallet.performManyActions(instructions, sender=agent)
+#     assert ai_wallet.performManyActions(instructions, sender=agent.address)
 #     assert usdc.balanceOf(ai_wallet) != amount
 
 #     assert morpho_vault_token.balanceOf(ai_wallet) != 0
@@ -287,7 +287,7 @@ def test_batch_action_withdraw_swap(special_ai_wallet, special_agent, owner, leg
 
 #     # Test batch operations fail if any action is not allowed
 #     with boa.reverts("agent not allowed"):
-#         ai_wallet.performManyActions(instructions, sender=agent)
+#         ai_wallet.performManyActions(instructions, sender=agent.address)
 
 #     # Test batch operations with only allowed actions
 #     allowed_instructions = [
@@ -303,7 +303,7 @@ def test_batch_action_withdraw_swap(special_ai_wallet, special_agent, owner, leg
 #         (BORROW_UINT256, mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, amount // 3, ZERO_ADDRESS, 0, ZERO_ADDRESS, ZERO_ADDRESS, 0, ZERO_ADDRESS),
 #     ]
 
-#     assert ai_wallet.performManyActions(allowed_instructions, sender=agent) 
+#     assert ai_wallet.performManyActions(allowed_instructions, sender=agent.address) 
 
 
 

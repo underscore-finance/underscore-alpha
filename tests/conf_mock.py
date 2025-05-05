@@ -2,7 +2,7 @@ import pytest
 import boa
 
 from constants import ZERO_ADDRESS, YIELD_OPP_UINT256
-from contracts.core.templates import UserWalletTemplate
+from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplate
 
 
 # accounts
@@ -39,8 +39,9 @@ def broadcaster(env):
 
 
 @pytest.fixture(scope="session")
-def agent(env):
-    return env.generate_address("agent")
+def agent(governor):
+    # needs to be a contract
+    return boa.load("contracts/mock/MockErc20.vy", governor, "Agent", "AGENT", 18, 10_000_000, name="agent")
 
 
 @pytest.fixture(scope="session")
@@ -59,12 +60,28 @@ def bob_agent_dev(env):
 # agentic wallets 
 
 
-@pytest.fixture(scope="session")
-def bob_ai_wallet(agent_factory, bob, bob_agent):
-    w = agent_factory.createUserWallet(bob, bob_agent, sender=bob)
+@pytest.fixture(scope="package")
+def bob_ai_wallet(agent_factory, bob, bob_agent, ambassador):
+    w = agent_factory.createUserWallet(bob, ambassador, sender=bob)
+    assert w != ZERO_ADDRESS
+    assert agent_factory.isUserWallet(w)
+    wallet = UserWalletTemplate.at(w)
+    w_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+    w_config.addOrModifyAgent(bob_agent, sender=bob)
+    return wallet
+
+
+@pytest.fixture(scope="package")
+def ambassador(agent_factory, owner):
+    w = agent_factory.createUserWallet(owner, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
     return UserWalletTemplate.at(w)
+
+
+@pytest.fixture(scope="package")
+def bob_ai_wallet_config(bob_ai_wallet):
+    return UserWalletConfigTemplate.at(bob_ai_wallet.walletConfig())
 
 
 # mock asset: alpha token

@@ -9,8 +9,8 @@ TRIAL_AMOUNT = 10 * EIGHTEEN_DECIMALS
 
 
 @pytest.fixture(scope="module")
-def new_ai_wallet(agent_factory, owner, agent):
-    w = agent_factory.createUserWallet(owner, agent, sender=owner)
+def new_ai_wallet(agent_factory, owner):
+    w = agent_factory.createUserWallet(owner, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
     return UserWalletTemplate.at(w)
@@ -75,11 +75,11 @@ def test_set_trial_funds_data(agent_factory, bravo_token, governor, sally):
     assert not agent_factory.setTrialFundsData(ZERO_ADDRESS, trial_amount, sender=governor)
 
 
-def test_wallet_creation_with_trial_funds(agent_factory, alpha_token, owner, agent):
+def test_wallet_creation_with_trial_funds(agent_factory, alpha_token, owner):
     """Test wallet creation with trial funds transfer"""
 
     # Create wallet and verify trial funds transfer
-    wallet_addr = agent_factory.createUserWallet(owner, agent)
+    wallet_addr = agent_factory.createUserWallet(owner)
     assert wallet_addr != ZERO_ADDRESS
 
     # Verify trial funds in new wallet
@@ -96,7 +96,7 @@ def test_trial_funds_restrictions(new_ai_wallet, alpha_token, owner, agent, mock
 
     # Try to deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
     assert assetAmountDeposited == TRIAL_AMOUNT
     assert vaultTokenAmountReceived == TRIAL_AMOUNT
 
@@ -116,7 +116,7 @@ def test_get_total_underlying_user(new_ai_wallet, alpha_token, agent, lego_regis
 
     # Deposit into first lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent.address)
 
     # Check total underlying after first deposit
     total_underlying = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
@@ -124,7 +124,7 @@ def test_get_total_underlying_user(new_ai_wallet, alpha_token, agent, lego_regis
 
     # Deposit into second lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent.address)
 
     # Check total underlying after second deposit
     total_underlying = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
@@ -136,12 +136,12 @@ def test_trial_funds_clawback(new_ai_wallet, agent_factory, alpha_token, agent, 
 
     # Deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
     assert assetAmountDeposited == TRIAL_AMOUNT
     assert vaultTokenAmountReceived == TRIAL_AMOUNT
 
     # Clawback trial funds
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
     assert alpha_token.balanceOf(agent_factory) == TRIAL_AMOUNT
 
 
@@ -151,16 +151,16 @@ def test_partial_trial_funds_deployment(new_ai_wallet, agent_factory, alpha_toke
     # Deploy half of trial funds
     half_amount = TRIAL_AMOUNT // 2
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent.address)
     assert assetAmountDeposited == half_amount
     assert vaultTokenAmountReceived == half_amount
 
     # Clawback trial funds
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
     assert alpha_token.balanceOf(agent_factory) == TRIAL_AMOUNT
 
 
-def test_wallet_creation_insufficient_trial_funds(agent_factory, bravo_token, bravo_token_whale, governor, owner, agent):
+def test_wallet_creation_insufficient_trial_funds(agent_factory, bravo_token, bravo_token_whale, governor, owner):
     """Test wallet creation when factory has insufficient trial funds"""
     all_funds = bravo_token.balanceOf(agent_factory)
     bravo_token.transfer(bravo_token_whale, all_funds, sender=agent_factory.address)
@@ -170,7 +170,7 @@ def test_wallet_creation_insufficient_trial_funds(agent_factory, bravo_token, br
     bravo_token.transfer(agent_factory, TRIAL_AMOUNT // 2, sender=bravo_token_whale)
 
     # Create wallet - should work but with reduced trial funds
-    wallet_addr = agent_factory.createUserWallet(owner, agent)
+    wallet_addr = agent_factory.createUserWallet(owner)
     wallet = UserWalletTemplate.at(wallet_addr)
 
     # Verify reduced trial funds
@@ -193,11 +193,11 @@ def test_trial_funds_balance_calculations(new_ai_wallet, agent_factory, alpha_to
 
     # Deploy to first lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, third_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, third_amount, sender=agent.address)
 
     # Deploy to second lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, third_amount, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, third_amount, sender=agent.address)
 
     # Verify balances
     deployed_balance = lego_registry.getUnderlyingForUser(new_ai_wallet, alpha_token)
@@ -211,21 +211,21 @@ def test_trial_funds_availability_edge_cases(new_ai_wallet, new_ai_wallet_config
 
     # Case 1: All funds deployed
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
 
     # Verify no funds available for transfer
     with boa.reverts():  # Should revert due to no available funds
-        new_ai_wallet.transferFunds(agent, TRIAL_AMOUNT // 2, alpha_token, sender=agent)
+        new_ai_wallet.transferFunds(agent, TRIAL_AMOUNT // 2, alpha_token, sender=agent.address)
 
     # Case 2: Partial deployment with additional deposits
     # First withdraw everything
     assetAmountReceived, vaultTokenAmountBurned, _ = new_ai_wallet.withdrawTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
 
     # Deploy half
     half_amount = TRIAL_AMOUNT // 2
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent.address)
 
     # Add extra funds from external source
     alpha_token.transfer(new_ai_wallet, TRIAL_AMOUNT, sender=alpha_token_whale)
@@ -235,7 +235,7 @@ def test_trial_funds_availability_edge_cases(new_ai_wallet, new_ai_wallet_config
     assert transferrable_amount == TRIAL_AMOUNT  # Only the additional funds are available
 
 
-def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_token, owner, agent, governor, alpha_token_whale, bravo_token_whale):
+def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_token, owner, governor, alpha_token_whale, bravo_token_whale):
     """Test trial funds behavior with multiple assets"""
 
     # Setup trial funds with both tokens
@@ -250,7 +250,7 @@ def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_toke
     assert agent_factory.setTrialFundsData(alpha_token, alpha_amount, sender=governor)
 
     # Create first wallet
-    wallet1 = agent_factory.createUserWallet(owner, agent)
+    wallet1 = agent_factory.createUserWallet(owner)
     wallet1_contract = UserWalletTemplate.at(wallet1)
 
     # Verify first wallet trial funds
@@ -262,7 +262,7 @@ def test_trial_funds_with_multiple_assets(agent_factory, alpha_token, bravo_toke
     assert agent_factory.setTrialFundsData(bravo_token, bravo_amount, sender=governor)
 
     # Create second wallet
-    wallet2 = agent_factory.createUserWallet(owner, agent)
+    wallet2 = agent_factory.createUserWallet(owner)
     wallet2_contract = UserWalletTemplate.at(wallet2)
 
     # Verify second wallet trial funds
@@ -279,18 +279,18 @@ def test_trial_funds_recovery_complex(new_ai_wallet, agent_factory, alpha_token,
 
     # Deploy to first lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, third_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, third_amount, sender=agent.address)
 
     # Deploy to second lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, third_amount, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, third_amount, sender=agent.address)
 
     # Deploy to third lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_third.legoId(), alpha_token, alpha_token_erc4626_vault_third, third_amount, sender=agent)
+        mock_lego_alpha_third.legoId(), alpha_token, alpha_token_erc4626_vault_third, third_amount, sender=agent.address)
 
     # Recover trial funds
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
     assert alpha_token.balanceOf(agent_factory) == TRIAL_AMOUNT
 
 
@@ -303,8 +303,8 @@ def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, ag
     alpha_token.transfer(agent_factory, new_trial_funds, sender=alpha_token_whale)
 
     # Create two wallets
-    wallet1 = agent_factory.createUserWallet(owner, agent)
-    wallet2 = agent_factory.createUserWallet(owner, agent)
+    wallet1 = agent_factory.createUserWallet(owner)
+    wallet2 = agent_factory.createUserWallet(owner)
     wallet1_contract = UserWalletTemplate.at(wallet1)
     wallet2_contract = UserWalletTemplate.at(wallet2)
 
@@ -313,8 +313,8 @@ def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, ag
     assert alpha_token.balanceOf(wallet2) == TRIAL_AMOUNT
 
     # Deposit trial funds from both wallets
-    wallet1_contract.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
-    wallet2_contract.depositTokens(mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, TRIAL_AMOUNT, sender=agent)
+    wallet1_contract.depositTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
+    wallet2_contract.depositTokens(mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, TRIAL_AMOUNT, sender=agent.address)
 
     # Verify trial funds are in vaults
     assert alpha_token.balanceOf(wallet1) == 0
@@ -323,8 +323,8 @@ def test_trial_funds_recovery_many_wallets(agent_factory, alpha_token, owner, ag
     assert alpha_token_erc4626_vault_another.balanceOf(wallet2) != 0
 
     # Recover trial funds from both wallets
-    assert wallet1_contract.recoverTrialFunds(sender=agent_factory.address)
-    assert wallet2_contract.recoverTrialFunds(sender=agent_factory.address)
+    assert wallet1_contract.clawBackTrialFunds(sender=agent_factory.address)
+    assert wallet2_contract.clawBackTrialFunds(sender=agent_factory.address)
 
     # Verify trial funds are gone
     assert alpha_token_erc4626_vault.balanceOf(wallet1) == 0
@@ -347,7 +347,7 @@ def test_trial_funds_vault_token_transfer_restrictions(new_ai_wallet, alpha_toke
 
     # First deposit trial funds into mock lego to get vault tokens
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
     assert vaultTokenAmountReceived == TRIAL_AMOUNT
 
     # Try to transfer vault tokens - should fail since they represent trial funds
@@ -366,7 +366,7 @@ def test_trial_funds_vault_token_partial_transfer(lego_registry, new_ai_wallet, 
 
     # First deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
 
     # Add extra funds on top of trial funds
     extra_amount = TRIAL_AMOUNT // 2
@@ -374,7 +374,7 @@ def test_trial_funds_vault_token_partial_transfer(lego_registry, new_ai_wallet, 
 
     # Deposit extra funds to get more vault tokens
     assetAmountDeposited, _, extra_vault_tokens, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, extra_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, extra_amount, sender=agent.address)
 
     underlying = lego_registry.getUnderlyingAsset(alpha_token_erc4626_vault)
     assert underlying == alpha_token.address
@@ -397,11 +397,11 @@ def test_trial_funds_vault_token_transfer_different_vault(new_ai_wallet, alpha_t
 
     # Deposit into first vault
     assetAmountDeposited, _, vault1_tokens, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent.address)
 
     # Deposit into second vault
     assetAmountDeposited, _, vault2_tokens, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent.address)
 
     # Try to transfer vault tokens from first vault - should fail
     with boa.reverts("cannot transfer trial funds vault token"):
@@ -416,11 +416,11 @@ def test_trial_funds_recovery_permissions(new_ai_wallet, agent_factory, owner, s
     """Test that only authorized addresses can recover trial funds"""
     
     # Test agent factory can recover
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
     
     # Test unauthorized address cannot recover
     with boa.reverts("no perms"):
-        new_ai_wallet.recoverTrialFunds(sender=sally)
+        new_ai_wallet.clawBackTrialFunds(sender=sally)
 
 
 def test_trial_funds_recovery_with_yield(new_ai_wallet, agent_factory, alpha_token, agent, mock_lego_alpha, alpha_token_erc4626_vault):
@@ -428,13 +428,13 @@ def test_trial_funds_recovery_with_yield(new_ai_wallet, agent_factory, alpha_tok
     
     # Deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
     
     # Record balances before recovery
     pre_factory_balance = alpha_token.balanceOf(agent_factory)
     
     # Recover trial funds
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
     
     # Verify factory got trial funds
     recovered_amount = alpha_token.balanceOf(agent_factory) - pre_factory_balance
@@ -453,17 +453,17 @@ def test_trial_funds_recovery_partial_success(new_ai_wallet, agent_factory, alph
     
     # Deposit into first vault
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, half_amount, sender=agent.address)
         
     # Deposit into second vault
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent)
+        mock_lego_alpha_another.legoId(), alpha_token, alpha_token_erc4626_vault_another, half_amount, sender=agent.address)
     
     # Record balances before recovery
     pre_factory_balance = alpha_token.balanceOf(agent_factory)
     
     # Recover trial funds
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
     
     # Verify full recovery
     recovered_amount = alpha_token.balanceOf(agent_factory) - pre_factory_balance
@@ -482,7 +482,7 @@ def test_trial_funds_recovery_zero_balance(new_ai_wallet, agent_factory, alpha_t
     assert new_ai_wallet.trialFundsInitialAmount() == TRIAL_AMOUNT
     
     # Try recovery with no actual funds - should still return true and clear data
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
     
     # Verify trial funds data is cleared
     assert new_ai_wallet.trialFundsAsset() == ZERO_ADDRESS
@@ -497,7 +497,7 @@ def test_trial_funds_recovery_with_extra_yield(_test, mock_lego_alpha, agent_fac
     
     # deposit trial funds into mock lego
     assetAmountDeposited, _, vaultTokenAmountReceived, _ = new_ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, TRIAL_AMOUNT, sender=agent.address)
     assert assetAmountDeposited == TRIAL_AMOUNT
 
     # send more to vault
@@ -510,7 +510,7 @@ def test_trial_funds_recovery_with_extra_yield(_test, mock_lego_alpha, agent_fac
     pre_factory_balance = alpha_token.balanceOf(agent_factory)
 
     # Recover trial funds
-    assert new_ai_wallet.recoverTrialFunds(sender=agent_factory.address)
+    assert new_ai_wallet.clawBackTrialFunds(sender=agent_factory.address)
 
     # Verify factory got trial funds
     take_back_amount = TRIAL_AMOUNT * 101_00 // HUNDRED_PERCENT

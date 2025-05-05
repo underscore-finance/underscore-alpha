@@ -116,7 +116,7 @@ def test_whitelist_permissions(ai_wallet_config, owner, agent, sally, bob):
     """Test permissions for whitelist operations"""
     # Only owner can add to whitelist
     with boa.reverts("only owner can add whitelist"):
-        ai_wallet_config.addWhitelistAddr(sally, sender=agent)
+        ai_wallet_config.addWhitelistAddr(sally, sender=agent.address)
     
     with boa.reverts("only owner can add whitelist"):
         ai_wallet_config.addWhitelistAddr(sally, sender=bob)
@@ -126,7 +126,7 @@ def test_whitelist_permissions(ai_wallet_config, owner, agent, sally, bob):
     
     # Only owner can cancel pending whitelist
     with boa.reverts("no perms (only owner or governance)"):
-        ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=agent)
+        ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=agent.address)
     
     with boa.reverts("no perms (only owner or governance)"):
         ai_wallet_config.cancelPendingWhitelistAddr(sally, sender=bob)
@@ -142,7 +142,7 @@ def test_whitelist_permissions(ai_wallet_config, owner, agent, sally, bob):
     
     # Only owner can confirm whitelist
     with boa.reverts("only owner can confirm"):
-        ai_wallet_config.confirmWhitelistAddr(sally, sender=agent)
+        ai_wallet_config.confirmWhitelistAddr(sally, sender=agent.address)
     
     with boa.reverts("only owner can confirm"):
         ai_wallet_config.confirmWhitelistAddr(sally, sender=bob)
@@ -152,7 +152,7 @@ def test_whitelist_permissions(ai_wallet_config, owner, agent, sally, bob):
     
     # Only owner can remove from whitelist
     with boa.reverts("only owner can remove whitelist"):
-        ai_wallet_config.removeWhitelistAddr(sally, sender=agent)
+        ai_wallet_config.removeWhitelistAddr(sally, sender=agent.address)
     
     with boa.reverts("only owner can remove whitelist"):
         ai_wallet_config.removeWhitelistAddr(sally, sender=bob)
@@ -204,13 +204,13 @@ def test_can_transfer_to_recipient(ai_wallet_config, owner, sally, bob, agent_fa
     assert ai_wallet_config.canTransferToRecipient(sally)
     
     # Create a new wallet owned by the same owner
-    new_wallet = agent_factory.createUserWallet(owner, ZERO_ADDRESS, sender=owner)
+    new_wallet = agent_factory.createUserWallet(owner, sender=owner)
     
     # Should be able to transfer to a wallet with the same owner
     assert ai_wallet_config.canTransferToRecipient(new_wallet)
     
     # Create a wallet with a different owner
-    other_wallet = agent_factory.createUserWallet(bob, ZERO_ADDRESS, sender=bob)
+    other_wallet = agent_factory.createUserWallet(bob, sender=bob)
     
     # Should not be able to transfer to a wallet with a different owner
     assert not ai_wallet_config.canTransferToRecipient(other_wallet)
@@ -219,7 +219,7 @@ def test_can_transfer_to_recipient(ai_wallet_config, owner, sally, bob, agent_fa
 def test_pending_ownership_change_affects_transfers(ai_wallet_config, owner, bob, agent_factory):
     """Test that pending ownership changes affect transfers to other wallets"""
     # Create a new wallet owned by the same owner
-    new_wallet = agent_factory.createUserWallet(owner, ZERO_ADDRESS, sender=owner)
+    new_wallet = agent_factory.createUserWallet(owner, sender=owner)
     
     # Initially can transfer to wallet with same owner
     assert ai_wallet_config.canTransferToRecipient(new_wallet)
@@ -240,7 +240,7 @@ def test_pending_ownership_change_affects_transfers(ai_wallet_config, owner, bob
 def test_transfer_to_wallet_with_pending_ownership(ai_wallet_config, owner, bob, agent_factory):
     """Test that transfers to wallets with pending ownership changes are not allowed"""
     # Create a new wallet owned by the same owner
-    new_wallet = agent_factory.createUserWallet(owner, ZERO_ADDRESS, sender=owner)
+    new_wallet = agent_factory.createUserWallet(owner, sender=owner)
     new_wallet_config = UserWalletConfigTemplate.at(UserWalletTemplate.at(new_wallet).walletConfig())
     
     # Initially can transfer to wallet with same owner
@@ -303,7 +303,7 @@ def test_transfer_funds_with_whitelist(ai_wallet, ai_wallet_config, owner, agent
         ai_wallet.transferFunds(bob, 100 * EIGHTEEN_DECIMALS, alpha_token, sender=owner)
     
     # Create a new wallet owned by the same owner
-    new_wallet = agent_factory.createUserWallet(owner, ZERO_ADDRESS, sender=owner)
+    new_wallet = agent_factory.createUserWallet(owner, sender=owner)
     
     # Should be able to transfer to wallet with same owner without whitelisting
     ai_wallet.transferFunds(new_wallet, 100 * EIGHTEEN_DECIMALS, alpha_token, sender=owner)

@@ -33,7 +33,7 @@ def test_modify_allowed_actions(ai_wallet, ai_wallet_config, owner, agent, sally
 
     # Verify event
     log = filter_logs(ai_wallet_config, "AllowedActionsModified")[0]
-    assert log.agent == agent
+    assert log.agent == agent.address
     assert log.canDeposit == True
     assert log.canWithdraw == False
     assert log.canRebalance == False
@@ -79,21 +79,21 @@ def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, bravo_to
     deposit_amount = 1_000 * EIGHTEEN_DECIMALS
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     assetAmountDeposited, vaultToken, vaultTokenAmountReceived, usdValue = ai_wallet.depositTokens(
-        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=agent)
+        mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=agent.address)
     assert assetAmountDeposited == deposit_amount
 
     # Test withdrawal (not allowed)
     with boa.reverts("agent not allowed"):
-        ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, vaultTokenAmountReceived, sender=agent)
+        ai_wallet.withdrawTokens(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, vaultTokenAmountReceived, sender=agent.address)
 
     # Test transfer (allowed)
     alpha_token.transfer(ai_wallet, deposit_amount, sender=alpha_token_whale)
     transfer_amount = deposit_amount // 2    
-    assert ai_wallet.transferFunds(sally, transfer_amount, alpha_token, sender=agent)
+    assert ai_wallet.transferFunds(sally, transfer_amount, alpha_token, sender=agent.address)
 
     # Test rebalance (not allowed)
     with boa.reverts("agent not allowed"):
-        ai_wallet.rebalance(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, mock_lego_alpha.legoId(), alpha_token_erc4626_vault, vaultTokenAmountReceived, sender=agent)
+        ai_wallet.rebalance(mock_lego_alpha.legoId(), alpha_token, alpha_token_erc4626_vault, mock_lego_alpha.legoId(), alpha_token_erc4626_vault, vaultTokenAmountReceived, sender=agent.address)
 
     # Test swap (not allowed)
     instruction = (
@@ -104,14 +104,14 @@ def test_allowed_actions_operations(ai_wallet, ai_wallet_config, owner, bravo_to
         [alpha_token]
     )
     with boa.reverts("agent not allowed"):
-        ai_wallet.swapTokens([instruction], sender=agent)
+        ai_wallet.swapTokens([instruction], sender=agent.address)
 
     # Test conversion (not allowed)
     with boa.reverts("agent not allowed"):
-        ai_wallet.convertWethToEth(deposit_amount, sender=agent)
+        ai_wallet.convertWethToEth(deposit_amount, sender=agent.address)
 
     # Test claim rewards (allowed)
-    ai_wallet.claimRewards(mock_lego_alpha.legoId(), sender=agent)
+    ai_wallet.claimRewards(mock_lego_alpha.legoId(), sender=agent.address)
 
     # Test borrow (allowed)
     # Note: This is a mock test since actual borrowing would require more setup

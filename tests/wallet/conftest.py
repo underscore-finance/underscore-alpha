@@ -8,8 +8,8 @@ from eth_account.messages import encode_defunct
 
 
 @pytest.fixture(scope="package")
-def ai_wallet(agent_factory, owner, agent):
-    w = agent_factory.createUserWallet(owner, agent, sender=owner)
+def ai_wallet(agent_factory, owner):
+    w = agent_factory.createUserWallet(owner, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
     return UserWalletTemplate.at(w)
@@ -109,10 +109,13 @@ def special_agent_signer():
 
 @pytest.fixture(scope="package")
 def special_ai_wallet(agent_factory, owner, special_agent):
-    w = agent_factory.createUserWallet(owner, special_agent, sender=owner)
+    w = agent_factory.createUserWallet(owner, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
-    return UserWalletTemplate.at(w)
+    wallet = UserWalletTemplate.at(w)
+    w_config = UserWalletConfigTemplate.at(wallet.walletConfig())
+    w_config.addOrModifyAgent(special_agent.address, sender=owner)
+    return wallet
 
 
 @pytest.fixture(scope="package")

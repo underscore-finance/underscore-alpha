@@ -7,9 +7,9 @@ from contracts.core.templates import UserWalletTemplate, UserWalletConfigTemplat
 
 
 @pytest.fixture(scope="module")
-def new_wallet(agent_factory, owner, bob_agent):
+def new_wallet(agent_factory, owner):
     """Create a new wallet to migrate to"""
-    w = agent_factory.createUserWallet(owner, bob_agent, sender=owner)
+    w = agent_factory.createUserWallet(owner, sender=owner)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
     return UserWalletTemplate.at(w)
@@ -22,9 +22,9 @@ def new_wallet_config(new_wallet):
 
 
 @pytest.fixture(scope="module")
-def other_wallet(agent_factory, owner, bob_agent, sally):
+def other_wallet(agent_factory, sally):
     """Create another wallet with different owner"""
-    w = agent_factory.createUserWallet(sally, bob_agent, sender=sally)
+    w = agent_factory.createUserWallet(sally, sender=sally)
     assert w != ZERO_ADDRESS
     assert agent_factory.isUserWallet(w)
     return UserWalletTemplate.at(w)
@@ -123,7 +123,7 @@ def test_migration_security(ai_wallet, ai_wallet_config, new_wallet, owner, agen
     """Test migration security and permissions"""
     # Only owner can start migration
     with boa.reverts("no perms"):
-        ai_wallet_config.startMigrationOut(new_wallet, [], [], sender=agent)
+        ai_wallet_config.startMigrationOut(new_wallet, [], [], sender=agent.address)
     
     # Cannot migrate with pending ownership change
     ai_wallet_config.changeOwnership(sally, sender=owner)
@@ -291,7 +291,7 @@ def test_migration_old_wallet_yield_tracking(ai_wallet, ai_wallet_config, new_wa
     assert alpha_token_erc4626_vault.balanceOf(new_wallet) == vaultTokenAmountReceived
 
 
-def test_migration_revert_cases(ai_wallet, ai_wallet_config, new_wallet, new_wallet_config, owner, bob_agent, sally, alpha_token, alpha_token_whale, agent_factory):
+def test_migration_revert_cases(ai_wallet, ai_wallet_config, new_wallet, new_wallet_config, owner, sally, alpha_token, alpha_token_whale, agent_factory):
     """Test all possible revert conditions for migration"""
     # Setup initial state with some assets
     amount = 1000 * EIGHTEEN_DECIMALS
@@ -302,7 +302,7 @@ def test_migration_revert_cases(ai_wallet, ai_wallet_config, new_wallet, new_wal
         ai_wallet_config.startMigrationOut(sally, sender=owner)
     
     # Test 2: Cannot migrate to wallet with different owner
-    other_wallet = agent_factory.createUserWallet(sally, bob_agent, sender=sally)
+    other_wallet = agent_factory.createUserWallet(sally, sender=sally)
     with boa.reverts():  # Will revert when checking owner
         ai_wallet_config.startMigrationOut(other_wallet, sender=owner)
     
