@@ -244,6 +244,12 @@ def legoChangeDelay() -> uint256:
     return registry.addyChangeDelay
 
 
+@external
+def setLegoChangeDelayToMin() -> bool:
+    assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._setAddyChangeDelay(registry.MIN_ADDY_CHANGE_DELAY)
+
+
 #################
 # Views / Utils #
 #################

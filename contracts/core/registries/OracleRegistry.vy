@@ -409,6 +409,12 @@ def oracleChangeDelay() -> uint256:
     return registry.addyChangeDelay
 
 
+@external
+def setOraclePartnerChangeDelayToMin() -> bool:
+    assert gov._canGovern(msg.sender) # dev: no perms
+    return registry._setAddyChangeDelay(registry.MIN_ADDY_CHANGE_DELAY)
+
+
 ############################
 # Priority Oracle Partners #
 ############################

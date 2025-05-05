@@ -185,3 +185,9 @@ def setAddyChangeDelay(_numBlocks: uint256) -> bool:
     """
     assert msg.sender == gov.governance # dev: no perms
     return registry._setAddyChangeDelay(_numBlocks)
+
+
+@external
+def setAddyChangeDelayToMin() -> bool:
+    assert msg.sender == gov.governance # dev: no perms
+    return registry._setAddyChangeDelay(registry.MIN_ADDY_CHANGE_DELAY)

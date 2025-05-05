@@ -72,7 +72,8 @@ def __init__(
     assert minDelay < maxDelay # dev: invalid delay
     MIN_GOV_CHANGE_DELAY = minDelay
     MAX_GOV_CHANGE_DELAY = maxDelay
-    
+
+    # Top-level registry (AddyRegistry.vy) has no delay initially during setup
     if _addyRegistry != empty(address):
         self.govChangeDelay = minDelay  
 
