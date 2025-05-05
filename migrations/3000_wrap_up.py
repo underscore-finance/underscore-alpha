@@ -5,20 +5,18 @@ from scripts.utils.migration import Migration
 def migrate(migration: Migration):
     log.h1("Wrapping up")
 
-    blueprint = migration.blueprint()
     log.h1("Setting up Core Contracts delays")
 
     #  lego registry
     lego_registry = migration.get_contract("LegoRegistry")
-    migration.execute(lego_registry.setLegoChangeDelay, blueprint.PARAMS["LEGO_REGISTRY_MIN_CHANGE_DELAY"])
+    migration.execute(lego_registry.setLegoChangeDelayToMin)
 
     #  oracle registry
     oracle_registry = migration.get_contract("OracleRegistry")
-    migration.execute(oracle_registry.setOraclePartnerChangeDelay,
-                      blueprint.PARAMS["ORACLE_REGISTRY_MIN_CHANGE_DELAY"])
+    migration.execute(oracle_registry.setOraclePartnerChangeDelayToMin)
 
     addy_registry = migration.get_contract("AddyRegistry")
-    migration.execute(addy_registry.setAddyChangeDelay, blueprint.PARAMS["ADDY_REGISTRY_MIN_CHANGE_DELAY"])
+    migration.execute(addy_registry.setAddyChangeDelayToMin)
 
     # TODO: Update governance
     GOV_WALLET = "0x10b990a0b0B192D76AbB199fc6fc41826041E280"
