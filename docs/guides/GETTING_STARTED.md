@@ -51,7 +51,7 @@ An agent is a smart contract (with its own owner) that can interact with your Us
 ```python
 # example using titanoboa
 import boa
-from contracts.core import AgentTemplate
+from contracts.core.templates import AgentTemplate
 
 # get agent factory
 agent_factory = boa.from_etherscan("0xDeployedAgentFactory")
@@ -72,7 +72,7 @@ A User AI Wallet is a smart contract wallet that the user owns, and that AI agen
 
 ```python
 import boa
-from contracts.core import WalletFunds
+from contracts.core.templates import UserWalletTemplate
 
 # get agent factory
 agent_factory = boa.from_etherscan("0xDeployedAgentFactory")
@@ -80,11 +80,12 @@ agent_factory = boa.from_etherscan("0xDeployedAgentFactory")
 # create new user AI wallet
 user_wallet_address = agent_factory.createUserWallet(
     "0xYourOwnerAddress", # owner wallet address
-    agent_address, # see Step 1
+    ambassador="0xAmbassadorAddress", # optional ambassador address
+    _shouldUseTrialFunds=True # whether to use trial funds
 )
 
 # get wallet contract
-user_wallet = WalletFunds.at(user_wallet_address)
+user_wallet = UserWalletTemplate.at(user_wallet_address)
 print(f"User AI wallet deployed at: {user_wallet_address}")
 ```
 
@@ -94,11 +95,11 @@ Now that you have a User AI Wallet and an AI Agent, you need to configure what i
 
 ```python
 import boa
-from contracts.core import WalletConfig
+from contracts.core.templates import UserWalletConfigTemplate
 
 # Get the WalletConfig contract associated with your wallet
 wallet_config_address = user_wallet.walletConfig()
-wallet_config = WalletConfig.at(wallet_config_address)
+wallet_config = UserWalletConfigTemplate.at(wallet_config_address)
 
 # Configure allowed assets
 allowed_assets = ["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # WETH

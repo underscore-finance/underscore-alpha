@@ -1,8 +1,29 @@
-# WalletFunds API Reference
+# UserWalletTemplate (WalletFunds)
 
-**File:** `contracts/core/WalletFunds.vy`
+**Source:** `contracts/core/templates/UserWalletTemplate.vy`
 
-The WalletFunds contract handles the management of user funds within the wallet, including deposit and withdrawal functionality, asset tracking, and security measures.
+The UserWalletTemplate contract handles the management of user funds within the wallet, including deposit and withdrawal functionality, asset tracking, and security measures.
+
+## Flags
+
+### ActionType
+
+```vyper
+flag ActionType:
+    DEPOSIT
+    WITHDRAWAL
+    REBALANCE
+    TRANSFER
+    SWAP
+    CONVERSION
+    ADD_LIQ
+    REMOVE_LIQ
+    CLAIM_REWARDS
+    BORROW
+    REPAY
+```
+
+Flag defining types of actions that can be performed.
 
 ## Structs
 
@@ -14,6 +35,7 @@ struct CoreData:
     wallet: address
     walletConfig: address
     addyRegistry: address
+    agentFactory: address
     legoRegistry: address
     priceSheets: address
     oracleRegistry: address
@@ -37,16 +59,6 @@ struct SubPaymentInfo:
 
 Structure containing subscription payment details.
 
-### TrialFundsOpp
-
-```vyper
-struct TrialFundsOpp:
-    legoId: uint256
-    vaultToken: address
-```
-
-Structure containing information about trial funds opportunities.
-
 ### SwapInstruction
 
 ```vyper
@@ -59,6 +71,16 @@ struct SwapInstruction:
 ```
 
 Structure containing swap instruction details.
+
+### VaultTokenInfo
+
+```vyper
+struct VaultTokenInfo:
+    legoId: uint256
+    vaultToken: address
+```
+
+Structure containing information about a vault token.
 
 ## Events
 
@@ -265,9 +287,11 @@ Emitted when a subscription payment is made.
 
 ```vyper
 event UserWalletTransactionFeePaid:
-    recipient: indexed(address)
     asset: indexed(address)
-    amount: uint256
+    protocolRecipient: indexed(address)
+    protocolAmount: uint256
+    ambassadorRecipient: indexed(address)
+    ambassadorAmount: uint256
     fee: uint256
     action: ActionType
 ```
@@ -322,14 +346,6 @@ trialFundsInitialAmount: public(uint256)
 
 The initial amount of trial funds.
 
-### addyRegistry
-
-```vyper
-addyRegistry: public(address)
-```
-
-The address of the address registry.
-
 ### wethAddr
 
 ```vyper
@@ -337,14 +353,6 @@ wethAddr: public(address)
 ```
 
 The address of the WETH contract.
-
-### initialized
-
-```vyper
-initialized: public(bool)
-```
-
-Whether the contract has been initialized.
 
 ## Constants
 
@@ -412,6 +420,30 @@ MAX_LEGOS: constant(uint256) = 20
 
 Maximum number of legos allowed.
 
+### MAX_VAULTS_FOR_USER
+
+```vyper
+MAX_VAULTS_FOR_USER: constant(uint256) = 30
+```
+
+Maximum number of vaults for a user.
+
+### MAX_MIGRATION_ASSETS
+
+```vyper
+MAX_MIGRATION_ASSETS: constant(uint256) = 40
+```
+
+Maximum number of assets for migration.
+
+### MAX_MIGRATION_WHITELIST
+
+```vyper
+MAX_MIGRATION_WHITELIST: constant(uint256) = 20
+```
+
+Maximum number of addresses in migration whitelist.
+
 ### HUNDRED_PERCENT
 
 ```vyper
@@ -431,14 +463,22 @@ Data used for ERC721 receive operations.
 ### API_VERSION
 
 ```vyper
-API_VERSION: constant(String[28]) = "0.0.1"
+API_VERSION: constant(String[28]) = "0.0.3"
 ```
 
 API version of the contract.
 
+### ADDY_REGISTRY
+
+```vyper
+ADDY_REGISTRY: public(immutable(address))
+```
+
+The address of the AddyRegistry contract.
+
 ## External Functions
 
-### __default__
+### **default**
 
 ```vyper
 @payable
@@ -459,42 +499,15 @@ def onERC721Received(_operator: address, _owner: address, _tokenId: uint256, _da
 Handles the receipt of an NFT.
 
 **Parameters:**
+
 - `_operator`: The address which called the function
 - `_owner`: The address which previously owned the token
 - `_tokenId`: The NFT identifier
 - `_data`: Additional data with no specified format
 
 **Returns:**
+
 - The function selector
-
-### initialize
-
-```vyper
-@external
-def initialize(
-    _walletConfig: address,
-    _addyRegistry: address,
-    _wethAddr: address,
-    _trialFundsAsset: address,
-    _trialFundsInitialAmount: uint256,
-) -> bool:
-```
-
-Initializes a new wallet funds instance.
-
-**Parameters:**
-- `_walletConfig`: The address of the wallet config contract
-- `_addyRegistry`: The address of the address registry
-- `_wethAddr`: The address of the WETH contract
-- `_trialFundsAsset`: The address of the trial funds asset
-- `_trialFundsInitialAmount`: The amount of trial funds to provide
-
-**Returns:**
-- True if initialization was successful
-
-**Requirements:**
-- Contract must not be already initialized
-- Valid wallet config, address registry, and WETH addresses
 
 ### apiVersion
 
@@ -507,12 +520,26 @@ def apiVersion() -> String[28]:
 Returns the current API version of the contract.
 
 **Returns:**
-- The API version string
+
+- String representing the API version
+
+### canBeAmbassador
+
+```vyper
+@view
+@external
+def canBeAmbassador() -> bool:
+```
+
+Checks if the current wallet can be an ambassador.
+
+**Returns:**
+
+- True if the wallet can be an ambassador, False otherwise
 
 ### depositTokens
 
 ```vyper
-@nonreentrant
 @external
 def depositTokens(
     _legoId: uint256,
@@ -525,29 +552,22 @@ def depositTokens(
 Deposits tokens into a specified lego integration and vault.
 
 **Parameters:**
+
 - `_legoId`: The ID of the lego to use for deposit
 - `_asset`: The address of the token to deposit
 - `_vault`: The target vault address
 - `_amount`: The amount to deposit (defaults to max)
 
 **Returns:**
+
 - The amount of assets deposited
 - The vault token address
 - The amount of vault tokens received
 - The USD value of the transaction
 
-**Events Emitted:**
-- `UserWalletDeposit`
-
-**Requirements:**
-- Caller must have permission to deposit
-- Valid lego ID and asset address
-- Sufficient balance of the asset
-
 ### withdrawTokens
 
 ```vyper
-@nonreentrant
 @external
 def withdrawTokens(
     _legoId: uint256,
@@ -560,28 +580,21 @@ def withdrawTokens(
 Withdraws tokens from a specified lego integration and vault.
 
 **Parameters:**
+
 - `_legoId`: The ID of the lego to use for withdrawal
 - `_asset`: The address of the token to withdraw
 - `_vaultToken`: The vault token address
 - `_vaultTokenAmount`: The amount of vault tokens to withdraw (defaults to max)
 
 **Returns:**
+
 - The amount of assets received
 - The amount of vault tokens burned
 - The USD value of the transaction
 
-**Events Emitted:**
-- `UserWalletWithdrawal`
-
-**Requirements:**
-- Caller must have permission to withdraw
-- Valid lego ID and asset address
-- Sufficient balance of the vault token
-
 ### rebalance
 
 ```vyper
-@nonreentrant
 @external
 def rebalance(
     _fromLegoId: uint256,
@@ -596,157 +609,94 @@ def rebalance(
 Withdraws tokens from one lego and deposits them into another (always same asset).
 
 **Parameters:**
+
 - `_fromLegoId`: The ID of the source lego
 - `_fromAsset`: The address of the token to rebalance
 - `_fromVaultToken`: The source vault token address
 - `_toLegoId`: The ID of the destination lego
 - `_toVault`: The destination vault address
-- `_fromVaultTokenAmount`: The vault token amount to rebalance (defaults to max)
+- `_fromVaultTokenAmount`: The amount of source vault tokens to rebalance (defaults to max)
 
 **Returns:**
-- The amount of assets deposited in the destination vault
+
+- The amount of assets deposited
 - The destination vault token address
 - The amount of destination vault tokens received
 - The USD value of the transaction
 
-**Events Emitted:**
-- `UserWalletWithdrawal` and `UserWalletDeposit`
-
-**Requirements:**
-- Caller must have permission to rebalance
-- Valid lego IDs and asset address
-- Sufficient balance of the source vault token
-
 ### swapTokens
 
 ```vyper
-@nonreentrant
 @external
-def swapTokens(
-    _swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS],
-) -> (uint256, uint256, uint256):
+def swapTokens(_swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]) -> (uint256, uint256, uint256):
 ```
 
-Swaps tokens using the specified swap instructions.
+Swaps tokens using specified instructions.
 
 **Parameters:**
+
 - `_swapInstructions`: Array of swap instructions
 
 **Returns:**
-- The amount of tokens swapped
-- The amount of tokens received
+
+- The amount swapped
+- The amount received
 - The USD value of the transaction
-
-**Events Emitted:**
-- `UserWalletSwap`
-
-**Requirements:**
-- Caller must have permission to swap
-- Valid lego IDs and asset addresses
-- Sufficient balance of the input tokens
 
 ### borrow
 
 ```vyper
-@nonreentrant
 @external
 def borrow(
     _legoId: uint256,
-    _borrowAsset: address,
-    _amount: uint256,
-) -> (uint256, uint256):
+    _borrowAsset: address = empty(address),
+    _amount: uint256 = max_value(uint256),
+) -> (address, uint256, uint256):
 ```
 
-Borrows assets from a lending protocol.
+Borrows assets from a specified lego integration.
 
 **Parameters:**
+
 - `_legoId`: The ID of the lego to use for borrowing
-- `_borrowAsset`: The address of the asset to borrow
-- `_amount`: The amount to borrow
+- `_borrowAsset`: The address of the asset to borrow (defaults to empty)
+- `_amount`: The amount to borrow (defaults to max)
 
 **Returns:**
+
+- The borrowed asset address
 - The amount borrowed
 - The USD value of the transaction
-
-**Events Emitted:**
-- `UserWalletBorrow`
-
-**Requirements:**
-- Caller must have permission to borrow
-- Valid lego ID and asset address
-- Sufficient borrowing capacity
 
 ### repayDebt
 
 ```vyper
-@nonreentrant
 @external
 def repayDebt(
     _legoId: uint256,
     _paymentAsset: address,
     _paymentAmount: uint256 = max_value(uint256),
-) -> (uint256, uint256, uint256):
+) -> (address, uint256, uint256, uint256):
 ```
 
-Repays debt to a lending protocol.
+Repays debt to a specified lego integration.
 
 **Parameters:**
+
 - `_legoId`: The ID of the lego to use for repayment
-- `_paymentAsset`: The address of the asset to repay with
+- `_paymentAsset`: The address of the asset to use for repayment
 - `_paymentAmount`: The amount to repay (defaults to max)
 
 **Returns:**
-- The amount repaid
+
+- The payment asset address
+- The amount paid
+- The USD value of the transaction
 - The remaining debt
-- The USD value of the transaction
-
-**Events Emitted:**
-- `UserWalletRepayDebt`
-
-**Requirements:**
-- Caller must have permission to repay
-- Valid lego ID and asset address
-- Sufficient balance of the payment asset
-
-### claimRewards
-
-```vyper
-@nonreentrant
-@external
-def claimRewards(
-    _legoId: uint256,
-    _market: address,
-    _rewardToken: address,
-    _rewardAmount: uint256,
-    _proof: bytes32,
-) -> (uint256, uint256):
-```
-
-Claims rewards from a protocol.
-
-**Parameters:**
-- `_legoId`: The ID of the lego to use for claiming rewards
-- `_market`: The address of the market
-- `_rewardToken`: The address of the reward token
-- `_rewardAmount`: The amount of rewards to claim
-- `_proof`: The proof for claiming rewards
-
-**Returns:**
-- The amount of rewards claimed
-- The USD value of the transaction
-
-**Events Emitted:**
-- `UserWalletRewardsClaimed`
-
-**Requirements:**
-- Caller must have permission to claim rewards
-- Valid lego ID and market address
-- Valid proof for claiming rewards
 
 ### addLiquidity
 
 ```vyper
-@nonreentrant
 @external
 def addLiquidity(
     _legoId: uint256,
@@ -755,53 +705,45 @@ def addLiquidity(
     _pool: address,
     _tokenA: address,
     _tokenB: address,
-    _amountA: uint256,
-    _amountB: uint256,
-    _tickLower: int24,
-    _tickUpper: int24,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-    _minLpAmount: uint256,
-) -> (uint256, uint256, uint256, uint256, uint256, uint256):
+    _amountA: uint256 = max_value(uint256),
+    _amountB: uint256 = max_value(uint256),
+    _tickLower: int24 = min_value(int24),
+    _tickUpper: int24 = max_value(int24),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+    _minLpAmount: uint256 = 0,
+) -> (uint256, uint256, uint256, uint256, uint256):
 ```
 
 Adds liquidity to a pool.
 
 **Parameters:**
-- `_legoId`: The ID of the lego to use for adding liquidity
-- `_nftAddr`: The address of the NFT contract
-- `_nftTokenId`: The token ID of the NFT
-- `_pool`: The address of the pool
-- `_tokenA`: The address of token A
-- `_tokenB`: The address of token B
-- `_amountA`: The amount of token A to add
-- `_amountB`: The amount of token B to add
-- `_tickLower`: The lower tick bound
-- `_tickUpper`: The upper tick bound
-- `_minAmountA`: The minimum amount of token A to add
-- `_minAmountB`: The minimum amount of token B to add
-- `_minLpAmount`: The minimum amount of LP tokens to receive
+
+- `_legoId`: The ID of the lego to use
+- `_nftAddr`: The NFT address (for concentrated liquidity positions)
+- `_nftTokenId`: The NFT token ID
+- `_pool`: The pool address
+- `_tokenA`: The first token address
+- `_tokenB`: The second token address
+- `_amountA`: The amount of the first token to add (defaults to max)
+- `_amountB`: The amount of the second token to add (defaults to max)
+- `_tickLower`: The lower tick bound (for concentrated liquidity)
+- `_tickUpper`: The upper tick bound (for concentrated liquidity)
+- `_minAmountA`: The minimum amount of token A to use
+- `_minAmountB`: The minimum amount of token B to use
+- `_minLpAmount`: The minimum LP tokens to receive
 
 **Returns:**
-- The amount of token A added
-- The amount of token B added
-- The amount of liquidity added
+
+- The amount of token A used
+- The amount of token B used
+- The amount of LP tokens received
 - The USD value of the transaction
-- The refund amount of token A
-- The refund amount of token B
-
-**Events Emitted:**
-- `UserWalletLiquidityAdded`
-
-**Requirements:**
-- Caller must have permission to add liquidity
-- Valid lego ID and pool address
-- Sufficient balance of tokens A and B
+- The NFT token ID (for concentrated liquidity positions)
 
 ### removeLiquidity
 
 ```vyper
-@nonreentrant
 @external
 def removeLiquidity(
     _legoId: uint256,
@@ -810,184 +752,161 @@ def removeLiquidity(
     _pool: address,
     _tokenA: address,
     _tokenB: address,
-    _liqToRemove: uint256,
-    _minAmountA: uint256,
-    _minAmountB: uint256,
-) -> (uint256, uint256, uint256, bool, uint256, uint256):
+    _liqToRemove: uint256 = max_value(uint256),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+) -> (uint256, uint256, uint256, bool):
 ```
 
 Removes liquidity from a pool.
 
 **Parameters:**
-- `_legoId`: The ID of the lego to use for removing liquidity
-- `_nftAddr`: The address of the NFT contract
-- `_nftTokenId`: The token ID of the NFT
-- `_pool`: The address of the pool
-- `_tokenA`: The address of token A
-- `_tokenB`: The address of token B
-- `_liqToRemove`: The amount of liquidity to remove
+
+- `_legoId`: The ID of the lego to use
+- `_nftAddr`: The NFT address (for concentrated liquidity positions)
+- `_nftTokenId`: The NFT token ID
+- `_pool`: The pool address
+- `_tokenA`: The first token address
+- `_tokenB`: The second token address
+- `_liqToRemove`: The amount of liquidity to remove (defaults to max)
 - `_minAmountA`: The minimum amount of token A to receive
 - `_minAmountB`: The minimum amount of token B to receive
 
 **Returns:**
+
 - The amount of token A received
 - The amount of token B received
 - The USD value of the transaction
-- Whether the position was fully depleted
-- The amount of liquidity removed
-- The refund amount of LP tokens
-
-**Events Emitted:**
-- `UserWalletLiquidityRemoved`
-
-**Requirements:**
-- Caller must have permission to remove liquidity
-- Valid lego ID and pool address
-- Sufficient balance of LP tokens
+- Whether all liquidity was removed
 
 ### transferFunds
 
 ```vyper
-@nonreentrant
 @external
 def transferFunds(
     _recipient: address,
-    _amount: uint256,
-    _asset: address,
+    _amount: uint256 = max_value(uint256),
+    _asset: address = empty(address),
 ) -> (uint256, uint256):
 ```
 
 Transfers funds to a recipient.
 
 **Parameters:**
-- `_recipient`: The address of the recipient
-- `_amount`: The amount to transfer
-- `_asset`: The address of the asset to transfer
+
+- `_recipient`: The recipient address
+- `_amount`: The amount to transfer (defaults to max)
+- `_asset`: The asset to transfer (defaults to empty)
 
 **Returns:**
+
 - The amount transferred
 - The USD value of the transaction
 
-**Events Emitted:**
-- `UserWalletFundsTransferred`
+### claimRewards
 
-**Requirements:**
-- Caller must have permission to transfer
-- Valid recipient and asset address
-- Sufficient balance of the asset
-- Recipient must be allowed
+```vyper
+@external
+def claimRewards(
+    _legoId: uint256,
+    _market: address = empty(address),
+    _rewardToken: address = empty(address),
+    _rewardAmount: uint256 = max_value(uint256),
+    _proof: bytes32 = empty(bytes32),
+):
+```
+
+Claims rewards for a position.
+
+**Parameters:**
+
+- `_legoId`: The ID of the lego to use
+- `_market`: The market address
+- `_rewardToken`: The reward token address
+- `_rewardAmount`: The reward amount to claim
+- `_proof`: The proof for claiming rewards
 
 ### convertEthToWeth
 
 ```vyper
-@nonreentrant
-@payable
 @external
 def convertEthToWeth(
+    _amount: uint256 = max_value(uint256),
     _depositLegoId: uint256 = 0,
     _depositVault: address = empty(address),
-) -> (uint256, uint256):
+) -> (uint256, address, uint256):
 ```
 
-Converts ETH to WETH and optionally deposits to a vault.
+Converts ETH to WETH and optionally deposits into a vault.
 
 **Parameters:**
-- `_depositLegoId`: The ID of the lego to use for deposit (optional)
-- `_depositVault`: The address of the vault to deposit to (optional)
+
+- `_amount`: The amount of ETH to convert (defaults to max)
+- `_depositLegoId`: The ID of the lego to deposit WETH into (0 means no deposit)
+- `_depositVault`: The vault address to deposit WETH into
 
 **Returns:**
+
 - The amount of ETH converted
-- The amount of WETH received
-
-**Events Emitted:**
-- `UserWalletEthConvertedToWeth`
-- `UserWalletDeposit` (if depositing)
-
-**Requirements:**
-- Caller must have permission to convert
-- ETH must be sent with the transaction
-- Valid lego ID and vault address if depositing
+- The vault token address (if deposited)
+- The amount of vault tokens received (if deposited)
 
 ### convertWethToEth
 
 ```vyper
-@nonreentrant
 @external
 def convertWethToEth(
-    _amount: uint256,
+    _amount: uint256 = max_value(uint256),
     _recipient: address = empty(address),
     _withdrawLegoId: uint256 = 0,
     _withdrawVaultToken: address = empty(address),
-) -> (uint256, uint256):
+) -> uint256:
 ```
 
-Converts WETH to ETH and optionally withdraws from a vault.
+Converts WETH to ETH, optionally first withdrawing from a vault.
 
 **Parameters:**
-- `_amount`: The amount to convert
-- `_recipient`: The address of the recipient (optional)
-- `_withdrawLegoId`: The ID of the lego to use for withdrawal (optional)
-- `_withdrawVaultToken`: The address of the vault token to withdraw from (optional)
+
+- `_amount`: The amount of WETH to convert (defaults to max)
+- `_recipient`: The recipient for the ETH (defaults to empty, meaning this wallet)
+- `_withdrawLegoId`: The ID of the lego to withdraw WETH from (0 means no withdrawal)
+- `_withdrawVaultToken`: The vault token address to withdraw from
 
 **Returns:**
-- The amount of WETH converted
+
 - The amount of ETH received
 
-**Events Emitted:**
-- `UserWalletWethConvertedToEth`
-- `UserWalletWithdrawal` (if withdrawing)
+### recoverERC721
 
-**Requirements:**
-- Caller must have permission to convert
-- Sufficient balance of WETH
-- Valid lego ID and vault token address if withdrawing
-- Recipient must be allowed if specified
+```vyper
+@external
+def recoverERC721(_collection: address, _tokenId: uint256) -> bool:
+```
+
+Recovers an ERC721 token held by the wallet.
+
+**Parameters:**
+
+- `_collection`: The collection address
+- `_tokenId`: The token ID
+
+**Returns:**
+
+- True if the recovery was successful
 
 ### recoverTrialFunds
 
 ```vyper
-@nonreentrant
 @external
 def recoverTrialFunds(_opportunities: DynArray[TrialFundsOpp, MAX_LEGOS]) -> bool:
 ```
 
-Recovers trial funds from the wallet.
+Recovers trial funds from various opportunities.
 
 **Parameters:**
-- `_opportunities`: Array of trial funds opportunities
+
+- `_opportunities`: Array of opportunities to recover funds from
 
 **Returns:**
-- True if the trial funds were recovered successfully
 
-**Events Emitted:**
-- `UserWalletTrialFundsRecovered`
-
-**Requirements:**
-- Caller must be the wallet config
-- Valid trial funds asset
-- Opportunities array must not be empty
-
-### recoverNft
-
-```vyper
-@nonreentrant
-@external
-def recoverNft(_collection: address, _nftTokenId: uint256) -> bool:
-```
-
-Recovers an NFT from the wallet.
-
-**Parameters:**
-- `_collection`: The address of the NFT collection
-- `_nftTokenId`: The token ID of the NFT
-
-**Returns:**
-- True if the NFT was recovered successfully
-
-**Events Emitted:**
-- `UserWalletNftRecovered`
-
-**Requirements:**
-- Caller must be the owner
-- Valid NFT collection address
-- Wallet must own the NFT 
+- True if the recovery was successful

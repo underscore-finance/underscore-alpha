@@ -2,7 +2,7 @@
 
 The AgentTemplate contract serves as a template for AI agents in the Underscore system. It provides functionality for managing user funds, executing various DeFi operations, and handling ownership changes.
 
-**Source:** `contracts/core/AgentTemplate.vy`
+**Source:** `contracts/core/templates/AgentTemplate.vy`
 
 ## Flags
 
@@ -78,6 +78,7 @@ struct ActionInstruction:
     liqToRemove: uint256
     recipient: address
     isWethToEthConversion: bool
+    swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]
 ```
 
 Structure for batch action instructions.
@@ -236,10 +237,138 @@ Maximum number of tokens in a swap path.
 ### API_VERSION
 
 ```vyper
-API_VERSION: constant(String[28]) = "0.0.1"
+API_VERSION: constant(String[28]) = "0.0.2"
 ```
 
 The API version of the contract.
+
+### DOMAIN_TYPE_HASH
+
+```vyper
+DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
+```
+
+EIP-712 domain type hash.
+
+### DEPOSIT_TYPE_HASH
+
+```vyper
+DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(address userWallet,uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
+```
+
+Type hash for deposit signatures.
+
+### WITHDRAWAL_TYPE_HASH
+
+```vyper
+WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(address userWallet,uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
+```
+
+Type hash for withdrawal signatures.
+
+### REBALANCE_TYPE_HASH
+
+```vyper
+REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(address userWallet,uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
+```
+
+Type hash for rebalance signatures.
+
+### SWAP_ACTION_TYPE_HASH
+
+```vyper
+SWAP_ACTION_TYPE_HASH: constant(bytes32) =  keccak256('Swap(address userWallet,SwapInstruction[] swapInstructions,uint256 expiration)')
+```
+
+Type hash for swap signatures.
+
+### SWAP_INSTRUCTION_TYPE_HASH
+
+```vyper
+SWAP_INSTRUCTION_TYPE_HASH: constant(bytes32) = keccak256('SwapInstruction(uint256 legoId,uint256 amountIn,uint256 minAmountOut,address[] tokenPath,address[] poolPath)')
+```
+
+Type hash for swap instruction signatures.
+
+### ADD_LIQ_TYPE_HASH
+
+```vyper
+ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 expiration)')
+```
+
+Type hash for add liquidity signatures.
+
+### REMOVE_LIQ_TYPE_HASH
+
+```vyper
+REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
+```
+
+Type hash for remove liquidity signatures.
+
+### TRANSFER_TYPE_HASH
+
+```vyper
+TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address userWallet,address recipient,uint256 amount,address asset,uint256 expiration)')
+```
+
+Type hash for transfer signatures.
+
+### ETH_TO_WETH_TYPE_HASH
+
+```vyper
+ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(address userWallet,uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
+```
+
+Type hash for ETH to WETH conversion signatures.
+
+### WETH_TO_ETH_TYPE_HASH
+
+```vyper
+WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(address userWallet,uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
+```
+
+Type hash for WETH to ETH conversion signatures.
+
+### CLAIM_REWARDS_TYPE_HASH
+
+```vyper
+CLAIM_REWARDS_TYPE_HASH: constant(bytes32) = keccak256('ClaimRewards(address userWallet,uint256 legoId,address market,address rewardToken,uint256 rewardAmount,bytes32 proof,uint256 expiration)')
+```
+
+Type hash for claim rewards signatures.
+
+### BORROW_TYPE_HASH
+
+```vyper
+BORROW_TYPE_HASH: constant(bytes32) = keccak256('Borrow(address userWallet,uint256 legoId,address borrowAsset,uint256 amount,uint256 expiration)')
+```
+
+Type hash for borrow signatures.
+
+### REPAY_TYPE_HASH
+
+```vyper
+REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(address userWallet,uint256 legoId,address paymentAsset,uint256 paymentAmount,uint256 expiration)')
+```
+
+Type hash for repay signatures.
+
+### BATCH_ACTIONS_TYPE_HASH
+
+```vyper
+BATCH_ACTIONS_TYPE_HASH: constant(bytes32) =  keccak256('BatchActions(address userWallet,ActionInstruction[] instructions,uint256 expiration)')
+```
+
+Type hash for batch actions signatures.
+
+### ACTION_INSTRUCTION_TYPE_HASH
+
+```vyper
+ACTION_INSTRUCTION_TYPE_HASH: constant(bytes32) = keccak256('ActionInstruction(bool usePrevAmountOut,uint256 action,uint256 legoId,address asset,address vault,uint256 amount,uint256 altLegoId,address altAsset,address altVault,uint256 altAmount,uint256 minAmountOut,address pool,bytes32 proof,address nftAddr,uint256 nftTokenId,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 liqToRemove,address recipient,bool isWethToEthConversion,SwapInstruction[] swapInstructions)')
+```
+
+Type hash for action instruction signatures.
 
 ## External Functions
 
@@ -253,12 +382,15 @@ def initialize(_owner: address) -> bool:
 Initializes a new agent instance.
 
 **Parameters:**
+
 - `_owner`: The address that will own the agent
 
 **Returns:**
+
 - True if initialization was successful
 
 **Requirements:**
+
 - Contract must not be already initialized
 - Owner address must not be empty
 
@@ -273,11 +405,13 @@ def apiVersion() -> String[28]:
 Returns the API version of the contract.
 
 **Returns:**
+
 - String representing the API version
 
 ### depositTokens
 
 ```vyper
+@nonreentrant
 @external
 def depositTokens(
     _userWallet: address,
@@ -292,24 +426,26 @@ def depositTokens(
 Deposits tokens into a yield-generating vault on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_legoId`: ID of the lego (protocol) to use
 - `_asset`: Address of the token to deposit
 - `_vault`: Address of the vault to deposit into
-- `_amount`: Amount of tokens to deposit
-- `_sig`: Signature data for verification
+- `_amount`: Amount of tokens to deposit (defaults to max)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing deposit information (legoId, asset address, amount deposited, vault tokens received)
+
+- A tuple containing (asset amount deposited, vault token address, vault token amount received, USD value)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### withdrawTokens
 
 ```vyper
+@nonreentrant
 @external
 def withdrawTokens(
     _userWallet: address,
@@ -324,24 +460,26 @@ def withdrawTokens(
 Withdraws tokens from a yield position on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_legoId`: ID of the lego (protocol) to use
 - `_asset`: Address of the underlying token
 - `_vaultToken`: Address of the vault token to withdraw
-- `_vaultTokenAmount`: Amount of vault tokens to withdraw
-- `_sig`: Signature data for verification
+- `_vaultTokenAmount`: Amount of vault tokens to withdraw (defaults to max)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing withdrawal information (legoId, amount withdrawn, vault tokens burned)
+
+- A tuple containing (asset amount received, vault token amount burned, USD value)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### rebalance
 
 ```vyper
+@nonreentrant
 @external
 def rebalance(
     _userWallet: address,
@@ -358,26 +496,28 @@ def rebalance(
 Rebalances funds from one yield position to another on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_fromLegoId`: ID of the source lego (protocol)
 - `_fromAsset`: Address of the source token
 - `_fromVaultToken`: Address of the source vault token
 - `_toLegoId`: ID of the destination lego (protocol)
 - `_toVault`: Address of the destination vault
-- `_fromVaultTokenAmount`: Amount of source vault tokens to rebalance
-- `_sig`: Signature data for verification
+- `_fromVaultTokenAmount`: Amount of source vault tokens to rebalance (defaults to max)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing rebalance information (legoId, asset address, amount deposited, vault tokens received)
+
+- A tuple containing (asset amount deposited, vault token address, vault token amount received, USD value)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### swapTokens
 
 ```vyper
+@nonreentrant
 @external
 def swapTokens(
     _userWallet: address,
@@ -389,17 +529,18 @@ def swapTokens(
 Swaps tokens on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_swapInstructions`: Array of swap instructions
-- `_sig`: Signature data for verification
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing swap information (legoId, amount in, amount out)
+
+- A tuple containing (in amount, out amount, USD value)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### getSwapActionHash
 
@@ -416,16 +557,19 @@ def getSwapActionHash(
 Gets the hash of a swap action for signature verification.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_swapInstructions`: Array of swap instructions
 - `_expiration`: Expiration timestamp for the signature
 
 **Returns:**
+
 - Hash of the swap action
 
 ### borrow
 
 ```vyper
+@nonreentrant
 @external
 def borrow(
     _userWallet: address,
@@ -439,23 +583,25 @@ def borrow(
 Borrows assets from a lending protocol on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_legoId`: ID of the lego (protocol) to use
-- `_borrowAsset`: Address of the asset to borrow
-- `_amount`: Amount to borrow
-- `_sig`: Signature data for verification
+- `_borrowAsset`: Address of the asset to borrow (defaults to empty)
+- `_amount`: Amount to borrow (defaults to max)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing borrow information (asset address, amount borrowed, debt token amount)
+
+- A tuple containing (borrow asset address, amount borrowed, USD value)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### repayDebt
 
 ```vyper
+@nonreentrant
 @external
 def repayDebt(
     _userWallet: address,
@@ -469,23 +615,25 @@ def repayDebt(
 Repays debt to a lending protocol on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_legoId`: ID of the lego (protocol) to use
 - `_paymentAsset`: Address of the asset to repay with
-- `_paymentAmount`: Amount to repay
-- `_sig`: Signature data for verification
+- `_paymentAmount`: Amount to repay (defaults to max)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing repay information (asset address, amount repaid, debt token amount, remaining debt)
+
+- A tuple containing (payment asset address, payment amount, USD value, remaining debt)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### claimRewards
 
 ```vyper
+@nonreentrant
 @external
 def claimRewards(
     _userWallet: address,
@@ -501,22 +649,23 @@ def claimRewards(
 Claims rewards from a protocol on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_legoId`: ID of the lego (protocol) to use
-- `_market`: Address of the market to claim rewards from
-- `_rewardToken`: Address of the reward token
-- `_rewardAmount`: Amount of rewards to claim
-- `_proof`: Merkle proof for claiming rewards
-- `_sig`: Signature data for verification
+- `_market`: Address of the market (defaults to empty)
+- `_rewardToken`: Address of the reward token (defaults to empty)
+- `_rewardAmount`: Amount of rewards to claim (defaults to max)
+- `_proof`: Proof for claiming rewards (defaults to empty)
+- `_sig`: Signature data for verification (optional)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### addLiquidity
 
 ```vyper
+@nonreentrant
 @external
 def addLiquidity(
     _userWallet: address,
@@ -540,33 +689,35 @@ def addLiquidity(
 Adds liquidity to a pool on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_legoId`: ID of the lego (protocol) to use
-- `_nftAddr`: Address of the NFT contract
-- `_nftTokenId`: ID of the NFT token
+- `_nftAddr`: Address of the NFT contract (for concentrated liquidity)
+- `_nftTokenId`: Token ID of the NFT (for concentrated liquidity)
 - `_pool`: Address of the pool
 - `_tokenA`: Address of token A
 - `_tokenB`: Address of token B
-- `_amountA`: Amount of token A to add
-- `_amountB`: Amount of token B to add
-- `_tickLower`: Lower tick for concentrated liquidity
-- `_tickUpper`: Upper tick for concentrated liquidity
-- `_minAmountA`: Minimum amount of token A to add
-- `_minAmountB`: Minimum amount of token B to add
-- `_minLpAmount`: Minimum amount of LP tokens to receive
-- `_sig`: Signature data for verification
+- `_amountA`: Amount of token A to add (defaults to max)
+- `_amountB`: Amount of token B to add (defaults to max)
+- `_tickLower`: Lower tick bound for concentrated liquidity (defaults to min value)
+- `_tickUpper`: Upper tick bound for concentrated liquidity (defaults to max value)
+- `_minAmountA`: Minimum amount of token A to use (defaults to 0)
+- `_minAmountB`: Minimum amount of token B to use (defaults to 0)
+- `_minLpAmount`: Minimum LP tokens to receive (defaults to 0)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing liquidity information (legoId, amount A, amount B, LP amount, NFT token ID)
+
+- A tuple containing (amount A used, amount B used, LP tokens received, USD value, NFT token ID)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### removeLiquidity
 
 ```vyper
+@nonreentrant
 @external
 def removeLiquidity(
     _userWallet: address,
@@ -586,29 +737,31 @@ def removeLiquidity(
 Removes liquidity from a pool on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_legoId`: ID of the lego (protocol) to use
-- `_nftAddr`: Address of the NFT contract
-- `_nftTokenId`: ID of the NFT token
+- `_nftAddr`: Address of the NFT contract (for concentrated liquidity)
+- `_nftTokenId`: Token ID of the NFT (for concentrated liquidity)
 - `_pool`: Address of the pool
 - `_tokenA`: Address of token A
 - `_tokenB`: Address of token B
-- `_liqToRemove`: Amount of liquidity to remove
-- `_minAmountA`: Minimum amount of token A to receive
-- `_minAmountB`: Minimum amount of token B to receive
-- `_sig`: Signature data for verification
+- `_liqToRemove`: Amount of liquidity to remove (defaults to max)
+- `_minAmountA`: Minimum amount of token A to receive (defaults to 0)
+- `_minAmountB`: Minimum amount of token B to receive (defaults to 0)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing removal information (amount A received, amount B received, liquidity removed, success)
+
+- A tuple containing (amount A received, amount B received, USD value, is fully depleted)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### transferFunds
 
 ```vyper
+@nonreentrant
 @external
 def transferFunds(
     _userWallet: address,
@@ -622,23 +775,25 @@ def transferFunds(
 Transfers funds from a user wallet to a recipient.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
-- `_recipient`: The address of the recipient
-- `_amount`: Amount to transfer
-- `_asset`: Address of the asset to transfer
-- `_sig`: Signature data for verification
+- `_recipient`: Address of the recipient
+- `_amount`: Amount to transfer (defaults to max)
+- `_asset`: Address of the asset to transfer (defaults to empty)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing transfer information (amount transferred, balance after transfer)
+
+- A tuple containing (amount transferred, USD value)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### convertEthToWeth
 
 ```vyper
+@nonreentrant
 @external
 def convertEthToWeth(
     _userWallet: address,
@@ -649,26 +804,28 @@ def convertEthToWeth(
 ) -> (uint256, address, uint256):
 ```
 
-Converts ETH to WETH on behalf of a user wallet.
+Converts ETH to WETH and optionally deposits it on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
-- `_amount`: Amount of ETH to convert
-- `_depositLegoId`: ID of the lego (protocol) to deposit to after conversion
-- `_depositVault`: Address of the vault to deposit to after conversion
-- `_sig`: Signature data for verification
+- `_amount`: Amount of ETH to convert (defaults to max)
+- `_depositLegoId`: ID of the lego to deposit WETH into (defaults to 0, no deposit)
+- `_depositVault`: Address of the vault to deposit WETH into (defaults to empty)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Tuple containing conversion information (amount converted, vault address, vault tokens received)
+
+- A tuple containing (amount converted, vault token address, vault token amount)
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### convertWethToEth
 
 ```vyper
+@nonreentrant
 @external
 def convertWethToEth(
     _userWallet: address,
@@ -680,27 +837,29 @@ def convertWethToEth(
 ) -> uint256:
 ```
 
-Converts WETH to ETH on behalf of a user wallet.
+Converts WETH to ETH and optionally withdraws first on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
-- `_amount`: Amount of WETH to convert
-- `_recipient`: Address to receive the ETH
-- `_withdrawLegoId`: ID of the lego (protocol) to withdraw from before conversion
-- `_withdrawVaultToken`: Address of the vault token to withdraw before conversion
-- `_sig`: Signature data for verification
+- `_amount`: Amount of WETH to convert (defaults to max)
+- `_recipient`: Address to send ETH to (defaults to empty, user wallet)
+- `_withdrawLegoId`: ID of the lego to withdraw WETH from (defaults to 0, no withdrawal)
+- `_withdrawVaultToken`: Address of the vault token to withdraw (defaults to empty)
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- Amount of ETH converted
+
+- The amount of ETH received
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
+
+- If msg.sender is not the owner, valid signature from the owner is required
 
 ### performBatchActions
 
 ```vyper
+@nonreentrant
 @external
 def performBatchActions(
     _userWallet: address,
@@ -712,18 +871,19 @@ def performBatchActions(
 Performs a batch of actions on behalf of a user wallet.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
-- `_instructions`: Array of action instructions to execute
-- `_sig`: Signature data for verification
+- `_instructions`: Array of action instructions
+- `_sig`: Signature data for verification (optional)
 
 **Returns:**
-- True if all actions were executed successfully
+
+- True if the batch actions were executed successfully
 
 **Requirements:**
-- Valid signature from the wallet owner
-- Signature not expired
-- Signature not already used
-- At least one instruction provided
+
+- If msg.sender is not the owner, valid signature from the owner is required
+- Non-empty instructions array
 
 ### getBatchActionHash
 
@@ -731,8 +891,8 @@ Performs a batch of actions on behalf of a user wallet.
 @view
 @external
 def getBatchActionHash(
-    _userWallet: address, 
-    _instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS], 
+    _userWallet: address,
+    _instructions: DynArray[ActionInstruction, MAX_INSTRUCTIONS],
     _expiration: uint256
 ) -> bytes32:
 ```
@@ -740,11 +900,13 @@ def getBatchActionHash(
 Gets the hash of a batch action for signature verification.
 
 **Parameters:**
+
 - `_userWallet`: The address of the user wallet
 - `_instructions`: Array of action instructions
 - `_expiration`: Expiration timestamp for the signature
 
 **Returns:**
+
 - Hash of the batch action
 
 ### DOMAIN_SEPARATOR
@@ -758,6 +920,7 @@ def DOMAIN_SEPARATOR() -> bytes32:
 Returns the domain separator used for EIP-712 signatures.
 
 **Returns:**
+
 - Domain separator as bytes32
 
 ### changeOwnership
@@ -770,12 +933,15 @@ def changeOwnership(_newOwner: address):
 Initiates a change of ownership for the agent.
 
 **Parameters:**
+
 - `_newOwner`: The address of the new owner
 
 **Events Emitted:**
+
 - `AgentOwnershipChangeInitiated(prevOwner, newOwner, confirmBlock)`
 
 **Requirements:**
+
 - Can only be called by the current owner
 - New owner address must not be empty or the current owner
 
@@ -789,9 +955,11 @@ def confirmOwnershipChange():
 Confirms a pending ownership change.
 
 **Events Emitted:**
+
 - `AgentOwnershipChangeConfirmed(prevOwner, newOwner, initiatedBlock, confirmBlock)`
 
 **Requirements:**
+
 - Can only be called by the pending new owner
 - Time delay must have passed since initiation
 
@@ -805,9 +973,11 @@ def cancelOwnershipChange():
 Cancels a pending ownership change.
 
 **Events Emitted:**
+
 - `AgentOwnershipChangeCancelled(cancelledOwner, initiatedBlock, confirmBlock)`
 
 **Requirements:**
+
 - Can only be called by the current owner
 - A pending ownership change must exist
 
@@ -821,12 +991,15 @@ def setOwnershipChangeDelay(_numBlocks: uint256):
 Sets the delay (in blocks) required for ownership changes.
 
 **Parameters:**
+
 - `_numBlocks`: The number of blocks to wait before ownership can be changed
 
 **Events Emitted:**
+
 - `AgentOwnershipChangeDelaySet(delayBlocks)`
 
 **Requirements:**
+
 - Can only be called by the owner
 - Delay must be within allowed range
 
@@ -840,15 +1013,19 @@ def recoverFunds(_asset: address) -> bool:
 Recovers funds from the agent contract to the owner.
 
 **Parameters:**
+
 - `_asset`: The address of the asset to recover
 
 **Returns:**
+
 - True if the funds were recovered successfully
 
 **Events Emitted:**
+
 - `AgentFundsRecovered(asset, recipient, balance)`
 
 **Requirements:**
+
 - Can only be called by the owner
 - Asset address must not be empty
-- Balance must be greater than zero 
+- Balance must be greater than zero

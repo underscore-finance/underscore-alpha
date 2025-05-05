@@ -1,60 +1,10 @@
-# OracleRegistry
+# OracleRegistry API Reference
 
-The OracleRegistry contract manages the registration and access to price oracles.
+**File:** `contracts/core/registries/OracleRegistry.vy`
 
-**Source:** `contracts/core/OracleRegistry.vy`
-
-## Structs
-
-### OraclePartnerInfo
-
-```vyper
-struct OraclePartnerInfo:
-    addr: address
-    version: uint256
-    lastModified: uint256
-    description: String[64]
-```
-
-Structure containing information about a registered oracle partner.
+The OracleRegistry contract maintains a registry of price oracles and provides functions to access price data.
 
 ## Events
-
-### NewOraclePartnerRegistered
-
-```vyper
-event NewOraclePartnerRegistered:
-    addr: indexed(address)
-    oraclePartnerId: uint256
-    description: String[64]
-```
-
-Emitted when a new oracle partner is registered in the system.
-
-### OraclePartnerAddrUpdated
-
-```vyper
-event OraclePartnerAddrUpdated:
-    newAddr: indexed(address)
-    prevAddr: indexed(address)
-    oraclePartnerId: uint256
-    version: uint256
-    description: String[64]
-```
-
-Emitted when an oracle partner's address is updated.
-
-### OraclePartnerAddrDisabled
-
-```vyper
-event OraclePartnerAddrDisabled:
-    prevAddr: indexed(address)
-    oraclePartnerId: uint256
-    version: uint256
-    description: String[64]
-```
-
-Emitted when an oracle partner is disabled.
 
 ### PriorityOraclePartnerIdsModified
 
@@ -63,7 +13,7 @@ event PriorityOraclePartnerIdsModified:
     numIds: uint256
 ```
 
-Emitted when the priority oracle partner IDs are modified.
+Emitted when the list of priority oracle partner IDs is modified.
 
 ### StaleTimeSet
 
@@ -72,33 +22,9 @@ event StaleTimeSet:
     staleTime: uint256
 ```
 
-Emitted when the stale time is set.
+Emitted when the stale time configuration is updated.
 
 ## Storage Variables
-
-### oraclePartnerInfo
-
-```vyper
-oraclePartnerInfo: public(HashMap[uint256, OraclePartnerInfo])
-```
-
-Mapping from oracle partner ID to oracle partner information.
-
-### oraclePartnerAddrToId
-
-```vyper
-oraclePartnerAddrToId: public(HashMap[address, uint256])
-```
-
-Mapping from oracle partner address to oracle partner ID.
-
-### numOraclePartners
-
-```vyper
-numOraclePartners: public(uint256)
-```
-
-Total number of registered oracle partners.
 
 ### priorityOraclePartnerIds
 
@@ -106,7 +32,7 @@ Total number of registered oracle partners.
 priorityOraclePartnerIds: public(DynArray[uint256, MAX_PRIORITY_PARTNERS])
 ```
 
-List of oracle partner IDs in priority order.
+An array of oracle partner IDs in priority order, which are checked first when requesting prices.
 
 ### staleTime
 
@@ -114,15 +40,7 @@ List of oracle partner IDs in priority order.
 staleTime: public(uint256)
 ```
 
-Time after which a price is considered stale.
-
-### ADDY_REGISTRY
-
-```vyper
-ADDY_REGISTRY: public(immutable(address))
-```
-
-Address of the address registry.
+The maximum staleness time allowed for price data in seconds.
 
 ### ETH
 
@@ -130,7 +48,7 @@ Address of the address registry.
 ETH: public(immutable(address))
 ```
 
-Address of the ETH token.
+The address representing ETH in the system.
 
 ### MIN_STALE_TIME
 
@@ -138,7 +56,7 @@ Address of the ETH token.
 MIN_STALE_TIME: public(immutable(uint256))
 ```
 
-Minimum allowed stale time.
+The minimum staleness time that can be configured.
 
 ### MAX_STALE_TIME
 
@@ -146,7 +64,7 @@ Minimum allowed stale time.
 MAX_STALE_TIME: public(immutable(uint256))
 ```
 
-Maximum allowed stale time.
+The maximum staleness time that can be configured.
 
 ## Constants
 
@@ -156,56 +74,9 @@ Maximum allowed stale time.
 MAX_PRIORITY_PARTNERS: constant(uint256) = 10
 ```
 
-Maximum number of priority oracle partners.
+The maximum number of oracle partners that can be set as priority partners.
 
 ## External Functions
-
-### registerOracle
-
-```vyper
-@external
-def registerOracle(_oracleAddr: address) -> uint256:
-```
-
-Registers a new oracle in the registry.
-
-**Parameters:**
-- `_oracleAddr`: The address of the oracle contract
-
-**Returns:**
-- The ID of the newly registered oracle
-
-**Events Emitted:**
-- `OracleRegistered(oracleId, oracleAddr)`
-
-**Requirements:**
-- Caller must be the governor
-- Oracle address must be a valid contract
-- Oracle must not be already registered
-
-### updateOracle
-
-```vyper
-@external
-def updateOracle(_oracleId: uint256, _newOracleAddr: address) -> bool:
-```
-
-Updates an existing oracle with a new address.
-
-**Parameters:**
-- `_oracleId`: The ID of the oracle to update
-- `_newOracleAddr`: The new address of the oracle contract
-
-**Returns:**
-- True if oracle was successfully updated
-
-**Events Emitted:**
-- `OracleUpdated(oracleId, oldOracleAddr, newOracleAddr)`
-
-**Requirements:**
-- Caller must be the governor
-- Oracle ID must be valid
-- New oracle address must be a valid contract
 
 ### getPrice
 
@@ -218,10 +89,12 @@ def getPrice(_asset: address, _shouldRaise: bool = False) -> uint256:
 Gets the USD price of an asset from registered oracle partners.
 
 **Parameters:**
-- `_asset`: The address of the asset to get price for
-- `_shouldRaise`: If True, raises an error when price feed exists but returns no price
+
+- `_asset`: The address of the asset to get the price for
+- `_shouldRaise`: If True, raises an error when a price feed exists but returns no price
 
 **Returns:**
+
 - The asset price in USD with 18 decimals
 
 ### getUsdValue
@@ -232,18 +105,55 @@ Gets the USD price of an asset from registered oracle partners.
 def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256:
 ```
 
-Gets the USD value of a given amount of an asset.
+Calculates the USD value of a given amount of an asset.
 
 **Parameters:**
+
 - `_asset`: The address of the asset
 - `_amount`: The amount of the asset
-- `_shouldRaise`: Whether to raise an error if the price is not available
+- `_shouldRaise`: If True, raises an error when a price feed exists but returns no price
 
 **Returns:**
-- The USD value of the asset amount
 
-**Requirements:**
-- If `_shouldRaise` is True, a valid price must be available
+- The USD value with 18 decimals
+
+### getAssetAmount
+
+```vyper
+@view
+@external
+def getAssetAmount(_asset: address, _usdValue: uint256, _shouldRaise: bool = False) -> uint256:
+```
+
+Calculates the amount of an asset worth a given USD value.
+
+**Parameters:**
+
+- `_asset`: The address of the asset
+- `_usdValue`: The USD value to convert to asset amount (18 decimals)
+- `_shouldRaise`: If True, raises an error when a price feed exists but returns no price
+
+**Returns:**
+
+- The amount of the asset
+
+### hasPriceFeed
+
+```vyper
+@view
+@external
+def hasPriceFeed(_asset: address) -> bool:
+```
+
+Checks if any oracle partner has a price feed for the asset.
+
+**Parameters:**
+
+- `_asset`: The address of the asset to check
+
+**Returns:**
+
+- True if a price feed exists, False otherwise
 
 ### getEthUsdValue
 
@@ -253,17 +163,35 @@ Gets the USD value of a given amount of an asset.
 def getEthUsdValue(_amount: uint256, _shouldRaise: bool = False) -> uint256:
 ```
 
-Gets the USD value of a given amount of ETH.
+Calculates the USD value of a given amount of ETH.
 
 **Parameters:**
-- `_amount`: The amount of ETH
-- `_shouldRaise`: Whether to raise an error if the price is not available
+
+- `_amount`: The amount of ETH in wei
+- `_shouldRaise`: If True, raises an error when a price feed exists but returns no price
 
 **Returns:**
-- The USD value of the ETH amount
 
-**Requirements:**
-- If `_shouldRaise` is True, a valid price must be available
+- The USD value with 18 decimals
+
+### getEthAmount
+
+```vyper
+@view
+@external
+def getEthAmount(_usdValue: uint256, _shouldRaise: bool = False) -> uint256:
+```
+
+Calculates the amount of ETH worth a given USD value.
+
+**Parameters:**
+
+- `_usdValue`: The USD value to convert to ETH amount (18 decimals)
+- `_shouldRaise`: If True, raises an error when a price feed exists but returns no price
+
+**Returns:**
+
+- The amount of ETH in wei
 
 ### isValidNewOraclePartnerAddr
 
@@ -273,247 +201,377 @@ Gets the USD value of a given amount of ETH.
 def isValidNewOraclePartnerAddr(_addr: address) -> bool:
 ```
 
-Checks if an address can be registered as a new oracle partner.
+Checks if an address can be registered as a new Oracle Partner.
 
 **Parameters:**
+
 - `_addr`: The address to validate
 
 **Returns:**
-- True if the address can be registered as a new oracle partner, False otherwise
+
+- True if the address can be registered, False otherwise
 
 ### registerNewOraclePartner
 
 ```vyper
 @external
-def registerNewOraclePartner(_addr: address, _description: String[64]) -> uint256:
+def registerNewOraclePartner(_addr: address, _description: String[64]) -> bool:
 ```
 
-Registers a new oracle partner in the registry.
+Initiates the registration process for a new Oracle Partner.
 
 **Parameters:**
-- `_addr`: The address of the oracle partner contract
-- `_description`: A brief description of the oracle partner's functionality
+
+- `_addr`: The address of the Oracle Partner to register
+- `_description`: A short description of the Oracle Partner (max 64 characters)
 
 **Returns:**
-- The ID of the newly registered oracle partner
 
-**Events Emitted:**
-- `NewOraclePartnerRegistered(addr, oraclePartnerId, description)`
+- True if the registration was successfully initiated, False if the Oracle Partner is invalid
 
 **Requirements:**
+
 - Caller must be the governor
-- Oracle partner address must be a valid contract
-- Oracle partner must not be already registered
+
+### confirmNewOraclePartnerRegistration
+
+```vyper
+@external
+def confirmNewOraclePartnerRegistration(_addr: address) -> uint256:
+```
+
+Confirms a pending Oracle Partner registration after the required delay period.
+
+**Parameters:**
+
+- `_addr`: The address of the Oracle Partner to confirm registration for
+
+**Returns:**
+
+- The assigned ID for the registered Oracle Partner, or 0 if confirmation fails
+
+**Requirements:**
+
+- Caller must be the governor
+- Registration must be past the required delay period
+
+### cancelPendingNewOraclePartner
+
+```vyper
+@external
+def cancelPendingNewOraclePartner(_addr: address) -> bool:
+```
+
+Cancels a pending Oracle Partner registration.
+
+**Parameters:**
+
+- `_addr`: The address of the Oracle Partner whose pending registration should be cancelled
+
+**Returns:**
+
+- True if the cancellation was successful
+
+**Requirements:**
+
+- Caller must be the governor
+- A pending registration must exist for the address
 
 ### isValidOraclePartnerUpdate
 
 ```vyper
 @view
 @external
-def isValidOraclePartnerUpdate(_oraclePartnerId: uint256, _newAddr: address) -> bool:
+def isValidOraclePartnerUpdate(_oracleId: uint256, _newAddr: address) -> bool:
 ```
 
-Checks if an oracle partner update operation would be valid.
+Checks if an Oracle Partner update operation would be valid.
 
 **Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner to update
-- `_newAddr`: The proposed new address for the oracle partner
+
+- `_oracleId`: The ID of the Oracle Partner to update
+- `_newAddr`: The proposed new address for the Oracle Partner
 
 **Returns:**
+
 - True if the update would be valid, False otherwise
 
 ### updateOraclePartnerAddr
 
 ```vyper
 @external
-def updateOraclePartnerAddr(_oraclePartnerId: uint256, _newAddr: address) -> bool:
+def updateOraclePartnerAddr(_oracleId: uint256, _newAddr: address) -> bool:
 ```
 
-Updates the address of an existing oracle partner.
+Initiates an address update for an existing registered Oracle Partner.
 
 **Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner to update
-- `_newAddr`: The new address for the oracle partner
+
+- `_oracleId`: The ID of the Oracle Partner to update
+- `_newAddr`: The new address to set for the Oracle Partner
 
 **Returns:**
-- True if the update was successful, False otherwise
 
-**Events Emitted:**
-- `OraclePartnerAddrUpdated(newAddr, prevAddr, oraclePartnerId, version, description)`
+- True if the update was successfully initiated, False if the update is invalid
 
 **Requirements:**
+
 - Caller must be the governor
-- Oracle partner ID must be valid
-- New oracle partner address must be a valid contract
+
+### confirmOraclePartnerUpdate
+
+```vyper
+@external
+def confirmOraclePartnerUpdate(_oracleId: uint256) -> bool:
+```
+
+Confirms a pending Oracle Partner address update after the required delay period.
+
+**Parameters:**
+
+- `_oracleId`: The ID of the Oracle Partner to confirm update for
+
+**Returns:**
+
+- True if the update was successfully confirmed, False if confirmation fails
+
+**Requirements:**
+
+- Caller must be the governor
+- Update must be past the required delay period
+
+### cancelPendingOraclePartnerUpdate
+
+```vyper
+@external
+def cancelPendingOraclePartnerUpdate(_oracleId: uint256) -> bool:
+```
+
+Cancels a pending Oracle Partner address update.
+
+**Parameters:**
+
+- `_oracleId`: The ID of the Oracle Partner whose pending update should be cancelled
+
+**Returns:**
+
+- True if the cancellation was successful
+
+**Requirements:**
+
+- Caller must be the governor
+- A pending update must exist for the Oracle Partner ID
 
 ### isValidOraclePartnerDisable
 
 ```vyper
 @view
 @external
-def isValidOraclePartnerDisable(_oraclePartnerId: uint256) -> bool:
+def isValidOraclePartnerDisable(_oracleId: uint256) -> bool:
 ```
 
-Checks if an oracle partner can be disabled.
+Checks if an Oracle Partner can be disabled.
 
 **Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner to check
+
+- `_oracleId`: The ID of the Oracle Partner to check
 
 **Returns:**
-- True if the oracle partner can be disabled, False otherwise
 
-### disableOraclePartner
+- True if the Oracle Partner can be disabled, False otherwise
+
+### disableOraclePartnerAddr
 
 ```vyper
 @external
-def disableOraclePartner(_oraclePartnerId: uint256) -> bool:
+def disableOraclePartnerAddr(_oracleId: uint256) -> bool:
 ```
 
-Disables an oracle partner by setting its address to empty.
+Initiates the disable process for an existing registered Oracle Partner.
 
 **Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner to disable
+
+- `_oracleId`: The ID of the Oracle Partner to disable
 
 **Returns:**
-- True if the oracle partner was successfully disabled, False otherwise
 
-**Events Emitted:**
-- `OraclePartnerAddrDisabled(prevAddr, oraclePartnerId, version, description)`
+- True if the disable was successfully initiated, False if the disable is invalid
 
 **Requirements:**
+
 - Caller must be the governor
-- Oracle partner ID must be valid
-- Oracle partner must not already be disabled
 
-### isValidOraclePartnerId
+### confirmOraclePartnerDisable
 
 ```vyper
-@view
 @external
-def isValidOraclePartnerId(_oraclePartnerId: uint256) -> bool:
+def confirmOraclePartnerDisable(_oracleId: uint256) -> bool:
 ```
 
-Checks if an oracle partner ID is valid.
+Confirms a pending Oracle Partner disable after the required delay period.
 
 **Parameters:**
-- `_oraclePartnerId`: The ID to check
+
+- `_oracleId`: The ID of the Oracle Partner to confirm disable for
 
 **Returns:**
-- True if the oracle partner ID is valid, False otherwise
 
-### getOraclePartnerAddr
-
-```vyper
-@view
-@external
-def getOraclePartnerAddr(_oraclePartnerId: uint256) -> address:
-```
-
-Gets the address of an oracle partner by its ID.
-
-**Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner
-
-**Returns:**
-- The address of the oracle partner contract
+- True if the disable was successfully confirmed, False if confirmation fails
 
 **Requirements:**
-- Oracle partner ID must be valid
 
-### getOraclePartnerIdFromAddr
+- Caller must be the governor
+- Disable must be past the required delay period
 
-```vyper
-@view
-@external
-def getOraclePartnerIdFromAddr(_addr: address) -> uint256:
-```
-
-Gets the ID of an oracle partner by its address.
-
-**Parameters:**
-- `_addr`: The address of the oracle partner
-
-**Returns:**
-- The ID of the oracle partner
-
-### getOraclePartnerDescription
+### cancelPendingOraclePartnerDisable
 
 ```vyper
-@view
 @external
-def getOraclePartnerDescription(_oraclePartnerId: uint256) -> String[64]:
+def cancelPendingOraclePartnerDisable(_oracleId: uint256) -> bool:
 ```
 
-Gets the description of an oracle partner by its ID.
+Cancels a pending Oracle Partner disable.
 
 **Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner
+
+- `_oracleId`: The ID of the Oracle Partner whose pending disable should be cancelled
 
 **Returns:**
-- The description of the oracle partner
+
+- True if the cancellation was successful
 
 **Requirements:**
-- Oracle partner ID must be valid
 
-### getOraclePartnerVersion
+- Caller must be the governor
+- A pending disable must exist for the Oracle Partner ID
+
+### setOraclePartnerChangeDelay
+
+```vyper
+@external
+def setOraclePartnerChangeDelay(_numBlocks: uint256) -> bool:
+```
+
+Sets the delay period required for Oracle Partner changes.
+
+**Parameters:**
+
+- `_numBlocks`: The number of blocks to set as the delay period
+
+**Returns:**
+
+- True if the delay was successfully set
+
+**Requirements:**
+
+- Caller must be the governor
+- Delay must be between MIN_ADDY_CHANGE_DELAY and MAX_ADDY_CHANGE_DELAY
+
+### oracleChangeDelay
 
 ```vyper
 @view
 @external
-def getOraclePartnerVersion(_oraclePartnerId: uint256) -> uint256:
+def oracleChangeDelay() -> uint256:
 ```
 
-Gets the version of an oracle partner by its ID.
-
-**Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner
+Gets the current oracle change delay in blocks.
 
 **Returns:**
-- The version of the oracle partner
+
+- The current delay in blocks
+
+### setOraclePartnerChangeDelayToMin
+
+```vyper
+@external
+def setOraclePartnerChangeDelayToMin() -> bool:
+```
+
+Sets the oracle change delay to the minimum allowed value.
+
+**Returns:**
+
+- True if the delay was successfully set
 
 **Requirements:**
-- Oracle partner ID must be valid
 
-### getOraclePartnerLastModified
+- Caller must be the governor
+
+### getPriorityOraclePartnerIds
 
 ```vyper
 @view
 @external
-def getOraclePartnerLastModified(_oraclePartnerId: uint256) -> uint256:
+def getPriorityOraclePartnerIds() -> DynArray[uint256, MAX_PRIORITY_PARTNERS]:
 ```
 
-Gets the last modified timestamp of an oracle partner by its ID.
-
-**Parameters:**
-- `_oraclePartnerId`: The ID of the oracle partner
+Gets the list of priority oracle partner IDs.
 
 **Returns:**
-- The last modified timestamp of the oracle partner
 
-**Requirements:**
-- Oracle partner ID must be valid
+- Array of oracle partner IDs in priority order
+
+### areValidPriorityOraclePartnerIds
+
+```vyper
+@view
+@external
+def areValidPriorityOraclePartnerIds(_priorityIds: DynArray[uint256, MAX_PRIORITY_PARTNERS]) -> bool:
+```
+
+Checks if a list of priority oracle partner IDs is valid.
+
+**Parameters:**
+
+- `_priorityIds`: Array of oracle partner IDs to validate
+
+**Returns:**
+
+- True if all IDs are valid, False otherwise
 
 ### setPriorityOraclePartnerIds
 
 ```vyper
 @external
-def setPriorityOraclePartnerIds(_priorityOraclePartnerIds: DynArray[uint256, MAX_PRIORITY_PARTNERS]) -> bool:
+def setPriorityOraclePartnerIds(_priorityIds: DynArray[uint256, MAX_PRIORITY_PARTNERS]) -> bool:
 ```
 
-Sets the priority oracle partner IDs.
+Sets the list of priority oracle partner IDs.
 
 **Parameters:**
-- `_priorityOraclePartnerIds`: Array of oracle partner IDs in priority order
+
+- `_priorityIds`: Array of oracle partner IDs in desired priority order
 
 **Returns:**
-- True if the priority IDs were successfully set
+
+- True if the priority list was set successfully, False otherwise
 
 **Events Emitted:**
+
 - `PriorityOraclePartnerIdsModified(numIds)`
 
 **Requirements:**
+
 - Caller must be the governor
-- All IDs must be valid oracle partner IDs
+
+### isValidStaleTime
+
+```vyper
+@view
+@external
+def isValidStaleTime(_staleTime: uint256) -> bool:
+```
+
+Checks if a stale time value is valid.
+
+**Parameters:**
+
+- `_staleTime`: The stale time in seconds to validate
+
+**Returns:**
+
+- True if the stale time is valid, False otherwise
 
 ### setStaleTime
 
@@ -522,17 +580,34 @@ Sets the priority oracle partner IDs.
 def setStaleTime(_staleTime: uint256) -> bool:
 ```
 
-Sets the stale time for price feeds.
+Sets the maximum staleness time for price data.
 
 **Parameters:**
-- `_staleTime`: The new stale time in seconds
+
+- `_staleTime`: The stale time in seconds to set
 
 **Returns:**
-- True if the stale time was successfully set
+
+- True if the stale time was set successfully, False otherwise
 
 **Events Emitted:**
+
 - `StaleTimeSet(staleTime)`
 
 **Requirements:**
+
 - Caller must be the governor
-- Stale time must be within allowed range 
+- Stale time must be between MIN_STALE_TIME and MAX_STALE_TIME
+
+## Inherited Methods
+
+The OracleRegistry inherits from the Registry module, which provides functionality for managing registered addresses, similar to the AddyRegistry. It also uses the same two-step governance model for critical operations.
+
+## Governance
+
+Like other registries in the system, the OracleRegistry implements a two-step governance process:
+
+1. **Initiation**: The governor initiates a change (registration, update, disable)
+2. **Confirmation**: After the required delay period, the governor confirms the change
+
+This delay mechanism provides security against malicious changes and allows time for review

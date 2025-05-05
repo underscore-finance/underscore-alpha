@@ -4,23 +4,25 @@ This document provides a high-level overview of the interfaces used in the Under
 
 ## Core Interfaces
 
-### UserWallet Interface
+### UserWalletInterface
 
 **Purpose**: Defines the main interface for user wallet interactions.
 
 **Key Responsibilities**:
+
 - Manages token deposits and withdrawals
 - Handles asset swaps and rebalancing
 - Supports liquidity provision and management
 - Enables borrowing and lending operations
 
-**Implemented By**: WalletFunds contract
+**Implemented By**: UserWalletTemplate (WalletFunds) contract
 
 ### LegoCommon Interface
 
 **Purpose**: Provides common functionality implemented by all lego modules.
 
 **Key Responsibilities**:
+
 - Defines standardized function signatures
 - Establishes common data structures
 - Provides base functionality for all legos
@@ -35,6 +37,7 @@ This document provides a high-level overview of the interfaces used in the Under
 **Purpose**: Defines functionality for decentralized exchange integrations.
 
 **Key Responsibilities**:
+
 - Enables token swaps
 - Supports liquidity provision and removal
 - Provides price query capabilities
@@ -47,6 +50,7 @@ This document provides a high-level overview of the interfaces used in the Under
 **Purpose**: Defines functionality for yield-generating protocol integrations.
 
 **Key Responsibilities**:
+
 - Enables deposits into yield-bearing vaults
 - Supports withdrawals from yield positions
 - Handles reward claiming
@@ -59,36 +63,48 @@ This document provides a high-level overview of the interfaces used in the Under
 **Purpose**: Defines functionality for lending/borrowing protocol integrations.
 
 **Key Responsibilities**:
+
 - Supports borrowing operations
 - Enables repayment functionality
 - Handles collateral management
 - Standardizes lending protocol interactions
 
-**Implemented By**: Credit protocol legos
+**Note**: Currently, lending functionality is primarily implemented through the LegoYield interface, with LegoCredit reserved for future specialized lending protocols.
 
 ## Data Interfaces
 
-### OraclePartner Interface
+### OraclePartnerInterface
 
 **Purpose**: Defines functionality for oracle integrations.
 
 **Key Responsibilities**:
+
 - Provides price feed access
 - Enables data validation
 - Supports oracle-specific configurations
 - Standardizes price data retrieval
 
-**Implemented By**: Oracle partner implementations
+**Implementation**: Integrated with OracleRegistry for accessing price data from various sources
+
+## Interface Implementation Pattern
+
+Interfaces in the Underscore system follow a consistent implementation pattern:
+
+1. **Interface Definition**: Each interface is defined in a `.vyi` file in the interfaces directory
+2. **Implementation Contract**: Contracts implement the interfaces by providing all required methods
+3. **Interface Inheritance**: Some interfaces extend others (e.g., all legos implement LegoCommon)
+4. **Standardized Interactions**: Contracts interact with each other through well-defined interfaces
 
 ## Interface Relationships
 
 ### Inheritance Hierarchy
 
 Lego implementations inherit from multiple interfaces:
+
 - All legos implement LegoCommon
 - DEX legos additionally implement LegoDex
 - Yield legos additionally implement LegoYield
-- Credit legos additionally implement LegoCredit
+- Credit legos additionally implement LegoCredit (for future specialized implementations)
 
 ### Interaction Patterns
 
@@ -96,11 +112,21 @@ Lego implementations inherit from multiple interfaces:
 2. **Legos to Protocols**: Each lego interface defines how legos interact with their respective DeFi protocols
 3. **System to Oracles**: The OraclePartnerInterface defines how the system obtains price data from oracle providers
 
-### Extension Model
+### Interface Stability
 
-The interface architecture is designed for extensibility:
-- New protocol types can be added by defining new interfaces
-- Existing interfaces can be extended with new functionality
-- Implementations can be updated without changing interface contracts
+The interface architecture prioritizes stability:
 
-For detailed information about each interface's API, including function signatures, parameters, return values, and requirements, please refer to the individual API reference documents linked above. 
+- Interfaces change less frequently than implementations
+- New functionality is typically added through new methods or optional extensions
+- Breaking changes are managed through version upgrades
+- Protocol-specific details are encapsulated within implementations
+
+## Governance and Registry Control
+
+Interfaces are used throughout the registry system:
+
+- LegoRegistry manages implementations of the lego interfaces
+- OracleRegistry manages implementations of the oracle interface
+- Interface validation occurs when registering or updating components
+
+For detailed information about each interface, refer to the `.vyi` files in the `interfaces` directory.

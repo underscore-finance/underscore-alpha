@@ -1,8 +1,29 @@
-# WalletConfig
+# UserWalletConfigTemplate (WalletConfig)
 
-The WalletConfig contract manages wallet configuration settings, including authorized agents and their permissions, protocol and asset allowlists, and user preferences.
+The UserWalletConfigTemplate contract manages wallet configuration settings, including authorized agents and their permissions, protocol and asset allowlists, and user preferences.
 
-**Source:** `contracts/core/WalletConfig.vy`
+**Source:** `contracts/core/templates/UserWalletConfigTemplate.vy`
+
+## Flags
+
+### ActionType
+
+```vyper
+flag ActionType:
+    DEPOSIT
+    WITHDRAWAL
+    REBALANCE
+    TRANSFER
+    SWAP
+    CONVERSION
+    ADD_LIQ
+    REMOVE_LIQ
+    CLAIM_REWARDS
+    BORROW
+    REPAY
+```
+
+Flag defining types of actions that agents can perform.
 
 ## Structs
 
@@ -38,6 +59,7 @@ struct CoreData:
     wallet: address
     walletConfig: address
     addyRegistry: address
+    agentFactory: address
     legoRegistry: address
     priceSheets: address
     oracleRegistry: address
@@ -112,17 +134,6 @@ struct SubscriptionInfo:
 ```
 
 Structure containing subscription pricing information.
-
-### PendingOwner
-
-```vyper
-struct PendingOwner:
-    newOwner: address
-    initiatedBlock: uint256
-    confirmBlock: uint256
-```
-
-Structure containing information about a pending ownership change.
 
 ## Events
 
@@ -199,6 +210,15 @@ event AllowedActionsModified:
 
 Emitted when an agent's allowed actions are modified.
 
+### CanTransferToAltOwnerWalletsSet
+
+```vyper
+event CanTransferToAltOwnerWalletsSet:
+    canTransfer: bool
+```
+
+Emitted when the ability to transfer to alternate owner wallets is set.
+
 ### WhitelistAddrPending
 
 ```vyper
@@ -227,6 +247,7 @@ event WhitelistAddrCancelled:
     addr: indexed(address)
     initiatedBlock: uint256
     confirmBlock: uint256
+    cancelledBy: indexed(address)
 ```
 
 Emitted when a pending whitelist address is cancelled.
@@ -240,6 +261,15 @@ event WhitelistAddrRemoved:
 
 Emitted when an address is removed from the whitelist.
 
+### WhitelistAddrSetViaMigration
+
+```vyper
+event WhitelistAddrSetViaMigration:
+    addr: indexed(address)
+```
+
+Emitted when a whitelist address is set via migration.
+
 ### ReserveAssetSet
 
 ```vyper
@@ -250,48 +280,23 @@ event ReserveAssetSet:
 
 Emitted when a reserve asset is set.
 
-### OwnershipChangeInitiated
+### CanWalletBeAmbassadorSet
 
 ```vyper
-event OwnershipChangeInitiated:
-    prevOwner: indexed(address)
-    newOwner: indexed(address)
-    confirmBlock: uint256
+event CanWalletBeAmbassadorSet:
+    canWalletBeAmbassador: bool
 ```
 
-Emitted when an ownership change is initiated.
+Emitted when the ability for wallet to be an ambassador is set.
 
-### OwnershipChangeConfirmed
+### AmbassadorForwarderSet
 
 ```vyper
-event OwnershipChangeConfirmed:
-    prevOwner: indexed(address)
-    newOwner: indexed(address)
-    initiatedBlock: uint256
-    confirmBlock: uint256
+event AmbassadorForwarderSet:
+    addr: indexed(address)
 ```
 
-Emitted when an ownership change is confirmed.
-
-### OwnershipChangeCancelled
-
-```vyper
-event OwnershipChangeCancelled:
-    cancelledOwner: indexed(address)
-    initiatedBlock: uint256
-    confirmBlock: uint256
-```
-
-Emitted when an ownership change is cancelled.
-
-### OwnershipChangeDelaySet
-
-```vyper
-event OwnershipChangeDelaySet:
-    delayBlocks: uint256
-```
-
-Emitted when the ownership change delay is set.
+Emitted when the ambassador forwarder address is set.
 
 ### FundsRecovered
 
@@ -304,6 +309,29 @@ event FundsRecovered:
 
 Emitted when funds are recovered from the contract.
 
+### UserWalletStartMigration
+
+```vyper
+event UserWalletStartMigration:
+    newWallet: indexed(address)
+    numAssetsToMigrate: uint256
+    numWhitelistToMigrate: uint256
+```
+
+Emitted when a wallet migration is started.
+
+### UserWalletFinishMigration
+
+```vyper
+event UserWalletFinishMigration:
+    oldWallet: indexed(address)
+    numWhitelistMigrated: uint256
+    numVaultTokensMigrated: uint256
+    numAssetsMigrated: uint256
+```
+
+Emitted when a wallet migration is finished.
+
 ## Storage Variables
 
 ### wallet
@@ -314,29 +342,13 @@ wallet: public(address)
 
 The address of the associated wallet.
 
-### owner
+### didSetWallet
 
 ```vyper
-owner: public(address)
+didSetWallet: public(bool)
 ```
 
-The address of the wallet owner.
-
-### pendingOwner
-
-```vyper
-pendingOwner: public(PendingOwner)
-```
-
-Information about a pending ownership change.
-
-### ownershipChangeDelay
-
-```vyper
-ownershipChangeDelay: public(uint256)
-```
-
-Number of blocks to wait before ownership can be changed.
+Whether the wallet address has been set.
 
 ### protocolSub
 
@@ -368,7 +380,7 @@ Mapping from agent address to agent information.
 isRecipientAllowed: public(HashMap[address, bool])
 ```
 
-Mapping from recipient address to whether it is allowed.
+Mapping from recipient address to whether it is allowed for transfers.
 
 ### pendingWhitelist
 
@@ -378,37 +390,85 @@ pendingWhitelist: public(HashMap[address, PendingWhitelist])
 
 Mapping from address to pending whitelist information.
 
-### addyRegistry
+### canTransferToAltOwnerWallets
 
 ```vyper
-addyRegistry: public(address)
+canTransferToAltOwnerWallets: public(bool)
 ```
 
-The address of the address registry.
+Whether transfers to other wallets owned by the same owner are allowed.
 
-### initialized
+### canWalletBeAmbassador
 
 ```vyper
-initialized: public(bool)
+canWalletBeAmbassador: public(bool)
 ```
 
-Whether the contract has been initialized.
+Whether this wallet can serve as an ambassador.
 
-### MIN_OWNER_CHANGE_DELAY
+### ambassadorForwarder
 
 ```vyper
-MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
+ambassadorForwarder: public(address)
 ```
 
-Minimum allowed ownership change delay in blocks.
+Address to forward ambassador rewards to.
 
-### MAX_OWNER_CHANGE_DELAY
+### myAmbassador
 
 ```vyper
-MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
+myAmbassador: public(address)
 ```
 
-Maximum allowed ownership change delay in blocks.
+Address of the ambassador who invited this wallet's owner.
+
+### didMigrateIn
+
+```vyper
+didMigrateIn: public(bool)
+```
+
+Whether this wallet migrated in from another wallet.
+
+### didMigrateOut
+
+```vyper
+didMigrateOut: public(bool)
+```
+
+Whether this wallet migrated out to another wallet.
+
+### isVaultToken
+
+```vyper
+isVaultToken: public(HashMap[address, bool])
+```
+
+Mapping from asset address to whether it is a vault token.
+
+### vaultTokenAmounts
+
+```vyper
+vaultTokenAmounts: public(HashMap[address, uint256])
+```
+
+Mapping from vault token to amount.
+
+### depositedAmounts
+
+```vyper
+depositedAmounts: public(HashMap[address, uint256])
+```
+
+Mapping from vault token to deposited underlying asset amount.
+
+### ADDY_REGISTRY
+
+```vyper
+ADDY_REGISTRY: public(immutable(address))
+```
+
+Address of the address registry.
 
 ## Constants
 
@@ -444,6 +504,22 @@ ORACLE_REGISTRY_ID: constant(uint256) = 4
 
 ID of the oracle registry in the address registry.
 
+### MAX_MIGRATION_ASSETS
+
+```vyper
+MAX_MIGRATION_ASSETS: constant(uint256) = 40
+```
+
+Maximum number of assets that can be migrated.
+
+### MAX_MIGRATION_WHITELIST
+
+```vyper
+MAX_MIGRATION_WHITELIST: constant(uint256) = 20
+```
+
+Maximum number of whitelist addresses that can be migrated.
+
 ### MAX_ASSETS
 
 ```vyper
@@ -463,35 +539,35 @@ Maximum number of legos an agent can have.
 ### API_VERSION
 
 ```vyper
-API_VERSION: constant(String[28]) = "0.0.1"
+API_VERSION: constant(String[28]) = "0.0.3"
 ```
 
 API version of the contract.
 
 ## External Functions
 
-### initialize
+### setWallet
 
 ```vyper
 @external
-def initialize(_wallet: address, _addyRegistry: address, _owner: address, _initialAgent: address) -> bool:
+def setWallet(_wallet: address) -> bool:
 ```
 
-Initializes a new wallet configuration.
+Sets the associated wallet address for this config contract.
 
 **Parameters:**
-- `_wallet`: The address of the associated wallet
-- `_addyRegistry`: The address of the address registry
-- `_owner`: The address of the wallet owner
-- `_initialAgent`: The address of the initial agent (can be empty)
+
+- `_wallet`: The address of the wallet contract to be associated with this config
 
 **Returns:**
-- True if initialization was successful
+
+- True if the wallet was successfully set
 
 **Requirements:**
-- Contract must not be already initialized
-- Valid wallet, address registry, and owner addresses
-- Initial agent cannot be the owner
+
+- Wallet has not been set yet
+- Wallet address is valid
+- Caller must be the agent factory
 
 ### apiVersion
 
@@ -504,6 +580,7 @@ def apiVersion() -> String[28]:
 Returns the current API version of the contract.
 
 **Returns:**
+
 - The API version string
 
 ### isAgentActive
@@ -517,9 +594,11 @@ def isAgentActive(_agent: address) -> bool:
 Checks if an agent is active.
 
 **Parameters:**
+
 - `_agent`: The address of the agent to check
 
 **Returns:**
+
 - True if the agent is active, False otherwise
 
 ### canAgentAccess
@@ -527,19 +606,26 @@ Checks if an agent is active.
 ```vyper
 @view
 @external
-def canAgentAccess(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
+def canAgentAccess(
+    _agent: address,
+    _action: ActionType,
+    _assets: DynArray[address, MAX_ASSETS],
+    _legoIds: DynArray[uint256, MAX_LEGOS],
+) -> bool:
 ```
 
-Checks if an agent can access specific actions, assets, and lego IDs.
+Checks if an agent has permission to perform a specific action with given assets and lego IDs.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
-- `_action`: The action to check
-- `_assets`: The assets to check
-- `_legoIds`: The lego IDs to check
+- `_action`: The type of action being attempted
+- `_assets`: Array of asset addresses involved in the action
+- `_legoIds`: Array of lego IDs involved in the action
 
 **Returns:**
-- True if the agent can access the specified actions, assets, and lego IDs, False otherwise
+
+- True if the agent has permission to perform the action, False otherwise
 
 ### getAgentSubscriptionStatus
 
@@ -552,9 +638,11 @@ def getAgentSubscriptionStatus(_agent: address) -> SubPaymentInfo:
 Gets the subscription status for an agent.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
 
 **Returns:**
+
 - Subscription payment information for the agent
 
 ### getProtocolSubscriptionStatus
@@ -565,9 +653,10 @@ Gets the subscription status for an agent.
 def getProtocolSubscriptionStatus() -> SubPaymentInfo:
 ```
 
-Gets the subscription status for the protocol.
+Gets the protocol subscription status.
 
 **Returns:**
+
 - Subscription payment information for the protocol
 
 ### canMakeSubscriptionPayments
@@ -578,436 +667,478 @@ Gets the subscription status for the protocol.
 def canMakeSubscriptionPayments(_agent: address) -> (bool, bool):
 ```
 
-Checks if subscription payments can be made for the protocol and agent.
+Checks if the wallet has sufficient funds for protocol and agent subscriptions.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
 
 **Returns:**
-- Tuple containing whether protocol and agent subscription payments can be made
+
+- Tuple of (canPayProtocolSub, canPayAgentSub)
 
 ### handleSubscriptionsAndPermissions
 
 ```vyper
 @external
-def handleSubscriptionsAndPermissions(_agent: address, _action: ActionType, _assets: DynArray[address, MAX_ASSETS], _legoIds: DynArray[uint256, MAX_LEGOS], _cd: CoreData) -> (SubPaymentInfo, SubPaymentInfo):
+def handleSubscriptionsAndPermissions(
+    _agent: address,
+    _action: ActionType,
+    _assets: DynArray[address, MAX_ASSETS],
+    _legoIds: DynArray[uint256, MAX_LEGOS],
+    _cd: CoreData,
+) -> (SubPaymentInfo, SubPaymentInfo):
 ```
 
-Handles the subscription and permission data for the given agent and action.
+Handles subscription payments and permission checks for an agent action.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
-- `_action`: The action to handle
-- `_assets`: The assets to check
-- `_legoIds`: The legos to check
-- `_cd`: The core data
+- `_action`: The type of action being attempted
+- `_assets`: Array of asset addresses involved in the action
+- `_legoIds`: Array of lego IDs involved in the action
+- `_cd`: Core data structure with system addresses
 
 **Returns:**
-- Tuple containing subscription payment information for protocol and agent
+
+- Tuple of (protocolSub, agentSub) payment information
 
 **Requirements:**
-- Caller must be the wallet
-- Agent must be allowed to perform the action with the specified assets and legos
-- Sufficient balance for protocol and agent subscription payments
 
-### getAvailableTxAmount
+- Caller must be the wallet contract
+- Agent must have permission for the action, assets, and legos
+
+### addAgent
 
 ```vyper
-@view
 @external
-def getAvailableTxAmount(_asset: address, _wantedAmount: uint256, _shouldCheckTrialFunds: bool, _cd: CoreData = empty(CoreData)) -> uint256:
+def addAgent(_agent: address) -> bool:
 ```
 
-Returns the maximum amount that can be sent from the wallet.
+Adds a new agent to the wallet.
 
 **Parameters:**
-- `_asset`: The address of the asset to check
-- `_wantedAmount`: The amount of the asset to send
-- `_shouldCheckTrialFunds`: Whether to check if the asset is a trial funds asset
-- `_cd`: The core data
+
+- `_agent`: The address of the agent to add
 
 **Returns:**
-- The maximum amount that can be sent
+
+- True if the agent was successfully added
 
 **Requirements:**
-- Available amount must be greater than zero
 
-### addOrModifyAgent
-
-```vyper
-@nonreentrant
-@external
-def addOrModifyAgent(_agent: address, _allowedAssets: DynArray[address, MAX_ASSETS] = [], _allowedLegoIds: DynArray[uint256, MAX_LEGOS] = [], _allowedActions: AllowedActions = empty(AllowedActions)) -> bool:
-```
-
-Adds a new agent or modifies an existing agent's permissions.
-
-**Parameters:**
-- `_agent`: The address of the agent to add or modify
-- `_allowedAssets`: List of assets the agent can interact with
-- `_allowedLegoIds`: List of lego IDs the agent can use
-- `_allowedActions`: The actions the agent can perform
-
-**Returns:**
-- True if the agent was successfully added or modified
-
-**Events Emitted:**
-- `AgentAdded` or `AgentModified`
-
-**Requirements:**
 - Caller must be the owner
-- Agent cannot be the owner
-- Agent address must be valid
+- Agent address must be valid and not already active
 
 ### disableAgent
 
 ```vyper
-@nonreentrant
 @external
 def disableAgent(_agent: address) -> bool:
 ```
 
-Disables an existing agent.
+Disables an agent, removing its permissions.
 
 **Parameters:**
+
 - `_agent`: The address of the agent to disable
 
 **Returns:**
+
 - True if the agent was successfully disabled
 
-**Events Emitted:**
-- `AgentDisabled`
-
 **Requirements:**
+
 - Caller must be the owner
 - Agent must be active
 
-### addLegoIdForAgent
+### setAgentAllowedAssets
 
 ```vyper
-@nonreentrant
 @external
-def addLegoIdForAgent(_agent: address, _legoId: uint256) -> bool:
+def setAgentAllowedAssets(_agent: address, _assets: DynArray[address, MAX_ASSETS]) -> bool:
 ```
 
-Adds a lego ID to an agent's allowed legos.
+Sets the allowed assets for an agent.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
-- `_legoId`: The lego ID to add
+- `_assets`: Array of asset addresses to allow
 
 **Returns:**
-- True if the lego ID was successfully added
 
-**Events Emitted:**
-- `LegoIdAddedToAgent`
+- True if assets were successfully set
 
 **Requirements:**
+
 - Caller must be the owner
 - Agent must be active
-- Lego ID must be valid
-- Lego ID must not already be in the agent's allowed legos
+- Assets must be valid
 
-### addAssetForAgent
+### setAgentAllowedLegoIds
 
 ```vyper
-@nonreentrant
 @external
-def addAssetForAgent(_agent: address, _asset: address) -> bool:
+def setAgentAllowedLegoIds(_agent: address, _legoIds: DynArray[uint256, MAX_LEGOS]) -> bool:
 ```
 
-Adds an asset to an agent's allowed assets.
+Sets the allowed lego IDs for an agent.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
-- `_asset`: The asset address to add
+- `_legoIds`: Array of lego IDs to allow
 
 **Returns:**
-- True if the asset was successfully added
 
-**Events Emitted:**
-- `AssetAddedToAgent`
+- True if lego IDs were successfully set
 
 **Requirements:**
+
 - Caller must be the owner
 - Agent must be active
-- Asset address must be valid
-- Asset must not already be in the agent's allowed assets
+- Lego IDs must be valid
 
-### modifyAllowedActions
+### setAgentAllowedActions
 
 ```vyper
-@nonreentrant
 @external
-def modifyAllowedActions(_agent: address, _allowedActions: AllowedActions = empty(AllowedActions)) -> bool:
+def setAgentAllowedActions(
+    _agent: address,
+    _canDeposit: bool,
+    _canWithdraw: bool,
+    _canRebalance: bool,
+    _canTransfer: bool,
+    _canSwap: bool,
+    _canConvert: bool,
+    _canAddLiq: bool,
+    _canRemoveLiq: bool,
+    _canClaimRewards: bool,
+    _canBorrow: bool,
+    _canRepay: bool
+) -> bool:
 ```
 
-Modifies the allowed actions for an agent.
+Sets the allowed actions for an agent.
 
 **Parameters:**
-- `_agent`: The address of the agent to modify
-- `_allowedActions`: The new allowed actions
+
+- `_agent`: The address of the agent
+- Action permission parameters for each action type
 
 **Returns:**
-- True if the allowed actions were successfully modified
 
-**Events Emitted:**
-- `AllowedActionsModified`
+- True if actions were successfully set
 
 **Requirements:**
+
 - Caller must be the owner
 - Agent must be active
 
-### canTransferToRecipient
+### addAddressToWhitelist
 
 ```vyper
-@view
 @external
-def canTransferToRecipient(_recipient: address) -> bool:
+def addAddressToWhitelist(_addr: address) -> bool:
 ```
 
-Checks if a transfer to a recipient is allowed.
+Initiates adding an address to the whitelist.
 
 **Parameters:**
-- `_recipient`: The address of the recipient
 
-**Returns:**
-- True if the transfer is allowed, False otherwise
-
-### addWhitelistAddr
-
-```vyper
-@nonreentrant
-@external
-def addWhitelistAddr(_addr: address):
-```
-
-Adds an address to the whitelist.
-
-**Parameters:**
 - `_addr`: The address to add to the whitelist
 
-**Events Emitted:**
-- `WhitelistAddrPending`
+**Returns:**
+
+- True if the process was successfully initiated
 
 **Requirements:**
-- Caller must be the owner
-- Address must be valid
-- Address cannot be the owner or the wallet
-- Address must not already be whitelisted
-- No pending whitelist must exist for the address
 
-### confirmWhitelistAddr
+- Caller must be the owner
+- Address must be valid and not already on the whitelist
+
+### confirmAddressToWhitelist
 
 ```vyper
-@nonreentrant
 @external
-def confirmWhitelistAddr(_addr: address):
+def confirmAddressToWhitelist(_addr: address) -> bool:
 ```
 
-Confirms a whitelist address.
+Confirms adding an address to the whitelist after the required delay.
 
 **Parameters:**
+
 - `_addr`: The address to confirm
 
-**Events Emitted:**
-- `WhitelistAddrConfirmed`
+**Returns:**
+
+- True if the address was successfully confirmed
 
 **Requirements:**
-- Caller must be the owner
-- Pending whitelist must exist for the address
-- Confirmation block must have been reached
 
-### cancelPendingWhitelistAddr
+- Caller must be the owner
+- Address must have a pending whitelist entry
+- Required delay period has passed
+
+### removeAddressFromWhitelist
 
 ```vyper
-@nonreentrant
 @external
-def cancelPendingWhitelistAddr(_addr: address):
-```
-
-Cancels a pending whitelist address.
-
-**Parameters:**
-- `_addr`: The address to cancel
-
-**Events Emitted:**
-- `WhitelistAddrCancelled`
-
-**Requirements:**
-- Caller must be the owner
-- Pending whitelist must exist for the address
-
-### removeWhitelistAddr
-
-```vyper
-@nonreentrant
-@external
-def removeWhitelistAddr(_addr: address):
+def removeAddressFromWhitelist(_addr: address) -> bool:
 ```
 
 Removes an address from the whitelist.
 
 **Parameters:**
-- `_addr`: The address to remove from the whitelist
 
-**Events Emitted:**
-- `WhitelistAddrRemoved`
+- `_addr`: The address to remove
+
+**Returns:**
+
+- True if the address was successfully removed
 
 **Requirements:**
+
 - Caller must be the owner
 - Address must be on the whitelist
+
+### cancelPendingWhitelist
+
+```vyper
+@external
+def cancelPendingWhitelist(_addr: address) -> bool:
+```
+
+Cancels a pending whitelist addition.
+
+**Parameters:**
+
+- `_addr`: The address to cancel
+
+**Returns:**
+
+- True if the pending whitelist was successfully cancelled
+
+**Requirements:**
+
+- Caller must be the owner or have cancellation rights
+- Address must have a pending whitelist entry
+
+### setCanTransferToAltOwnerWallets
+
+```vyper
+@external
+def setCanTransferToAltOwnerWallets(_canTransfer: bool) -> bool:
+```
+
+Sets whether transfers to other wallets owned by the same owner are allowed.
+
+**Parameters:**
+
+- `_canTransfer`: Whether to allow transfers to other owner wallets
+
+**Returns:**
+
+- True if the setting was successfully updated
+
+**Requirements:**
+
+- Caller must be the owner
 
 ### setReserveAsset
 
 ```vyper
-@nonreentrant
 @external
 def setReserveAsset(_asset: address, _amount: uint256) -> bool:
 ```
 
-Sets a reserve asset.
+Sets a reserve amount for an asset.
 
 **Parameters:**
-- `_asset`: The address of the asset to set
-- `_amount`: The amount of the asset to set
+
+- `_asset`: The address of the asset
+- `_amount`: The reserve amount
 
 **Returns:**
+
 - True if the reserve asset was successfully set
 
-**Events Emitted:**
-- `ReserveAssetSet`
-
 **Requirements:**
+
 - Caller must be the owner
 - Asset address must be valid
 
-### setManyReserveAssets
+### setCanWalletBeAmbassador
 
 ```vyper
-@nonreentrant
 @external
-def setManyReserveAssets(_assets: DynArray[ReserveAsset, MAX_ASSETS]) -> bool:
+def setCanWalletBeAmbassador(_canWalletBeAmbassador: bool) -> bool:
 ```
 
-Sets multiple reserve assets.
+Sets whether this wallet can be an ambassador.
 
 **Parameters:**
-- `_assets`: The array of reserve assets to set
+
+- `_canWalletBeAmbassador`: Whether the wallet can be an ambassador
 
 **Returns:**
-- True if the reserve assets were successfully set
 
-**Events Emitted:**
-- `ReserveAssetSet` for each asset
+- True if the setting was successfully updated
 
 **Requirements:**
-- Caller must be the owner
-- Assets array must not be empty
-- Each asset address must be valid
 
-### hasPendingOwnerChange
+- Caller must be the owner
+
+### setAmbassadorForwarder
+
+```vyper
+@external
+def setAmbassadorForwarder(_addr: address) -> bool:
+```
+
+Sets the address to forward ambassador rewards to.
+
+**Parameters:**
+
+- `_addr`: The address to forward rewards to
+
+**Returns:**
+
+- True if the forwarder was successfully set
+
+**Requirements:**
+
+- Caller must be the owner
+- Address must be valid
+
+### trackVaultTokenPosition
+
+```vyper
+@external
+def trackVaultTokenPosition(_vaultToken: address, _vaultTokenDelta: int256, _depositedDelta: int256) -> bool:
+```
+
+Tracks changes in vault token positions.
+
+**Parameters:**
+
+- `_vaultToken`: The address of the vault token
+- `_vaultTokenDelta`: The change in vault token amount (positive or negative)
+- `_depositedDelta`: The change in deposited underlying amount (positive or negative)
+
+**Returns:**
+
+- True if the position was successfully tracked
+
+**Requirements:**
+
+- Caller must be the wallet contract
+- Vault token must be valid
+- Resulting balances must be non-negative
+
+### migrateIn
+
+```vyper
+@external
+def migrateIn(_prevWallet: address, _newOwner: address, _addrsToWhitelist: DynArray[address, MAX_MIGRATION_WHITELIST]) -> bool:
+```
+
+Migrates data from a previous wallet.
+
+**Parameters:**
+
+- `_prevWallet`: The address of the previous wallet
+- `_newOwner`: The address of the new owner
+- `_addrsToWhitelist`: Addresses to add to the whitelist
+
+**Returns:**
+
+- True if the migration was successful
+
+**Requirements:**
+
+- Caller must be the agent factory
+- Previous wallet must be valid
+- Has not already migrated in
+
+### startMigrateOut
+
+```vyper
+@external
+def startMigrateOut(_newWallet: address, _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS], _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST]) -> bool:
+```
+
+Starts migrating out to a new wallet.
+
+**Parameters:**
+
+- `_newWallet`: The address of the new wallet
+- `_assetsToMigrate`: Assets to migrate
+- `_whitelistToMigrate`: Whitelist addresses to migrate
+
+**Returns:**
+
+- True if the migration was successfully started
+
+**Requirements:**
+
+- Caller must be the owner
+- New wallet must be valid
+- Has not already migrated out
+
+### recoveryGetVaultTokens
 
 ```vyper
 @view
 @external
-def hasPendingOwnerChange() -> bool:
+def recoveryGetVaultTokens() -> DynArray[address, MAX_MIGRATION_ASSETS]:
 ```
 
-Checks if there is a pending ownership change.
+Gets the list of vault tokens for recovery.
 
 **Returns:**
-- True if there is a pending ownership change, False otherwise
 
-### changeOwnership
+- Array of vault token addresses
+
+### recoveryGetVaultTokenAmount
 
 ```vyper
+@view
 @external
-def changeOwnership(_newOwner: address):
+def recoveryGetVaultTokenAmount(_vaultToken: address) -> (uint256, uint256):
 ```
 
-Initiates a new ownership change.
+Gets the amount of a vault token and its deposited amount.
 
 **Parameters:**
-- `_newOwner`: The address of the new owner
 
-**Events Emitted:**
-- `OwnershipChangeInitiated`
+- `_vaultToken`: The address of the vault token
 
-**Requirements:**
-- Caller must be the current owner
-- New owner address must be valid and different from the current owner
+**Returns:**
 
-### confirmOwnershipChange
-
-```vyper
-@external
-def confirmOwnershipChange():
-```
-
-Confirms the ownership change.
-
-**Events Emitted:**
-- `OwnershipChangeConfirmed`
-
-**Requirements:**
-- Pending owner must exist
-- Confirmation block must have been reached
-- Caller must be the new owner
-
-### cancelOwnershipChange
-
-```vyper
-@external
-def cancelOwnershipChange():
-```
-
-Cancels the ownership change.
-
-**Events Emitted:**
-- `OwnershipChangeCancelled`
-
-**Requirements:**
-- Caller must be the current owner
-- Pending ownership change must exist
-
-### setOwnershipChangeDelay
-
-```vyper
-@external
-def setOwnershipChangeDelay(_numBlocks: uint256):
-```
-
-Sets the ownership change delay.
-
-**Parameters:**
-- `_numBlocks`: The number of blocks to wait before ownership can be changed
-
-**Events Emitted:**
-- `OwnershipChangeDelaySet`
-
-**Requirements:**
-- Caller must be the owner
-- Delay must be within allowed range
+- Tuple of (vaultTokenAmount, depositedAmount)
 
 ### recoverFunds
 
 ```vyper
 @external
-def recoverFunds(_asset: address) -> bool:
+def recoverFunds(_asset: address, _to: address) -> uint256:
 ```
 
-Transfers funds from the config contract to the main wallet.
+Recovers funds stuck in the contract.
 
 **Parameters:**
+
 - `_asset`: The address of the asset to recover
+- `_to`: The address to send the funds to
 
 **Returns:**
-- True if the funds were recovered successfully
 
-**Events Emitted:**
-- `FundsRecovered`
+- The amount of funds recovered
 
 **Requirements:**
-- Wallet and asset addresses must be valid
-- Balance must be greater than zero 
+
+- Caller must be the owner
+- Asset and recipient addresses must be valid

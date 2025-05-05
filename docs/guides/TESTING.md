@@ -54,17 +54,24 @@ The testing framework uses several configuration files:
 ### Core Tests
 
 Tests for core contracts including:
+
 - AgentFactory
-- WalletConfig
-- WalletFunds
-- LegoRegistry
-- AddyRegistry
+- Templates:
+  - UserWalletConfigTemplate (WalletConfig)
+  - UserWalletTemplate (WalletFunds)
+  - AgentTemplate
+- Registries:
+  - LegoRegistry
+  - AddyRegistry
+  - OracleRegistry
+- PriceSheets
 
 **Location**: `tests/core/`
 
 ### Lego Tests
 
 Tests for lego modules including:
+
 - Yield legos (Aave, Compound)
 - DEX legos (Uniswap, Curve)
 - Credit legos
@@ -74,6 +81,7 @@ Tests for lego modules including:
 ### Oracle Tests
 
 Tests for oracle integrations including:
+
 - Price feed oracles
 - Oracle adapters
 
@@ -82,9 +90,12 @@ Tests for oracle integrations including:
 ### Wallet Tests
 
 Tests for wallet functionality including:
+
 - Deposit/withdrawal
 - Asset management
 - Security features
+- Governance features
+- Trial funds management
 
 **Location**: `tests/wallet/`
 

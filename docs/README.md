@@ -33,8 +33,19 @@ Detailed documentation for each contract in the Underscore protocol:
 - [**AgentTemplate**](api/AgentTemplate.md): Template for AI agents and their actions
 - [**WalletConfig**](api/WalletConfig.md): Manages wallet configuration settings
 - [**WalletFunds**](api/WalletFunds.md): Handles user funds management
-- [**LegoRegistry**](api/LegoRegistry.md): Registry for DeFi protocol integrations
-- [**OracleRegistry**](api/OracleRegistry.md): Registry for price oracles
-- [**AddyRegistry**](api/AddyRegistry.md): Registry for system component addresses
+- [**LegoRegistry**](api/LegoRegistry.md): Registry for DeFi protocol integrations with governance controls
+- [**OracleRegistry**](api/OracleRegistry.md): Registry for price oracles with governance controls
+- [**AddyRegistry**](api/AddyRegistry.md): Registry for system component addresses with governance controls
 - [**PriceSheets**](api/PriceSheets.md): Handles price data and calculations
 - [**LegoHelper**](api/LegoHelper.md): Helper functions for lego operations
+
+## Registry and Governance System
+
+The Underscore protocol implements a robust registry and governance system, with these key features:
+
+1. **Two-Step Governance**: Critical operations require initiation followed by confirmation after a delay
+2. **Registry Pattern**: Consistent implementation across all registries (Lego, Oracle, Address)
+3. **Upgrade Path**: Secure mechanism for updating contract addresses and implementations
+4. **Type Management**: Specialized handling for different component types (e.g., yield vs. DEX legos)
+
+For more details on the governance mechanism, see the Core Components documentation.

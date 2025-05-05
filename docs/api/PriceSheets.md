@@ -4,22 +4,36 @@ The PriceSheets contract handles price data management and calculations for both
 
 **Source:** `contracts/core/PriceSheets.vy`
 
+## Flags
+
+### ActionType
+
+```vyper
+flag ActionType:
+    DEPOSIT
+    WITHDRAWAL
+    REBALANCE
+    TRANSFER
+    SWAP
+    CONVERSION
+    ADD_LIQ
+    REMOVE_LIQ
+    CLAIM_REWARDS
+    BORROW
+    REPAY
+```
+
+Flag defining the types of actions for which fees can be charged.
+
 ## Structs
 
 ### TxPriceSheet
 
 ```vyper
 struct TxPriceSheet:
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
+    yieldFee: uint256
     swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
     claimRewardsFee: uint256
-    borrowFee: uint256
-    repayFee: uint256
 ```
 
 Structure containing fee percentages for different transaction types.
@@ -139,16 +153,9 @@ Emitted when agent subscription pricing is enabled or disabled.
 
 ```vyper
 event ProtocolTxPriceSheetSet:
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
+    yieldFee: uint256
     swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
     claimRewardsFee: uint256
-    borrowFee: uint256
-    repayFee: uint256
 ```
 
 Emitted when transaction pricing is set for the protocol.
@@ -157,16 +164,9 @@ Emitted when transaction pricing is set for the protocol.
 
 ```vyper
 event ProtocolTxPriceSheetRemoved:
-    depositFee: uint256
-    withdrawalFee: uint256
-    rebalanceFee: uint256
-    transferFee: uint256
+    yieldFee: uint256
     swapFee: uint256
-    addLiqFee: uint256
-    removeLiqFee: uint256
     claimRewardsFee: uint256
-    borrowFee: uint256
-    repayFee: uint256
 ```
 
 Emitted when transaction pricing is removed for the protocol.
@@ -188,6 +188,15 @@ event PriceChangeDelaySet:
 ```
 
 Emitted when the price change delay is set.
+
+### AmbassadorRatioSet
+
+```vyper
+event AmbassadorRatioSet:
+    ratio: uint256
+```
+
+Emitted when the ambassador ratio is set.
 
 ### PriceSheetsActivated
 
@@ -256,6 +265,14 @@ priceChangeDelay: public(uint256)
 
 Number of blocks that must pass before price changes take effect.
 
+### ambassadorRatio
+
+```vyper
+ambassadorRatio: public(uint256)
+```
+
+Ratio of transaction fees that go to ambassadors.
+
 ### ADDY_REGISTRY
 
 ```vyper
@@ -322,13 +339,21 @@ AGENT_FACTORY_ID: constant(uint256) = 1
 
 ID of the agent factory in the address registry.
 
+### HUNDRED_PERCENT
+
+```vyper
+HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
+```
+
+Represents 100.00% in basis points.
+
 ### MAX_TX_FEE
 
 ```vyper
-MAX_TX_FEE: constant(uint256) = 10_00 # 10.00%
+MAX_TX_FEE: constant(uint256) = 20_00 # 20.00%
 ```
 
-Maximum allowed transaction fee percentage (10.00%).
+Maximum allowed transaction fee percentage (20.00%).
 
 ## External Functions
 
@@ -343,26 +368,16 @@ def getAgentSubPriceData(_agent: address) -> SubscriptionInfo:
 Gets subscription price data for an agent.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
 
 **Returns:**
+
 - Subscription information for the agent
 
 **Requirements:**
+
 - Returns empty SubscriptionInfo if agent subscription pricing is disabled
-
-### protocolSubPriceData
-
-```vyper
-@view
-@external
-def protocolSubPriceData() -> SubscriptionInfo:
-```
-
-Gets subscription price data for the protocol.
-
-**Returns:**
-- Subscription information for the protocol
 
 ### getCombinedSubData
 
@@ -372,9 +387,10 @@ Gets subscription price data for the protocol.
 def getCombinedSubData(_user: address, _agent: address, _agentPaidThru: uint256, _protocolPaidThru: uint256, _oracleRegistry: address) -> (SubPaymentInfo, SubPaymentInfo):
 ```
 
-Gets combined subscription data for a user and agent.
+Gets combined subscription data for an agent and protocol.
 
 **Parameters:**
+
 - `_user`: The address of the user
 - `_agent`: The address of the agent
 - `_agentPaidThru`: The block until which the agent subscription is paid
@@ -382,7 +398,8 @@ Gets combined subscription data for a user and agent.
 - `_oracleRegistry`: The address of the oracle registry
 
 **Returns:**
-- Tuple containing subscription payment information for agent and protocol
+
+- Tuple containing subscription payment information for protocol and agent
 
 ### isValidSubPrice
 
@@ -395,12 +412,14 @@ def isValidSubPrice(_asset: address, _usdValue: uint256, _trialPeriod: uint256, 
 Checks if subscription price parameters are valid.
 
 **Parameters:**
+
 - `_asset`: The token address for subscription payments
 - `_usdValue`: The USD value of the subscription
 - `_trialPeriod`: The trial period in blocks
 - `_payPeriod`: The payment period in blocks
 
 **Returns:**
+
 - True if all parameters are valid, False otherwise
 
 ### setAgentSubPrice
@@ -413,6 +432,7 @@ def setAgentSubPrice(_agent: address, _asset: address, _usdValue: uint256, _tria
 Sets subscription pricing for a specific agent.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
 - `_asset`: The token address for subscription payments
 - `_usdValue`: The USD value of the subscription
@@ -420,16 +440,14 @@ Sets subscription pricing for a specific agent.
 - `_payPeriod`: The payment period in blocks
 
 **Returns:**
+
 - True if pending subscription price was set successfully
 
-**Events Emitted:**
-- `AgentSubPriceSet` or `PendingAgentSubPriceSet`
-
 **Requirements:**
+
 - Agent must be registered
 - Caller must be the agent owner or governor
 - If caller is agent owner, price sheets must be activated
-- Agent address must be valid
 - Subscription price parameters must be valid
 
 ### finalizePendingAgentSubPrice
@@ -442,17 +460,18 @@ def finalizePendingAgentSubPrice(_agent: address) -> bool:
 Finalizes a pending subscription price for an agent.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
 
 **Returns:**
+
 - True if subscription price was finalized successfully
 
-**Events Emitted:**
-- `AgentSubPriceSet`
-
 **Requirements:**
+
 - Price sheets must be activated
-- Price change delay must have passed
+- A pending subscription price must exist for the agent
+- The effective block for the price change must have been reached
 
 ### removeAgentSubPrice
 
@@ -464,16 +483,16 @@ def removeAgentSubPrice(_agent: address) -> bool:
 Removes subscription pricing for a specific agent.
 
 **Parameters:**
+
 - `_agent`: The address of the agent
 
 **Returns:**
+
 - True if agent subscription price was removed successfully
 
-**Events Emitted:**
-- `AgentSubPriceRemoved`
-
 **Requirements:**
-- Caller must be the governor
+
+- Caller must be authorized to govern
 - Agent must be registered
 - Agent must have subscription pricing set
 
@@ -487,16 +506,16 @@ def setAgentSubPricingEnabled(_isEnabled: bool) -> bool:
 Enables or disables agent subscription pricing.
 
 **Parameters:**
+
 - `_isEnabled`: True to enable, False to disable
 
 **Returns:**
+
 - True if agent subscription pricing state was changed successfully
 
-**Events Emitted:**
-- `AgentSubPricingEnabled`
-
 **Requirements:**
-- Caller must be the governor
+
+- Caller must be authorized to govern
 - New state must be different from current state
 
 ### setProtocolSubPrice
@@ -509,19 +528,19 @@ def setProtocolSubPrice(_asset: address, _usdValue: uint256, _trialPeriod: uint2
 Sets subscription pricing for the protocol.
 
 **Parameters:**
+
 - `_asset`: The token address for subscription payments
 - `_usdValue`: The USD value of the subscription
 - `_trialPeriod`: The trial period in blocks
 - `_payPeriod`: The payment period in blocks
 
 **Returns:**
+
 - True if protocol subscription price was set successfully
 
-**Events Emitted:**
-- `ProtocolSubPriceSet`
-
 **Requirements:**
-- Caller must be the governor
+
+- Caller must be authorized to govern
 - Subscription price parameters must be valid
 
 ### removeProtocolSubPrice
@@ -533,15 +552,37 @@ def removeProtocolSubPrice() -> bool:
 
 Removes subscription pricing for the protocol.
 
+**Parameters:**
+
+- None
+
 **Returns:**
+
 - True if protocol subscription price was removed successfully
 
-**Events Emitted:**
-- `ProtocolSubPriceRemoved`
-
 **Requirements:**
-- Caller must be the governor
+
+- Caller must be authorized to govern
 - Protocol must have subscription pricing set
+
+### getTransactionFeeDataWithAmbassadorRatio
+
+```vyper
+@view
+@external
+def getTransactionFeeDataWithAmbassadorRatio(_user: address, _action: ActionType) -> (uint256, address, uint256):
+```
+
+Gets transaction fee data with ambassador ratio for a user and action.
+
+**Parameters:**
+
+- `_user`: The address of the user
+- `_action`: The type of action being performed
+
+**Returns:**
+
+- Tuple containing the fee amount, recipient address, and ambassador ratio
 
 ### getTransactionFeeData
 
@@ -551,110 +592,40 @@ Removes subscription pricing for the protocol.
 def getTransactionFeeData(_user: address, _action: ActionType) -> (uint256, address):
 ```
 
-Gets transaction fee data for the protocol.
+Gets transaction fee data for a user and action (legacy function).
 
 **Parameters:**
+
 - `_user`: The address of the user
 - `_action`: The type of action being performed
 
 **Returns:**
-- Tuple containing the fee amount and recipient address for the protocol
 
-### isValidTxPriceSheet
-
-```vyper
-@view
-@external
-def isValidTxPriceSheet(
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
-    _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
-    _claimRewardsFee: uint256,
-    _borrowFee: uint256,
-    _repayFee: uint256,
-) -> bool:
-```
-
-Checks if transaction price sheet parameters are valid.
-
-**Parameters:**
-- `_depositFee`: The fee percentage for deposits
-- `_withdrawalFee`: The fee percentage for withdrawals
-- `_rebalanceFee`: The fee percentage for rebalances
-- `_transferFee`: The fee percentage for transfers
-- `_swapFee`: The fee percentage for swaps
-- `_addLiqFee`: The fee percentage for adding liquidity
-- `_removeLiqFee`: The fee percentage for removing liquidity
-- `_claimRewardsFee`: The fee percentage for claiming rewards
-- `_borrowFee`: The fee percentage for borrowing
-- `_repayFee`: The fee percentage for repaying
-
-**Returns:**
-- True if all parameters are valid, False otherwise
+- Tuple containing the fee amount and recipient address
 
 ### setProtocolTxPriceSheet
 
 ```vyper
 @external
-def setProtocolTxPriceSheet(
-    _depositFee: uint256,
-    _withdrawalFee: uint256,
-    _rebalanceFee: uint256,
-    _transferFee: uint256,
-    _swapFee: uint256,
-    _addLiqFee: uint256,
-    _removeLiqFee: uint256,
-    _claimRewardsFee: uint256,
-    _borrowFee: uint256,
-    _repayFee: uint256,
-) -> bool:
+def setProtocolTxPriceSheet(_yield: uint256, _swap: uint256, _claimRewards: uint256) -> bool:
 ```
 
-Sets transaction price sheet for the protocol.
+Sets transaction pricing for the protocol.
 
 **Parameters:**
-- `_depositFee`: The fee percentage for deposits
-- `_withdrawalFee`: The fee percentage for withdrawals
-- `_rebalanceFee`: The fee percentage for rebalances
-- `_transferFee`: The fee percentage for transfers
-- `_swapFee`: The fee percentage for swaps
-- `_addLiqFee`: The fee percentage for adding liquidity
-- `_removeLiqFee`: The fee percentage for removing liquidity
-- `_claimRewardsFee`: The fee percentage for claiming rewards
-- `_borrowFee`: The fee percentage for borrowing
-- `_repayFee`: The fee percentage for repaying
+
+- `_yield`: The fee percentage for yield operations
+- `_swap`: The fee percentage for swap operations
+- `_claimRewards`: The fee percentage for claiming rewards
 
 **Returns:**
-- True if protocol price sheet was set successfully
 
-**Events Emitted:**
-- `ProtocolTxPriceSheetSet`
+- True if protocol transaction pricing was set successfully
 
 **Requirements:**
-- Caller must be the governor
-- Transaction price sheet parameters must be valid
 
-### removeProtocolTxPriceSheet
-
-```vyper
-@external
-def removeProtocolTxPriceSheet() -> bool:
-```
-
-Removes transaction price sheet for the protocol.
-
-**Returns:**
-- True if protocol price sheet was removed successfully
-
-**Events Emitted:**
-- `ProtocolTxPriceSheetRemoved`
-
-**Requirements:**
-- Caller must be the governor
+- Caller must be authorized to govern
+- Fee percentages must be within allowed range
 
 ### setProtocolRecipient
 
@@ -663,20 +634,20 @@ Removes transaction price sheet for the protocol.
 def setProtocolRecipient(_recipient: address) -> bool:
 ```
 
-Sets the recipient address for protocol fees.
+Sets the recipient for protocol fees.
 
 **Parameters:**
+
 - `_recipient`: The address to receive protocol fees
 
 **Returns:**
+
 - True if protocol recipient was set successfully
 
-**Events Emitted:**
-- `ProtocolRecipientSet`
-
 **Requirements:**
-- Caller must be the governor
-- Recipient address must be valid
+
+- Caller must be authorized to govern
+- Recipient address must not be empty
 
 ### setPriceChangeDelay
 
@@ -685,35 +656,61 @@ Sets the recipient address for protocol fees.
 def setPriceChangeDelay(_delayBlocks: uint256) -> bool:
 ```
 
-Sets the number of blocks required before price changes take effect.
+Sets the delay for price changes to take effect.
 
 **Parameters:**
-- `_delayBlocks`: The number of blocks to wait before price changes take effect
+
+- `_delayBlocks`: The delay period in blocks
 
 **Returns:**
+
 - True if price change delay was set successfully
 
-**Events Emitted:**
-- `PriceChangeDelaySet`
-
 **Requirements:**
-- Caller must be the governor
-- Delay must be 0 or greater than or equal to MIN_PRICE_CHANGE_BUFFER
 
-### activate
+- Caller must be authorized to govern
+- Delay must be at least the minimum price change buffer
+
+### setAmbassadorRatio
 
 ```vyper
 @external
-def activate(_shouldActivate: bool):
+def setAmbassadorRatio(_ratio: uint256) -> bool:
 ```
 
-Activates or deactivates the price sheets registry.
+Sets the ratio of transaction fees that go to ambassadors.
 
 **Parameters:**
-- `_shouldActivate`: True to activate, False to deactivate
 
-**Events Emitted:**
-- `PriceSheetsActivated`
+- `_ratio`: The ratio value (percentage in basis points)
+
+**Returns:**
+
+- True if ambassador ratio was set successfully
 
 **Requirements:**
-- Caller must be the governor 
+
+- Caller must be authorized to govern
+- Ratio must be within allowed range
+
+### setPriceSheetsActivated
+
+```vyper
+@external
+def setPriceSheetsActivated(_isActivated: bool) -> bool:
+```
+
+Activates or deactivates the price sheets contract.
+
+**Parameters:**
+
+- `_isActivated`: True to activate, False to deactivate
+
+**Returns:**
+
+- True if activation state was changed successfully
+
+**Requirements:**
+
+- Caller must be authorized to govern
+- New state must be different from current state
