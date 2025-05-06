@@ -163,36 +163,36 @@ For detailed information about which directories and files are covered by each l
 
 | Core Contracts           |                                                                                                                       |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| AddyRegistry             | [0xdCCaB9855D7eE558409EBdf358a3A44a8b2415B3](https://basescan.org/address/0xdCCaB9855D7eE558409EBdf358a3A44a8b2415B3) |
-| AgentFactory             | [0x484637E77C66eaE88C8Edb64E09c5057F52866BE](https://basescan.org/address/0x484637E77C66eaE88C8Edb64E09c5057F52866BE) |
-| UserWalletTemplate       | [0xf614Bb656a8B1B8646b25f3Ca4a9655E407D38e5](https://basescan.org/address/0xf614Bb656a8B1B8646b25f3Ca4a9655E407D38e5) |
-| UserWalletConfigTemplate | [0xAeE931cC57CfBE31328bCfF092Af7eC7dFD7EBC8](https://basescan.org/address/0xAeE931cC57CfBE31328bCfF092Af7eC7dFD7EBC8) |
-| AgentTemplate            | [0x2e3754aD00DcC1c31Ee1Ea46379DA83bD02896F7](https://basescan.org/address/0x2e3754aD00DcC1c31Ee1Ea46379DA83bD02896F7) |
-| LegoRegistry             | [0x5dC5A7304a1f2feeadF491b8F62BD41687CB330b](https://basescan.org/address/0x5dC5A7304a1f2feeadF491b8F62BD41687CB330b) |
-| OracleRegistry           | [0x4D97d514d92Efd711D0645fE0759fA68480facc5](https://basescan.org/address/0x4D97d514d92Efd711D0645fE0759fA68480facc5) |
-| PriceSheets              | [0x38Cd202B42b3906051573174e506b5b6BC83D47C](https://basescan.org/address/0x38Cd202B42b3906051573174e506b5b6BC83D47C) |
-| LegoHelper               | [0xF2920Dcb5298D48755b49a5e91F073D47A25439b](https://basescan.org/address/0xF2920Dcb5298D48755b49a5e91F073D47A25439b) |
+| AddyRegistry             | [0x7BcD6d471D1A068012A79347C7a944d1Df01a1AE](https://basescan.org/address/0x7BcD6d471D1A068012A79347C7a944d1Df01a1AE) |
+| AgentFactory             | [0xd5a1cc447D94114136A5a8828F59d5a1cfe65038](https://basescan.org/address/0xd5a1cc447D94114136A5a8828F59d5a1cfe65038) |
+| UserWalletTemplate       | [0xe43D5bD11a2A6A9348EFC516ad9Ac3D32164A5A0](https://basescan.org/address/0xe43D5bD11a2A6A9348EFC516ad9Ac3D32164A5A0) |
+| UserWalletConfigTemplate | [0x61293F1bF484d20dcc841175b4E4A0F46c26658c](https://basescan.org/address/0x61293F1bF484d20dcc841175b4E4A0F46c26658c) |
+| AgentTemplate            | [0x76Eb19Ae42c07a7AD50aFD58b579a7c45bd70183](https://basescan.org/address/0x76Eb19Ae42c07a7AD50aFD58b579a7c45bd70183) |
+| LegoRegistry             | [0x8D8593FE154d14976352FA2CE30322EcDF99C72a](https://basescan.org/address/0x8D8593FE154d14976352FA2CE30322EcDF99C72a) |
+| OracleRegistry           | [0xe133F22aAdC23F9B7ca7A9f16B6D9A0C662Cf90b](https://basescan.org/address/0xe133F22aAdC23F9B7ca7A9f16B6D9A0C662Cf90b) |
+| PriceSheets              | [0xD15331Cf355B5D8EF017c1FD49516b95593FA6aA](https://basescan.org/address/0xD15331Cf355B5D8EF017c1FD49516b95593FA6aA) |
+| LegoHelper               | [0xF80b87DD1096f9E68739f55B9807Df1CB21422E3](https://basescan.org/address/0xF80b87DD1096f9E68739f55B9807Df1CB21422E3) |
 
 | Oracles        |                                                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| ChainlinkFeeds | [0x5e06882026739D91541b4F979FbF40057C75aB96](https://basescan.org/address/0x5e06882026739D91541b4F979FbF40057C75aB96) |
-| PythFeeds      | [0x56cC721FA002425b074e767A1F7B663Eb00C7535](https://basescan.org/address/0x56cC721FA002425b074e767A1F7B663Eb00C7535) |
-| StorkFeeds     | [0x37Ce94Ec6A9072ee1231eff57A8987448aDb8E0a](https://basescan.org/address/0x37Ce94Ec6A9072ee1231eff57A8987448aDb8E0a) |
+| ChainlinkFeeds | [0x605c6ab843d65dD14b00CEB33f445D7f9bbb7930](https://basescan.org/address/0x605c6ab843d65dD14b00CEB33f445D7f9bbb7930) |
+| PythFeeds      | [0x415a2fe1e591619c6c12Df09eAEc8a598224F9fE](https://basescan.org/address/0x415a2fe1e591619c6c12Df09eAEc8a598224F9fE) |
+| StorkFeeds     | [0xD47D74C56c17Bf3B7236e8a7eb97D3194c3d477c](https://basescan.org/address/0xD47D74C56c17Bf3B7236e8a7eb97D3194c3d477c) |
 
 | Yield Legos    |                                                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| LegoAaveV3     | [0x580729527620ab496195465bfFD15E89eFb508B4](https://basescan.org/address/0x580729527620ab496195465bfFD15E89eFb508B4) |
-| LegoCompoundV3 | [0x71fC412B72e052F91AEF0e11084D7cEb99ae275c](https://basescan.org/address/0x71fC412B72e052F91AEF0e11084D7cEb99ae275c) |
-| LegoEuler      | [0x29e0815b2c801D6946bD05EB0A5c9b5a510d88f1](https://basescan.org/address/0x29e0815b2c801D6946bD05EB0A5c9b5a510d88f1) |
-| LegoFluid      | [0x76765fcd0A666fAc585e520C421FcD881ca0d861](https://basescan.org/address/0x76765fcd0A666fAc585e520C421FcD881ca0d861) |
-| LegoMoonwell   | [0x959753dB45E61Cf7dCc6057279A57AC286830C28](https://basescan.org/address/0x959753dB45E61Cf7dCc6057279A57AC286830C28) |
-| LegoMorpho     | [0xF7B09b7E6528037e125Ac8d3Ed047A39d10A32AF](https://basescan.org/address/0xF7B09b7E6528037e125Ac8d3Ed047A39d10A32AF) |
-| LegoSky        | [0x6c2496434a42779A1c5dc62C18B3177C1771Bb80](https://basescan.org/address/0x6c2496434a42779A1c5dc62C18B3177C1771Bb80) |
+| LegoAaveV3     | [0x8c94cfC11A9340e45032e5021881cc312993Bf15](https://basescan.org/address/0x8c94cfC11A9340e45032e5021881cc312993Bf15) |
+| LegoCompoundV3 | [0xF86d1D68C951d163aBc383C508740df6ddED500C](https://basescan.org/address/0xF86d1D68C951d163aBc383C508740df6ddED500C) |
+| LegoEuler      | [0xB2a1cdC1D896eE37cD432b591FeC2664294286FB](https://basescan.org/address/0xB2a1cdC1D896eE37cD432b591FeC2664294286FB) |
+| LegoFluid      | [0xc4a864F5543D3CDB06D5F3419c18315f2cDe9675](https://basescan.org/address/0xc4a864F5543D3CDB06D5F3419c18315f2cDe9675) |
+| LegoMoonwell   | [0x3890573c04A13d1D982104c7DaDb17F66cb1aE6c](https://basescan.org/address/0x3890573c04A13d1D982104c7DaDb17F66cb1aE6c) |
+| LegoMorpho     | [0x825309418B066603C2732fdA08d39A79CAA5CC8e](https://basescan.org/address/0x825309418B066603C2732fdA08d39A79CAA5CC8e) |
+| LegoSky        | [0x3514536163D5c0c5207A6A1230fc76bEe8CE8506](https://basescan.org/address/0x3514536163D5c0c5207A6A1230fc76bEe8CE8506) |
 
 | Dex Legos          |                                                                                                                       |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| LegoAeroClassic    | [0xF66d2FD9Ee2975DF518c6bA9D2ff7d562EE8530b](https://basescan.org/address/0xF66d2FD9Ee2975DF518c6bA9D2ff7d562EE8530b) |
-| LegoAeroSlipstream | [0xe819d6367d393AD952265Ed34b2A9A67a3F1423A](https://basescan.org/address/0xe819d6367d393AD952265Ed34b2A9A67a3F1423A) |
-| LegoCurve          | [0x3EadC664BE12D7Ef39ACf50C48695ff8614127f1](https://basescan.org/address/0x3EadC664BE12D7Ef39ACf50C48695ff8614127f1) |
-| LegoUniswapV2      | [0xC9Eeeab623B1cd6b53a03938Df5eBf9B7d3d2C0F](https://basescan.org/address/0xC9Eeeab623B1cd6b53a03938Df5eBf9B7d3d2C0F) |
-| LegoUniswapV3      | [0x5282BA17Ec8cF31c78404d0C57Fb7CfeabC212a0](https://basescan.org/address/0x5282BA17Ec8cF31c78404d0C57Fb7CfeabC212a0) |
+| LegoAeroClassic    | [0x61C8D98F01B066fA99eb2cf2E6069a7e5d891313](https://basescan.org/address/0x61C8D98F01B066fA99eb2cf2E6069a7e5d891313) |
+| LegoAeroSlipstream | [0x0891DdE2eC48f9663A1c9a81820c283dD8846594](https://basescan.org/address/0x0891DdE2eC48f9663A1c9a81820c283dD8846594) |
+| LegoCurve          | [0x6118D44763a556Cf8d113ebBce853E14a0C67997](https://basescan.org/address/0x6118D44763a556Cf8d113ebBce853E14a0C67997) |
+| LegoUniswapV2      | [0x9973e271Bd6cAb8Ce1CAEaBAB8a1bEbcB6EdD535](https://basescan.org/address/0x9973e271Bd6cAb8Ce1CAEaBAB8a1bEbcB6EdD535) |
+| LegoUniswapV3      | [0x6bfd82031a968685358DA84ebB797c3C068EC704](https://basescan.org/address/0x6bfd82031a968685358DA84ebB797c3C068EC704) |
