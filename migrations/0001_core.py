@@ -1,5 +1,6 @@
 from scripts.utils import log
 from scripts.utils.migration import Migration
+from tests.constants import ZERO_ADDRESS
 
 
 def migrate(migration: Migration):
@@ -29,6 +30,7 @@ def migrate(migration: Migration):
         wallet_funds,
         wallet_config,
         agent_template,
+        ZERO_ADDRESS,
         blueprint.PARAMS["USER_MIN_OWNER_CHANGE_DELAY"],
         blueprint.PARAMS["USER_MAX_OWNER_CHANGE_DELAY"]
     )
