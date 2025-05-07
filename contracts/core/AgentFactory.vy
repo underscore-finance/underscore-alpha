@@ -17,6 +17,9 @@ interface WalletConfig:
 interface Agent:
     def initialize(_owner: address, _addyRegistry: address) -> bool: nonpayable
 
+interface AltAgentFactory:
+    def isUserWallet(_addr: address) -> bool: view
+
 struct TemplateInfo:
     addr: address
     version: uint256
@@ -101,7 +104,7 @@ recoveryCaller: public(address)
 # user wallets
 userWalletTemplate: public(TemplateInfo)
 userWalletConfig: public(TemplateInfo)
-isUserWallet: public(HashMap[address, bool])
+_isUserWallet: public(HashMap[address, bool])
 numUserWallets: public(uint256)
 
 # agents
@@ -129,6 +132,8 @@ MAX_LEGOS: constant(uint256) = 20
 
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
+
+NEW_AGENT_FACTORY: constant(address) = 0xd5a1cc447D94114136A5a8828F59d5a1cfe65038
 
 
 @deploy
@@ -257,7 +262,7 @@ def createUserWallet(_owner: address = msg.sender, _agent: address = empty(addre
         assert extcall IERC20(trialFundsData.asset).transfer(mainWalletAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
 
     # update data
-    self.isUserWallet[mainWalletAddr] = True
+    self._isUserWallet[mainWalletAddr] = True
     self.numUserWallets += 1
 
     log UserWalletCreated(mainAddr=mainWalletAddr, configAddr=walletConfigAddr, owner=_owner, agent=_agent, creator=msg.sender)
@@ -730,3 +735,23 @@ def activate(_shouldActivate: bool):
 
     self.isActivated = _shouldActivate
     log AgentFactoryActivated(isActivated=_shouldActivate)
+
+
+#################
+# Compatibility #
+#################
+
+
+@view
+@external
+def isUserWallet(_addr: address) -> bool:
+    isUserWallet: bool = self._isUserWallet[_addr]
+    if isUserWallet:
+        return True
+
+    # new factory
+    isNew: bool = False
+    if NEW_AGENT_FACTORY != empty(address):
+        isNew = staticcall AltAgentFactory(NEW_AGENT_FACTORY).isUserWallet(_addr)
+
+    return isNew
