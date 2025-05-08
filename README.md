@@ -164,7 +164,7 @@ For detailed information about which directories and files are covered by each l
 | Core Contracts           |                                                                                                                       |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | AddyRegistry             | [0x7BcD6d471D1A068012A79347C7a944d1Df01a1AE](https://basescan.org/address/0x7BcD6d471D1A068012A79347C7a944d1Df01a1AE) |
-| AgentFactory             | [0xd5a1cc447D94114136A5a8828F59d5a1cfe65038](https://basescan.org/address/0xd5a1cc447D94114136A5a8828F59d5a1cfe65038) |
+| AgentFactory             | [0x7C4be37a65E8410c0fb03d62059E3cB04f78c565](https://basescan.org/address/0x7C4be37a65E8410c0fb03d62059E3cB04f78c565) |
 | UserWalletTemplate       | [0xe43D5bD11a2A6A9348EFC516ad9Ac3D32164A5A0](https://basescan.org/address/0xe43D5bD11a2A6A9348EFC516ad9Ac3D32164A5A0) |
 | UserWalletConfigTemplate | [0x61293F1bF484d20dcc841175b4E4A0F46c26658c](https://basescan.org/address/0x61293F1bF484d20dcc841175b4E4A0F46c26658c) |
 | AgentTemplate            | [0x76Eb19Ae42c07a7AD50aFD58b579a7c45bd70183](https://basescan.org/address/0x76Eb19Ae42c07a7AD50aFD58b579a7c45bd70183) |
