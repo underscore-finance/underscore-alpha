@@ -133,7 +133,7 @@ MAX_LEGOS: constant(uint256) = 20
 MIN_OWNER_CHANGE_DELAY: public(immutable(uint256))
 MAX_OWNER_CHANGE_DELAY: public(immutable(uint256))
 
-NEW_AGENT_FACTORY: constant(address) = 0xd5a1cc447D94114136A5a8828F59d5a1cfe65038
+NEW_AGENT_FACTORY: constant(address) = 0x7C4be37a65E8410c0fb03d62059E3cB04f78c565
 
 
 @deploy
@@ -555,6 +555,13 @@ def recoverTrialFundsMany(_recoveries: DynArray[TrialFundsRecovery, MAX_RECOVERI
     assert gov._canGovern(msg.sender) or msg.sender == self.recoveryCaller # dev: no perms
     for r: TrialFundsRecovery in _recoveries:
         assert extcall MainWallet(r.wallet).recoverTrialFunds(r.opportunities) # dev: recovery failed
+
+    # transfer to new agent factory
+    trialFundAsset: address = self.trialFundsData.asset
+    balance: uint256 = staticcall IERC20(trialFundAsset).balanceOf(self)
+    if balance != 0:
+        assert extcall IERC20(trialFundAsset).transfer(NEW_AGENT_FACTORY, balance, default_return_value=True) # dev: transfer failed
+
     return True
 
 
