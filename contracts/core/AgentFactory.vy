@@ -271,19 +271,21 @@ def createUserWallet(
             ambassador = _ambassador
 
     # initial trial funds asset + amount
-    trialFundsData: TrialFundsData = self.trialFundsData
-    if _shouldUseTrialFunds and trialFundsData.asset != empty(address):
-        trialFundsData.amount = min(trialFundsData.amount, staticcall IERC20(trialFundsData.asset).balanceOf(self))
+    userTrialFundsData: TrialFundsData = empty(TrialFundsData)
+    if _shouldUseTrialFunds:
+        trialFundsData: TrialFundsData = self.trialFundsData
+        if trialFundsData.asset != empty(address) and trialFundsData.amount != 0 and staticcall IERC20(trialFundsData.asset).balanceOf(self) >= trialFundsData.amount:
+            userTrialFundsData = trialFundsData
 
     # create wallet contracts
     defaultAgent: address = self.addressInfo[AddressTypes.DEFAULT_AGENT].addr
     walletConfigAddr: address = create_from_blueprint(walletConfigTemplate, _owner, defaultAgent, ambassador, ADDY_REGISTRY, MIN_OWNER_CHANGE_DELAY, MAX_OWNER_CHANGE_DELAY)
-    mainWalletAddr: address = create_from_blueprint(userWalletTemplate, walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, trialFundsData.asset, trialFundsData.amount)
+    mainWalletAddr: address = create_from_blueprint(userWalletTemplate, walletConfigAddr, ADDY_REGISTRY, WETH_ADDR, userTrialFundsData.asset, userTrialFundsData.amount)
     assert extcall WalletConfig(walletConfigAddr).setWallet(mainWalletAddr) # dev: could not set wallet
 
     # transfer after initialization
-    if trialFundsData.amount != 0:
-        assert extcall IERC20(trialFundsData.asset).transfer(mainWalletAddr, trialFundsData.amount, default_return_value=True) # dev: gift transfer failed
+    if userTrialFundsData.asset != empty(address) and userTrialFundsData.amount != 0:
+        assert extcall IERC20(userTrialFundsData.asset).transfer(mainWalletAddr, userTrialFundsData.amount, default_return_value=True) # dev: gift transfer failed
 
     # update data
     assert extcall AddyRegistry(ADDY_REGISTRY).setIsUserWalletOrAgent(mainWalletAddr, True, True) # dev: could not set is user wallet

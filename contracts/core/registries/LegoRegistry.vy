@@ -119,6 +119,7 @@ def cancelPendingNewLego(_addr: address) -> bool:
     @return True if the cancellation was successful, reverts if no pending registration exists
     """
     assert gov._canGovern(msg.sender) # dev: no perms
+    self.pendingLegoType[_addr] = empty(LegoType)
     return registry._cancelPendingNewAddy(_addr)
 
 
