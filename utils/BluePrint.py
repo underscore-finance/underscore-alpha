@@ -49,7 +49,7 @@ ADDYS = {
         "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
         "BTC": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
     },
-    "sepolia": {
+    "base-sepolia": {
         "WETH": "0x4200000000000000000000000000000000000006",
         "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
         "BTC": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
@@ -84,7 +84,7 @@ PARAMS = {
         "ORACLE_REGISTRY_MIN_STALE_TIME": 60 * 5,  # 5 mins
         "ORACLE_REGISTRY_MAX_STALE_TIME": 60 * 60 * 24 * 3,  # 3 days
     },
-    "sepolia": {
+    "base-sepolia": {
         # addy book gov (blocks)
         "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,  # 1 day on Base
         "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,  # 7 days on Base
@@ -208,7 +208,7 @@ YIELD_TOKENS = {
         "MORPHO_IONIC_WETH": "0x5A32099837D89E3a794a44fb131CBbAD41f87a8C",  # ionic
         "MORPHO_IONIC_USDC": "0x23479229e52Ab6aaD312D0B03DF9F33B46753B5e",  # ionic
     },
-    "sepolia": {
+    "base-sepolia": {
         "USDC_VAULT": "0x1d9d43eFD5B1ECd6582Cae061c560F03cAd958c7",
         "CBBTC_VAULT": "0x192C3079D59727B84Fc9E4A8701583Ac0c63E243",
         "WETH_VAULT": "0x7931B77d17baf8f3354A3B4035EF392B098D7ae2"
@@ -245,7 +245,7 @@ CORE_TOKENS = {
         "WELL": "0xA88594D404727625A9437C3f886C7643872296AE",
         "VIRTUAL": "0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b",
     },
-    "sepolia": {
+    "base-sepolia": {
         "USDC": "0x611ce0729f6C052f49536c84a8fD717E619D5dc6",
         "WETH": "0x4200000000000000000000000000000000000006",
         "CBBTC": "0x003d1beA6B9C5193cDA8d747A5362eD2932a35d0"
