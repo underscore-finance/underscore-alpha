@@ -18,6 +18,7 @@ from interfaces import LegoCommon
 flag LegoType:
     YIELD_OPP
     DEX
+    BORROW
 
 struct VaultTokenInfo:
     legoId: uint256
