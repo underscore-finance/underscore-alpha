@@ -30,6 +30,7 @@ interface AddyRegistry:
 flag LegoType:
     YIELD_OPP
     DEX
+    BORROW
 
 struct SwapRoute:
     legoId: uint256
