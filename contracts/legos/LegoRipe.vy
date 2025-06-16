@@ -20,6 +20,7 @@ interface RipeTeller:
     def repay(_paymentAmount: uint256 = max_value(uint256), _user: address = msg.sender, _isPaymentSavingsGreen: bool = False, _shouldRefundSavingsGreen: bool = True) -> bool: nonpayable
     def borrow(_greenAmount: uint256 = max_value(uint256), _user: address = msg.sender, _wantsSavingsGreen: bool = True) -> uint256: nonpayable
     def claimLoot(_user: address = msg.sender, _shouldStake: bool = True) -> uint256: nonpayable
+    def doesUndyLegoHaveAccess(_wallet: address, _legoAddr: address) -> bool: view
 
 interface RipeRegistry:
     def getAddr(_regId: uint256) -> address: view
@@ -70,6 +71,8 @@ RIPE_REGISTRY: public(immutable(address))
 RIPE_LOOTBOX_ID: constant(uint256) = 16
 RIPE_TELLER_ID: constant(uint256) = 17
 
+LEGO_ACCESS_ABI: constant(String[64]) = "setUndyLegoAccess(address)"
+
 
 @deploy
 def __init__(_ripeRegistry: address, _addyRegistry: address):
@@ -89,7 +92,11 @@ def getRegistries() -> DynArray[address, 10]:
 @view
 @external
 def getAccessForLego(_user: address) -> (address, String[64], uint256):
-    return empty(address), empty(String[64]), 0
+    teller: address = staticcall RipeRegistry(RIPE_REGISTRY).getAddr(RIPE_TELLER_ID)
+    if staticcall RipeTeller(teller).doesUndyLegoHaveAccess(_user, self):
+        return empty(address), empty(String[64]), 0
+    else:
+        return teller, LEGO_ACCESS_ABI, 1
 
 
 @view
@@ -152,7 +159,7 @@ def depositTokens(
 def withdrawTokens(
     _asset: address,
     _amount: uint256,
-    _vaultToken: address,
+    _vaultAddr: address,
     _recipient: address,
     _oracleRegistry: address = empty(address),
 ) -> (uint256, uint256, uint256, uint256):
@@ -160,7 +167,7 @@ def withdrawTokens(
 
     # withdraw from Ripe Protocol
     teller: address = staticcall RipeRegistry(RIPE_REGISTRY).getAddr(RIPE_TELLER_ID)
-    assetAmountReceived: uint256 = extcall RipeTeller(teller).withdraw(_asset, _amount, _recipient, _vaultToken, 0)
+    assetAmountReceived: uint256 = extcall RipeTeller(teller).withdraw(_asset, _amount, _recipient, _vaultAddr, 0)
     assert assetAmountReceived != 0 # dev: no asset amount received
 
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)

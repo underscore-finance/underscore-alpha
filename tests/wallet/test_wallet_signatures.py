@@ -49,7 +49,7 @@ def test_withdraw_with_signature(special_ai_wallet, special_agent, mock_lego_alp
 
     # withdrawal
     assetAmountReceived, vaultTokenAmountBurned, usdValue = special_agent.withdrawTokens(
-        special_ai_wallet, lego_id, alpha_token, alpha_token_erc4626_vault.address, MAX_UINT256, signature, sender=broadcaster)
+        special_ai_wallet, lego_id, alpha_token, alpha_token_erc4626_vault.address, MAX_UINT256, True, signature, sender=broadcaster)
 
     # withdrawal
     log = filter_logs(special_agent, "UserWalletWithdrawal")[0]
@@ -72,11 +72,11 @@ def test_rebalance_with_signature(special_ai_wallet, owner, broadcaster, special
         lego_id, alpha_token, alpha_token_erc4626_vault, deposit_amount, sender=owner)
 
     # signature
-    signature = signRebalance(special_agent, special_ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256)
+    signature = signRebalance(special_agent, special_ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256, True)
 
     # rebalance
     assetAmountDeposited, newVaultToken, vaultTokenAmountReceived, usdValue = special_agent.rebalance(
-        special_ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256, signature, sender=broadcaster)
+        special_ai_wallet, lego_id, alpha_token.address, alpha_token_erc4626_vault.address, alt_lego_id, alpha_token_erc4626_vault_another.address, MAX_UINT256, True, signature, sender=broadcaster)
     
     # rebalance
     log = filter_logs(special_agent, "UserWalletWithdrawal")[0]

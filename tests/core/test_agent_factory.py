@@ -788,7 +788,7 @@ def test_trialfunds_data_set(agent_factory, governor, alpha_token, bob):
 def test_create_wallet_with_trial_funds(agent_factory, owner, governor, alpha_token, alpha_token_whale):
     """Test creating a wallet with trial funds"""
     # Set up trial funds
-    alpha_token.transfer(agent_factory.address, 100 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
+    alpha_token.transfer(agent_factory.address, 101 * EIGHTEEN_DECIMALS, sender=alpha_token_whale)
     agent_factory.setTrialFundsData(alpha_token.address, 50 * EIGHTEEN_DECIMALS, sender=governor)
     
     # Create wallet with trial funds
@@ -799,13 +799,11 @@ def test_create_wallet_with_trial_funds(agent_factory, owner, governor, alpha_to
     assert alpha_token.balanceOf(wallet_addr) == 50 * EIGHTEEN_DECIMALS
     
     # Create another wallet, specifying shouldUseTrialFunds=False 
-    # In the current implementation, this parameter doesn't seem to prevent funds from being transferred
-    # if the asset exists. This is how the implementation works, so we're testing the actual behavior.
     wallet_addr2 = agent_factory.createUserWallet(owner, ZERO_ADDRESS, False, sender=owner)
     assert wallet_addr2 != ZERO_ADDRESS
     
-    # Verify funds were still transferred (this is the actual behavior)
-    assert alpha_token.balanceOf(wallet_addr2) == 50 * EIGHTEEN_DECIMALS
+    # Verify no funds were transferred
+    assert alpha_token.balanceOf(wallet_addr2) == 0
 
 
 def test_create_wallet_with_insufficient_trial_funds(agent_factory, owner, governor, alpha_token, alpha_token_whale):
@@ -818,8 +816,8 @@ def test_create_wallet_with_insufficient_trial_funds(agent_factory, owner, gover
     wallet_addr = agent_factory.createUserWallet(owner, sender=owner)
     assert wallet_addr != ZERO_ADDRESS
     
-    # Verify only available funds were transferred
-    assert alpha_token.balanceOf(wallet_addr) == 10 * EIGHTEEN_DECIMALS
+    # full trial funds not available, therefore no funds transferred
+    assert alpha_token.balanceOf(wallet_addr) == 0
 
 
 def test_recover_funds_from_agent_factory(agent_factory, governor, alpha_token, alpha_token_whale, bob):

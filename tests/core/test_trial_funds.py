@@ -163,7 +163,8 @@ def test_partial_trial_funds_deployment(new_ai_wallet, agent_factory, alpha_toke
 def test_wallet_creation_insufficient_trial_funds(agent_factory, bravo_token, bravo_token_whale, governor, owner):
     """Test wallet creation when factory has insufficient trial funds"""
     all_funds = bravo_token.balanceOf(agent_factory)
-    bravo_token.transfer(bravo_token_whale, all_funds, sender=agent_factory.address)
+    if all_funds != 0:
+        bravo_token.transfer(bravo_token_whale, all_funds, sender=agent_factory.address)
 
     # Set trial funds data but don't transfer enough to factory
     assert agent_factory.setTrialFundsData(bravo_token, TRIAL_AMOUNT, sender=governor)
@@ -173,10 +174,10 @@ def test_wallet_creation_insufficient_trial_funds(agent_factory, bravo_token, br
     wallet_addr = agent_factory.createUserWallet(owner)
     wallet = UserWalletTemplate.at(wallet_addr)
 
-    # Verify reduced trial funds
-    assert bravo_token.balanceOf(wallet_addr) == TRIAL_AMOUNT // 2
-    assert wallet.trialFundsAsset() == bravo_token.address
-    assert wallet.trialFundsInitialAmount() == TRIAL_AMOUNT // 2
+    # won't have any trial funds because insufficient funds
+    assert bravo_token.balanceOf(wallet_addr) == 0
+    assert wallet.trialFundsAsset() == ZERO_ADDRESS
+    assert wallet.trialFundsInitialAmount() == 0
 
 
 def test_trial_funds_with_zero_amount(agent_factory, alpha_token, governor):

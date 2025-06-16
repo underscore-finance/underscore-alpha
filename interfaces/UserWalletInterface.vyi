@@ -31,8 +31,9 @@ def depositTokens(
 def withdrawTokens(
     _legoId: uint256,
     _asset: address,
-    _vaultToken: address,
-    _vaultTokenAmount: uint256 = max_value(uint256),
+    _vaultAddr: address,
+    _withdrawAmount: uint256 = max_value(uint256),
+    _hasVaultToken: bool = True,
 ) -> (uint256, uint256, uint256):
     ...
 
@@ -41,10 +42,11 @@ def withdrawTokens(
 def rebalance(
     _fromLegoId: uint256,
     _fromAsset: address,
-    _fromVaultToken: address,
+    _fromVaultAddr: address,
     _toLegoId: uint256,
-    _toVault: address,
-    _fromVaultTokenAmount: uint256 = max_value(uint256),
+    _toVaultAddr: address,
+    _fromVaultAmount: uint256 = max_value(uint256),
+    _hasFromVaultToken: bool = True,
 ) -> (uint256, address, uint256, uint256):
     ...
 
@@ -107,7 +109,8 @@ def convertWethToEth(
     _amount: uint256 = max_value(uint256),
     _recipient: address = empty(address),
     _withdrawLegoId: uint256 = 0,
-    _withdrawVaultToken: address = empty(address),
+    _withdrawVaultAddr: address = empty(address),
+    _hasWithdrawVaultToken: bool = True,
 ) -> uint256:
     ...
 

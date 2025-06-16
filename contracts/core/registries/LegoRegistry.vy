@@ -58,6 +58,12 @@ def isYieldLego(_legoId: uint256) -> bool:
     return self.legoIdToType[_legoId] == LegoType.YIELD_OPP
 
 
+@view
+@external
+def isBorrowLego(_legoId: uint256) -> bool:
+    return self.legoIdToType[_legoId] == LegoType.BORROW
+
+
 #################
 # Register Lego #
 #################

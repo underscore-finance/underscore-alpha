@@ -384,8 +384,8 @@ def test_lego_type_cancellation(lego_registry, new_lego, governor):
     # Cancel registration
     assert lego_registry.cancelPendingNewLego(new_lego, sender=governor)
     
-    # Verify pending type is NOT cleared after cancellation (contract behavior)
-    assert lego_registry.pendingLegoType(new_lego.address) == YIELD_OPP_UINT256
+    # Verify pending type is cleared after cancellation
+    assert lego_registry.pendingLegoType(new_lego.address) == 0
 
 
 def test_lego_type_update(lego_registry, new_lego, new_lego_b, governor):

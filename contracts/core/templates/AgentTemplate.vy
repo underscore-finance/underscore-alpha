@@ -63,6 +63,7 @@ struct ActionInstruction:
     recipient: address
     isWethToEthConversion: bool
     swapInstructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]
+    hasVaultToken: bool
 
 event AgentFundsRecovered:
     asset: indexed(address)
@@ -75,15 +76,15 @@ usedSignatures: public(HashMap[Bytes[65], bool])
 ECRECOVER_PRECOMPILE: constant(address) = 0x0000000000000000000000000000000000000001
 DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
 DEPOSIT_TYPE_HASH: constant(bytes32) = keccak256('Deposit(address userWallet,uint256 legoId,address asset,address vault,uint256 amount,uint256 expiration)')
-WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(address userWallet,uint256 legoId,address asset,address vaultToken,uint256 vaultTokenAmount,uint256 expiration)')
-REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(address userWallet,uint256 fromLegoId,address fromAsset,address fromVaultToken,uint256 toLegoId,address toVault,uint256 fromVaultTokenAmount,uint256 expiration)')
+WITHDRAWAL_TYPE_HASH: constant(bytes32) = keccak256('Withdrawal(address userWallet,uint256 legoId,address asset,address vaultAddr,uint256 withdrawAmount,bool hasVaultToken,uint256 expiration)')
+REBALANCE_TYPE_HASH: constant(bytes32) = keccak256('Rebalance(address userWallet,uint256 fromLegoId,address fromAsset,address fromVaultAddr,uint256 toLegoId,address toVaultAddr,uint256 fromVaultAmount,bool hasFromVaultToken,uint256 expiration)')
 SWAP_ACTION_TYPE_HASH: constant(bytes32) =  keccak256('Swap(address userWallet,SwapInstruction[] swapInstructions,uint256 expiration)')
 SWAP_INSTRUCTION_TYPE_HASH: constant(bytes32) = keccak256('SwapInstruction(uint256 legoId,uint256 amountIn,uint256 minAmountOut,address[] tokenPath,address[] poolPath)')
 ADD_LIQ_TYPE_HASH: constant(bytes32) = keccak256('AddLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 amountA,uint256 amountB,int24 tickLower,int24 tickUpper,uint256 minAmountA,uint256 minAmountB,uint256 minLpAmount,uint256 expiration)')
 REMOVE_LIQ_TYPE_HASH: constant(bytes32) = keccak256('RemoveLiquidity(address userWallet,uint256 legoId,address nftAddr,uint256 nftTokenId,address pool,address tokenA,address tokenB,uint256 liqToRemove,uint256 minAmountA,uint256 minAmountB,uint256 expiration)')
 TRANSFER_TYPE_HASH: constant(bytes32) = keccak256('Transfer(address userWallet,address recipient,uint256 amount,address asset,uint256 expiration)')
 ETH_TO_WETH_TYPE_HASH: constant(bytes32) = keccak256('EthToWeth(address userWallet,uint256 amount,uint256 depositLegoId,address depositVault,uint256 expiration)')
-WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(address userWallet,uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultToken,uint256 expiration)')
+WETH_TO_ETH_TYPE_HASH: constant(bytes32) = keccak256('WethToEth(address userWallet,uint256 amount,address recipient,uint256 withdrawLegoId,address withdrawVaultAddr,bool hasWithdrawVaultToken,uint256 expiration)')
 CLAIM_REWARDS_TYPE_HASH: constant(bytes32) = keccak256('ClaimRewards(address userWallet,uint256 legoId,address market,address rewardToken,uint256 rewardAmount,bytes32 proof,uint256 expiration)')
 BORROW_TYPE_HASH: constant(bytes32) = keccak256('Borrow(address userWallet,uint256 legoId,address borrowAsset,uint256 amount,uint256 expiration)')
 REPAY_TYPE_HASH: constant(bytes32) = keccak256('Repay(address userWallet,uint256 legoId,address paymentAsset,uint256 paymentAmount,uint256 expiration)')
@@ -154,15 +155,16 @@ def withdrawTokens(
     _userWallet: address,
     _legoId: uint256,
     _asset: address,
-    _vaultToken: address,
-    _vaultTokenAmount: uint256 = max_value(uint256),
+    _vaultAddr: address,
+    _withdrawAmount: uint256 = max_value(uint256),
+    _hasVaultToken: bool = True,
     _sig: Signature = empty(Signature),
 ) -> (uint256, uint256, uint256):
     owner: address = own.owner
     if msg.sender != owner:
-        self._isValidSignature(abi_encode(WITHDRAWAL_TYPE_HASH, _userWallet, _legoId, _asset, _vaultToken, _vaultTokenAmount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(WITHDRAWAL_TYPE_HASH, _userWallet, _legoId, _asset, _vaultAddr, _withdrawAmount, _hasVaultToken, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
-    return extcall UserWalletInterface(_userWallet).withdrawTokens(_legoId, _asset, _vaultToken, _vaultTokenAmount)
+    return extcall UserWalletInterface(_userWallet).withdrawTokens(_legoId, _asset, _vaultAddr, _withdrawAmount, _hasVaultToken)
 
 
 #############
@@ -176,17 +178,18 @@ def rebalance(
     _userWallet: address,
     _fromLegoId: uint256,
     _fromAsset: address,
-    _fromVaultToken: address,
+    _fromVaultAddr: address,
     _toLegoId: uint256,
-    _toVault: address,
-    _fromVaultTokenAmount: uint256 = max_value(uint256),
+    _toVaultAddr: address,
+    _fromVaultAmount: uint256 = max_value(uint256),
+    _hasFromVaultToken: bool = True,
     _sig: Signature = empty(Signature),
 ) -> (uint256, address, uint256, uint256):
     owner: address = own.owner
     if msg.sender != owner:
-        self._isValidSignature(abi_encode(REBALANCE_TYPE_HASH, _userWallet, _fromLegoId, _fromAsset, _fromVaultToken, _toLegoId, _toVault, _fromVaultTokenAmount, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(REBALANCE_TYPE_HASH, _userWallet, _fromLegoId, _fromAsset, _fromVaultAddr, _toLegoId, _toVaultAddr, _fromVaultAmount, _hasFromVaultToken, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
-    return extcall UserWalletInterface(_userWallet).rebalance(_fromLegoId, _fromAsset, _fromVaultToken, _toLegoId, _toVault, _fromVaultTokenAmount)
+    return extcall UserWalletInterface(_userWallet).rebalance(_fromLegoId, _fromAsset, _fromVaultAddr, _toLegoId, _toVaultAddr, _fromVaultAmount, _hasFromVaultToken)
 
 
 ########
@@ -465,14 +468,15 @@ def convertWethToEth(
     _amount: uint256 = max_value(uint256),
     _recipient: address = empty(address),
     _withdrawLegoId: uint256 = 0,
-    _withdrawVaultToken: address = empty(address),
+    _withdrawVaultAddr: address = empty(address),
+    _hasWithdrawVaultToken: bool = True,
     _sig: Signature = empty(Signature),
 ) -> uint256:
     owner: address = own.owner
     if msg.sender != owner:
-        self._isValidSignature(abi_encode(WETH_TO_ETH_TYPE_HASH, _userWallet, _amount, _recipient, _withdrawLegoId, _withdrawVaultToken, _sig.expiration), _sig)
+        self._isValidSignature(abi_encode(WETH_TO_ETH_TYPE_HASH, _userWallet, _amount, _recipient, _withdrawLegoId, _withdrawVaultAddr, _hasWithdrawVaultToken, _sig.expiration), _sig)
         assert _sig.signer == owner # dev: invalid signer
-    return extcall UserWalletInterface(_userWallet).convertWethToEth(_amount, _recipient, _withdrawLegoId, _withdrawVaultToken)
+    return extcall UserWalletInterface(_userWallet).convertWethToEth(_amount, _recipient, _withdrawLegoId, _withdrawVaultAddr, _hasWithdrawVaultToken)
 
 
 #################
@@ -519,14 +523,14 @@ def performBatchActions(
             amount: uint256 = i.amount
             if i.usePrevAmountOut and prevAmountReceived != 0:
                 amount = prevAmountReceived
-            prevAmountReceived, naValueA, naValueB = extcall UserWalletInterface(_userWallet).withdrawTokens(i.legoId, i.asset, i.vault, amount)
+            prevAmountReceived, naValueA, naValueB = extcall UserWalletInterface(_userWallet).withdrawTokens(i.legoId, i.asset, i.vault, amount, i.hasVaultToken)
 
         # rebalance
         elif i.action == ActionType.REBALANCE:
             amount: uint256 = i.amount
             if i.usePrevAmountOut and prevAmountReceived != 0:
                 amount = prevAmountReceived
-            naValueA, naAddyA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).rebalance(i.legoId, i.asset, i.vault, i.altLegoId, i.altVault, amount)
+            naValueA, naAddyA, prevAmountReceived, naValueB = extcall UserWalletInterface(_userWallet).rebalance(i.legoId, i.asset, i.vault, i.altLegoId, i.altVault, amount, i.hasVaultToken)
 
         # swap
         elif i.action == ActionType.SWAP:
@@ -580,7 +584,7 @@ def performBatchActions(
             if i.usePrevAmountOut and prevAmountReceived != 0:
                 amount = prevAmountReceived
             if i.isWethToEthConversion:
-                prevAmountReceived = extcall UserWalletInterface(_userWallet).convertWethToEth(amount, i.recipient, i.legoId, i.vault)
+                prevAmountReceived = extcall UserWalletInterface(_userWallet).convertWethToEth(amount, i.recipient, i.legoId, i.vault, i.hasVaultToken)
             else:
                 prevAmountReceived, naAddyA, naValueB = extcall UserWalletInterface(_userWallet).convertEthToWeth(amount, i.legoId, i.vault)
                 if naValueB != 0:
@@ -591,7 +595,7 @@ def performBatchActions(
 
 @view
 @internal
-def _encodeBatchActionInstruction(_instr: ActionInstruction) -> Bytes[3552]:
+def _encodeBatchActionInstruction(_instr: ActionInstruction) -> Bytes[3584]:
     encodedSwapInstructions: Bytes[2720] = self._encodeSwapInstructions(_instr.swapInstructions)
 
     # Just encode, no hash
@@ -620,7 +624,8 @@ def _encodeBatchActionInstruction(_instr: ActionInstruction) -> Bytes[3552]:
         _instr.liqToRemove,
         _instr.recipient,
         _instr.isWethToEthConversion,
-        encodedSwapInstructions
+        encodedSwapInstructions,
+        _instr.hasVaultToken,
     )
 
 

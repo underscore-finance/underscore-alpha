@@ -47,6 +47,7 @@ def createActionInstruction():
         _recipient=ZERO_ADDRESS,
         _isWethToEthConversion=False,
         _swapInstructions=[],
+        _hasVaultToken=True,
     ):
         return (
             _usePrevAmountOut,
@@ -73,6 +74,7 @@ def createActionInstruction():
             _recipient,
             _isWethToEthConversion,
             _swapInstructions,
+            _hasVaultToken,
         )
 
     yield createActionInstruction
@@ -172,8 +174,9 @@ def signWithdrawal(special_agent_signer):
         _userWallet,
         _lego_id,
         _asset,
-        _vaultToken,
-        _vaultTokenAmount,
+        _vaultAddr,
+        _withdrawAmount,
+        _hasVaultToken=True,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -189,8 +192,9 @@ def signWithdrawal(special_agent_signer):
                     {"name": "userWallet", "type": "address"},
                     {"name": "legoId", "type": "uint256"},
                     {"name": "asset", "type": "address"},
-                    {"name": "vaultToken", "type": "address"},
-                    {"name": "vaultTokenAmount", "type": "uint256"},
+                    {"name": "vaultAddr", "type": "address"},
+                    {"name": "withdrawAmount", "type": "uint256"},
+                    {"name": "hasVaultToken", "type": "bool"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
@@ -198,8 +202,9 @@ def signWithdrawal(special_agent_signer):
                 "userWallet": _userWallet.address,
                 "legoId": _lego_id,
                 "asset": _asset,
-                "vaultToken": _vaultToken,
-                "vaultTokenAmount": _vaultTokenAmount,
+                "vaultAddr": _vaultAddr,
+                "withdrawAmount": _withdrawAmount,
+                "hasVaultToken": _hasVaultToken,
                 "expiration": _expiration,
             }
         }
@@ -214,10 +219,11 @@ def signRebalance(special_agent_signer):
         _userWallet,
         _fromLegoId,
         _fromAsset,
-        _fromVaultToken,
+        _fromVaultAddr,
         _toLegoId,
         _toVault,
-        _fromVaultTokenAmount,
+        _fromVaultAmount,
+        _hasFromVaultToken=True,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -233,10 +239,11 @@ def signRebalance(special_agent_signer):
                     {"name": "userWallet", "type": "address"},
                     {"name": "fromLegoId", "type": "uint256"},
                     {"name": "fromAsset", "type": "address"},
-                    {"name": "fromVaultToken", "type": "address"},
+                    {"name": "fromVaultAddr", "type": "address"},
                     {"name": "toLegoId", "type": "uint256"},
-                    {"name": "toVault", "type": "address"},
-                    {"name": "fromVaultTokenAmount", "type": "uint256"},
+                    {"name": "toVaultAddr", "type": "address"},
+                    {"name": "fromVaultAmount", "type": "uint256"},
+                    {"name": "hasFromVaultToken", "type": "bool"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
@@ -244,10 +251,11 @@ def signRebalance(special_agent_signer):
                 "userWallet": _userWallet.address,
                 "fromLegoId": _fromLegoId,
                 "fromAsset": _fromAsset,
-                "fromVaultToken": _fromVaultToken,
+                "fromVaultAddr": _fromVaultAddr,
                 "toLegoId": _toLegoId,
-                "toVault": _toVault,
-                "fromVaultTokenAmount": _fromVaultTokenAmount,
+                "toVaultAddr": _toVault,
+                "fromVaultAmount": _fromVaultAmount,
+                "hasFromVaultToken": _hasFromVaultToken,
                 "expiration": _expiration,
             }
         }
@@ -482,7 +490,8 @@ def signWethToEth(special_agent_signer):
         _amount,
         _recipient,
         _withdrawLegoId,
-        _withdrawVaultToken,
+        _withdrawVaultAddr,
+        _hasWithdrawVaultToken=True,
         _expiration=boa.env.evm.patch.timestamp + 60,  # 1 minute
     ):
         # the data to be signed
@@ -499,7 +508,8 @@ def signWethToEth(special_agent_signer):
                     {"name": "amount", "type": "uint256"},
                     {"name": "recipient", "type": "address"},
                     {"name": "withdrawLegoId", "type": "uint256"},
-                    {"name": "withdrawVaultToken", "type": "address"},
+                    {"name": "withdrawVaultAddr", "type": "address"},
+                    {"name": "hasWithdrawVaultToken", "type": "bool"},
                     {"name": "expiration", "type": "uint256"},
                 ],
             },
@@ -508,7 +518,8 @@ def signWethToEth(special_agent_signer):
                 "amount": _amount,
                 "recipient": _recipient,
                 "withdrawLegoId": _withdrawLegoId,
-                "withdrawVaultToken": _withdrawVaultToken,
+                "withdrawVaultAddr": _withdrawVaultAddr,
+                "hasWithdrawVaultToken": _hasWithdrawVaultToken,
                 "expiration": _expiration,
             }
         }
