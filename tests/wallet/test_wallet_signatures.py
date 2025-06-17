@@ -207,10 +207,10 @@ def test_weth_to_eth_with_signature(special_ai_wallet, getTokenAndWhale, special
     weth.transfer(special_ai_wallet, weth_amount, sender=weth_token_whale)
 
     # signature
-    signature = signWethToEth(special_agent, special_ai_wallet, weth_amount, ZERO_ADDRESS, 0, ZERO_ADDRESS)
+    signature = signWethToEth(special_agent, special_ai_wallet, weth_amount, ZERO_ADDRESS, 0, ZERO_ADDRESS, True)
 
     # weth to eth
-    special_agent.convertWethToEth(special_ai_wallet, weth_amount, ZERO_ADDRESS, 0, ZERO_ADDRESS, signature, sender=broadcaster)
+    special_agent.convertWethToEth(special_ai_wallet, weth_amount, ZERO_ADDRESS, 0, ZERO_ADDRESS, True, signature, sender=broadcaster)
     
     log = filter_logs(special_agent, "UserWalletWethConvertedToEth")[0]
     assert log.signer == special_agent.address
