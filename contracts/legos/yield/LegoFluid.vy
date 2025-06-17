@@ -31,6 +31,9 @@ interface OracleRegistry:
 interface FluidLendingResolver:
     def getAllFTokens() -> DynArray[address, MAX_FTOKENS]: view
 
+interface LegoRegistry:
+    def addRipeSnapshot(_asset: address): nonpayable
+
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
 
@@ -269,6 +272,9 @@ def depositTokens(
         assert extcall IERC20(_asset).transfer(msg.sender, refundAssetAmount, default_return_value=True) # dev: transfer failed
         depositAmount -= refundAssetAmount
 
+    # add price snapshot
+    self._addPriceSnapshot(_asset)
+
     usdValue: uint256 = self._getUsdValue(_asset, depositAmount, _oracleRegistry)
     log FluidDeposit(sender=msg.sender, asset=_asset, vaultToken=_vault, assetAmountDeposited=depositAmount, usdValue=usdValue, vaultTokenAmountReceived=vaultTokenAmountReceived, recipient=_recipient)
     return depositAmount, _vault, vaultTokenAmountReceived, refundAssetAmount, usdValue
@@ -310,6 +316,9 @@ def withdrawTokens(
         refundVaultTokenAmount = currentLegoVaultBalance - preLegoVaultBalance
         assert extcall IERC20(_vaultToken).transfer(msg.sender, refundVaultTokenAmount, default_return_value=True) # dev: transfer failed
         vaultTokenAmount -= refundVaultTokenAmount
+
+    # add price snapshot
+    self._addPriceSnapshot(_asset)
 
     usdValue: uint256 = self._getUsdValue(_asset, assetAmountReceived, _oracleRegistry)
     log FluidWithdrawal(sender=msg.sender, asset=_asset, vaultToken=_vaultToken, assetAmountReceived=assetAmountReceived, usdValue=usdValue, vaultTokenAmountBurned=vaultTokenAmount, recipient=_recipient)
@@ -402,3 +411,14 @@ def activate(_shouldActivate: bool):
     assert gov._canGovern(msg.sender) # dev: no perms
     self.isActivated = _shouldActivate
     log FluidActivated(isActivated=_shouldActivate)
+
+
+##################
+# Price Snapshot #
+##################
+
+
+@internal
+def _addPriceSnapshot(_asset: address):
+    legoRegistry: address = staticcall AddyRegistry(ADDY_REGISTRY).getAddy(2)
+    extcall LegoRegistry(legoRegistry).addRipeSnapshot(_asset)

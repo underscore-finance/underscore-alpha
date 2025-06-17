@@ -15,6 +15,12 @@ from ethereum.ercs import IERC20
 from interfaces import LegoYield
 from interfaces import LegoCommon
 
+interface RipePriceDesk:
+    def addPriceSnapshot(_asset: address) -> bool: nonpayable
+
+interface RipeRegistry:
+    def getAddr(_regId: uint256) -> address: view
+
 flag LegoType:
     YIELD_OPP
     DEX
@@ -27,14 +33,20 @@ struct VaultTokenInfo:
 event LegoHelperSet:
     helperAddr: indexed(address)
 
+event RipeHqSet:
+    ripeHq: indexed(address)
+
 # lego types
 pendingLegoType: public(HashMap[address, LegoType]) # addr -> pending lego type
 legoIdToType: public(HashMap[uint256, LegoType]) # legoId -> lego type
 
 legoHelper: public(address)
+ripeHq: public(address)
 
 MAX_VAULTS: constant(uint256) = 15
 MAX_VAULTS_FOR_USER: constant(uint256) = 30
+RIPE_PRICE_DESK_ID: constant(uint256) = 7
+
 
 
 @deploy
@@ -518,3 +530,47 @@ def setLegoHelper(_helperAddr: address) -> bool:
     log LegoHelperSet(helperAddr=_helperAddr)
     return True
 
+
+#############################
+# Ripe Hq - Price Snapshots #
+#############################
+
+
+@view
+@external 
+def isValidRipeHq(_ripeHq: address) -> bool:
+    return self._isValidRipeHq(_ripeHq)
+
+
+@view
+@internal 
+def _isValidRipeHq(_ripeHq: address) -> bool:
+    if not _ripeHq.is_contract or _ripeHq == empty(address):
+        return False
+    return _ripeHq != self.ripeHq
+
+
+@external
+def setRipeHq(_ripeHq: address) -> bool:
+    assert gov._canGovern(msg.sender) # dev: no perms
+
+    if not self._isValidRipeHq(_ripeHq):
+        return False
+    self.ripeHq = _ripeHq
+    log RipeHqSet(ripeHq=_ripeHq)
+    return True
+
+
+@external
+def addRipeSnapshot(_asset: address):
+    assert registry._isValidAddyAddr(msg.sender) # dev: no perms
+
+    ripeHq: address = self.ripeHq
+    if ripeHq == empty(address):
+        return
+
+    priceDesk: address = staticcall RipeRegistry(ripeHq).getAddr(RIPE_PRICE_DESK_ID)
+    if priceDesk == empty(address):
+        return
+
+    extcall RipePriceDesk(priceDesk).addPriceSnapshot(_asset)
