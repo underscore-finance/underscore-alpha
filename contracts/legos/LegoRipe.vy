@@ -18,9 +18,8 @@ interface RipeTeller:
     def deposit(_asset: address, _amount: uint256 = max_value(uint256), _user: address = msg.sender, _vaultAddr: address = empty(address), _vaultId: uint256 = 0) -> uint256: nonpayable
     def withdraw(_asset: address, _amount: uint256 = max_value(uint256), _user: address = msg.sender, _vaultAddr: address = empty(address), _vaultId: uint256 = 0) -> uint256: nonpayable
     def repay(_paymentAmount: uint256 = max_value(uint256), _user: address = msg.sender, _isPaymentSavingsGreen: bool = False, _shouldRefundSavingsGreen: bool = True) -> bool: nonpayable
-    def borrow(_greenAmount: uint256 = max_value(uint256), _user: address = msg.sender, _wantsSavingsGreen: bool = True) -> uint256: nonpayable
+    def borrow(_greenAmount: uint256 = max_value(uint256), _user: address = msg.sender, _wantsSavingsGreen: bool = True, _shouldEnterStabPool: bool = True) -> uint256: nonpayable
     def claimLoot(_user: address = msg.sender, _shouldStake: bool = True) -> uint256: nonpayable
-    def doesUndyLegoHaveAccess(_wallet: address, _legoAddr: address) -> bool: view
 
 interface RipeRegistry:
     def getAddr(_regId: uint256) -> address: view
@@ -29,6 +28,9 @@ interface RipeRegistry:
 
 interface OracleRegistry:
     def getUsdValue(_asset: address, _amount: uint256, _shouldRaise: bool = False) -> uint256: view
+
+interface RipeMissionControl:
+    def doesUndyLegoHaveAccess(_wallet: address, _legoAddr: address) -> bool: view
 
 interface AddyRegistry:
     def getAddy(_addyId: uint256) -> address: view
@@ -66,8 +68,9 @@ event UnderscoreActivated:
 legoId: public(uint256)
 isActivated: public(bool)
 ADDY_REGISTRY: public(immutable(address))
-
 RIPE_REGISTRY: public(immutable(address))
+
+RIPE_MISSION_CONTROL_ID: constant(uint256) = 5
 RIPE_LOOTBOX_ID: constant(uint256) = 16
 RIPE_TELLER_ID: constant(uint256) = 17
 
@@ -92,10 +95,14 @@ def getRegistries() -> DynArray[address, 10]:
 @view
 @external
 def getAccessForLego(_user: address) -> (address, String[64], uint256):
-    teller: address = staticcall RipeRegistry(RIPE_REGISTRY).getAddr(RIPE_TELLER_ID)
-    if staticcall RipeTeller(teller).doesUndyLegoHaveAccess(_user, self):
+    ripeHq: address = RIPE_REGISTRY
+
+    mc: address = staticcall RipeRegistry(ripeHq).getAddr(RIPE_MISSION_CONTROL_ID)
+    if staticcall RipeMissionControl(mc).doesUndyLegoHaveAccess(_user, self):
         return empty(address), empty(String[64]), 0
+
     else:
+        teller: address = staticcall RipeRegistry(ripeHq).getAddr(RIPE_TELLER_ID)
         return teller, LEGO_ACCESS_ABI, 1
 
 
@@ -191,7 +198,7 @@ def borrow(
 
     ripeHq: address = RIPE_REGISTRY
     teller: address = staticcall RipeRegistry(ripeHq).getAddr(RIPE_TELLER_ID)
-    borrowAmount: uint256 = extcall RipeTeller(teller).borrow(_amount, _recipient, True)
+    borrowAmount: uint256 = extcall RipeTeller(teller).borrow(_amount, _recipient, False, False)
     assert borrowAmount != 0 # dev: no borrow amount received
     return staticcall RipeRegistry(ripeHq).greenToken(), borrowAmount, borrowAmount
 
