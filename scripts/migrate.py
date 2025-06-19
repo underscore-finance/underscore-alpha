@@ -235,8 +235,8 @@ def cli(
     log.h2("Running migrations...")
 
     migrations = MigrationRunner(
-        MIGRATION_SCRIPTS_DIR,
-        f"{MIGRATION_HISTORY_DIR}/{environment}",
+        f"{MIGRATION_SCRIPTS_DIR}/{chain}",
+        f"{MIGRATION_HISTORY_DIR}/{chain}/{environment}",
         vyper_files
     )
 

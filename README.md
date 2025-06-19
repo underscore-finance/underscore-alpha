@@ -196,3 +196,21 @@ For detailed information about which directories and files are covered by each l
 | LegoCurve          | [0x6118D44763a556Cf8d113ebBce853E14a0C67997](https://basescan.org/address/0x6118D44763a556Cf8d113ebBce853E14a0C67997) |
 | LegoUniswapV2      | [0x9973e271Bd6cAb8Ce1CAEaBAB8a1bEbcB6EdD535](https://basescan.org/address/0x9973e271Bd6cAb8Ce1CAEaBAB8a1bEbcB6EdD535) |
 | LegoUniswapV3      | [0x6bfd82031a968685358DA84ebB797c3C068EC704](https://basescan.org/address/0x6bfd82031a968685358DA84ebB797c3C068EC704) |
+
+### Base Sepolia
+
+| Core Contracts           |                                                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| AddyRegistry             | [0xa89a59E14333187829528C50eBAaE6EC12Bae95d](https://sepolia.basescan.org/address/0xa89a59E14333187829528C50eBAaE6EC12Bae95d) |
+| AgentFactory             | [0x50d08c554b0F7F4784B7108103e586eccb522b8E](https://sepolia.basescan.org/address/0x50d08c554b0F7F4784B7108103e586eccb522b8E) |
+| UserWalletTemplate       | [0x5081a0ff1F3518aE7D3c6E5106CC820EB5d472a5](https://sepolia.basescan.org/address/0x5081a0ff1F3518aE7D3c6E5106CC820EB5d472a5) |
+| UserWalletConfigTemplate | [0xC12152418FDF2daE2A45C3D07AdFf9f6f1249BbA](https://sepolia.basescan.org/address/0xC12152418FDF2daE2A45C3D07AdFf9f6f1249BbA) |
+| AgentTemplate            | [0xfd1255e086b0E045EfBFa9E3e99aE9A450BDc486](https://sepolia.basescan.org/address/0xfd1255e086b0E045EfBFa9E3e99aE9A450BDc486) |
+| LegoRegistry             | [0xf6a8bE55c84b94Fe071575EF52F095A23c282eea](https://sepolia.basescan.org/address/0xf6a8bE55c84b94Fe071575EF52F095A23c282eea) |
+| OracleRegistry           | [0x2c794b3864480fAfF791cD46400E061f818cE42f](https://sepolia.basescan.org/address/0x2c794b3864480fAfF791cD46400E061f818cE42f) |
+| PriceSheets              | [0x155d0ECd672D7a1050d34eC0a1006d67823C3123](https://sepolia.basescan.org/address/0x155d0ECd672D7a1050d34eC0a1006d67823C3123) |
+| LegoHelper               | [0x98dD9D8591D826E285052f23F450c8d702f07a18](https://sepolia.basescan.org/address/0x98dD9D8591D826E285052f23F450c8d702f07a18) |
+
+| Yield Legos |                                                                                                                               |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| MockLego    | [0x81f44b04Ff47140f8d30e9925259788cB18bC76f](https://sepolia.basescan.org/address/0x81f44b04Ff47140f8d30e9925259788cB18bC76f) |
