@@ -1,6 +1,3 @@
-# SPDX-License-Identifier: BUSL-1.1
-# Underscore Protocol License: https://github.com/underscore-finance/underscore/blob/main/licenses/BUSL_LICENSE
-# Underscore Protocol (C) 2025 Hightop Financial, Inc.
 # @version 0.4.1
 # pragma optimize codesize
 
@@ -13,6 +10,20 @@ from interfaces import UserWalletInterface
 
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC721
+
+interface LegoPartner:
+    def addLiquidityConcentrated(_nftTokenId: uint256, _pool: address, _tokenA: address, _tokenB: address, _tickLower: int24, _tickUpper: int24, _amountA: uint256, _amountB: uint256, _minAmountA: uint256, _minAmountB: uint256, _recipient: address) -> (uint256, uint256, uint256, uint256): nonpayable
+    def addLiquidity(_pool: address, _tokenA: address, _tokenB: address, _amountA: uint256, _amountB: uint256, _minAmountA: uint256, _minAmountB: uint256, _minLpAmount: uint256, _recipient: address) -> (address, uint256, uint256, uint256): nonpayable
+    def removeLiquidityConcentrated(_nftTokenId: uint256, _pool: address, _tokenA: address, _tokenB: address, _liqToRemove: uint256, _minAmountA: uint256, _minAmountB: uint256, _recipient: address) -> (uint256, uint256, uint256, bool): nonpayable
+    def removeLiquidity(_pool: address, _tokenA: address, _tokenB: address, _lpToken: address, _lpAmount: uint256, _minAmountA: uint256, _minAmountB: uint256, _recipient: address) -> (uint256, uint256, uint256): nonpayable
+    def swapTokens(_amountIn: uint256, _minAmountOut: uint256, _tokenPath: DynArray[address, MAX_TOKEN_PATH], _poolPath: DynArray[address, MAX_TOKEN_PATH - 1], _recipient: address) -> (uint256, uint256): nonpayable
+    def repayDebt(_paymentAsset: address, _paymentAmount: uint256, _extraAddr: address, _extraVal: uint256, _recipient: address) -> uint256: nonpayable
+    def borrow(_borrowAsset: address, _amount: uint256, _extraAddr: address, _extraVal: uint256, _recipient: address) -> (address, uint256): nonpayable
+    def removeCollateral(_asset: address, _amount: uint256, _extraAddr: address, _extraVal: uint256, _recipient: address) -> uint256: nonpayable
+    def depositForYield(_asset: address, _amount: uint256, _vaultAddr: address, _recipient: address) -> (uint256, address, uint256): nonpayable
+    def addCollateral(_asset: address, _amount: uint256, _extraAddr: address, _extraVal: uint256, _recipient: address) -> uint256: nonpayable
+    def withdrawFromYield(_vaultToken: address, _amount: uint256, _recipient: address) -> (uint256, address, uint256): nonpayable
+    def getAccessForLego(_user: address) -> (address, String[64], uint256): view
 
 interface WalletConfig:
     def finishMigrationIn(_whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST], _assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS], _vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS]) -> bool: nonpayable
@@ -36,16 +47,6 @@ interface LegoRegistry:
     def getUnderlyingAsset(_vaultToken: address) -> address: view
     def getLegoAddr(_legoId: uint256) -> address: view
     def isBorrowLego(_legoId: uint256) -> bool: view
-
-interface LegoPartner:
-    def swapTokens(_amountIn: uint256, _minAmountOut: uint256, _tokenPath: DynArray[address, MAX_TOKEN_PATH], _poolPath: DynArray[address, MAX_TOKEN_PATH - 1], _recipient: address) -> (uint256, uint256): nonpayable
-    def depositForYield(_asset: address, _amount: uint256, _vaultAddr: address, _recipient: address) -> (uint256, address, uint256): nonpayable
-    def repayDebt(_paymentAsset: address, _paymentAmount: uint256, _extraAddr: address, _recipient: address) -> uint256: nonpayable
-    def borrow(_borrowAsset: address, _amount: uint256, _extraAddr: address, _recipient: address) -> (address, uint256): nonpayable
-    def removeCollateral(_asset: address, _amount: uint256, _extraAddr: address, _recipient: address) -> uint256: nonpayable
-    def withdrawFromYield(_vaultToken: address, _amount: uint256, _recipient: address) -> (uint256, address, uint256): nonpayable
-    def addCollateral(_asset: address, _amount: uint256, _extraAddr: address, _recipient: address) -> uint256: nonpayable
-    def getAccessForLego(_user: address) -> (address, String[64], uint256): view
 
 interface AgentFactory:
     def payAmbassadorYieldBonus(_ambassador: address, _asset: address, _amount: uint256) -> bool: nonpayable
@@ -73,11 +74,11 @@ flag ActionType:
     EARN
     SWAP
     DEBT
+    LIQUIDITY
     WETH_WRAP
 
 struct CoreData:
     legoAddr: address
-    amount: uint256
     owner: address
     isSignerAgent: bool
     wallet: address
@@ -128,7 +129,7 @@ event YieldWithdrawal:
     signer: indexed(address)
     isSignerAgent: bool
         
-event SwapInstructionPerformed:
+event SwapPerformed:
     tokenIn: indexed(address)
     tokenInAmount: uint256
     tokenOut: indexed(address)
@@ -139,80 +140,113 @@ event SwapInstructionPerformed:
     signer: indexed(address)
     isSignerAgent: bool
 
-event AddCollateral:
+event CollateralAdded:
     asset: indexed(address)
-    assetDeposited: uint256
+    amountDeposited: uint256
     extraAddr: indexed(address)
+    extraVal: uint256
     legoId: uint256
     legoAddr: address
     signer: indexed(address)
     isSignerAgent: bool
 
-event RemoveCollateral:
+event CollateralRemoved:
     asset: indexed(address)
-    assetRemoved: uint256
+    amountRemoved: uint256
     extraAddr: indexed(address)
+    extraVal: uint256
     legoId: uint256
     legoAddr: address
     signer: indexed(address)
     isSignerAgent: bool
 
-event Borrow:
+event NewBorrow:
     borrowAsset: indexed(address)
     borrowAmount: uint256
+    extraAddr: indexed(address)
+    extraVal: uint256
     legoId: uint256
     legoAddr: address
     signer: indexed(address)
     isSignerAgent: bool
 
-event RepayDebt:
+event DebtRepayment:
     paymentAsset: indexed(address)
     repaidAmount: uint256
+    extraAddr: indexed(address)
+    extraVal: uint256
     legoId: uint256
     legoAddr: address
     signer: indexed(address)
     isSignerAgent: bool
 
-# event UserWalletRepayDebt:
-#     signer: indexed(address)
-#     paymentAsset: indexed(address)
-#     paymentAmount: uint256
-#     usdValue: uint256
-#     remainingDebt: uint256
-#     legoId: uint256
-#     legoAddr: indexed(address)
-#     isSignerAgent: bool
+event LiquidityAdded:
+    pool: indexed(address)
+    tokenA: indexed(address)
+    amountA: uint256
+    tokenB: indexed(address)
+    amountB: uint256
+    lpToken: address
+    lpAmountReceived: uint256
+    legoId: uint256
+    legoAddr: address
+    signer: address
+    isSignerAgent: bool
 
-# event UserWalletLiquidityAdded:
-#     signer: indexed(address)
-#     tokenA: indexed(address)
-#     tokenB: indexed(address)
-#     liqAmountA: uint256
-#     liqAmountB: uint256
-#     liquidityAdded: uint256
-#     pool: address
-#     usdValue: uint256
-#     refundAssetAmountA: uint256
-#     refundAssetAmountB: uint256
-#     nftTokenId: uint256
-#     legoId: uint256
-#     legoAddr: address
-#     isSignerAgent: bool
+event ConcentratedLiquidityAdded:
+    nftTokenId: uint256
+    pool: indexed(address)
+    tokenA: indexed(address)
+    amountA: uint256
+    tokenB: indexed(address)
+    amountB: uint256
+    liqAdded: uint256
+    legoId: uint256
+    legoAddr: address
+    signer: address
+    isSignerAgent: bool
 
-# event UserWalletLiquidityRemoved:
-#     signer: indexed(address)
-#     tokenA: indexed(address)
-#     tokenB: address
-#     removedAmountA: uint256
-#     removedAmountB: uint256
-#     usdValue: uint256
-#     isDepleted: bool
-#     liquidityRemoved: uint256
-#     lpToken: indexed(address)
-#     refundedLpAmount: uint256
-#     legoId: uint256
-#     legoAddr: address
-#     isSignerAgent: bool
+event LiquidityRemoved:
+    pool: indexed(address)
+    tokenA: indexed(address)
+    amountAReceived: uint256
+    tokenB: indexed(address)
+    amountBReceived: uint256
+    lpToken: address
+    lpAmountBurned: uint256
+    legoId: uint256
+    legoAddr: address
+    signer: address
+    isSignerAgent: bool
+
+event ConcentratedLiquidityRemoved:
+    nftTokenId: uint256
+    pool: indexed(address)
+    tokenA: indexed(address)
+    amountAReceived: uint256
+    tokenB: indexed(address)
+    amountBReceived: uint256
+    liqRemoved: uint256
+    legoId: uint256
+    legoAddr: address
+    signer: address
+    isSignerAgent: bool
+
+event UserWalletLiquidityAdded:
+    signer: indexed(address)
+    tokenA: indexed(address)
+    tokenB: indexed(address)
+    liqAmountA: uint256
+    liqAmountB: uint256
+    liquidityAdded: uint256
+    pool: address
+    usdValue: uint256
+    refundAssetAmountA: uint256
+    refundAssetAmountB: uint256
+    nftTokenId: uint256
+    legoId: uint256
+    legoAddr: address
+    isSignerAgent: bool
 
 # event UserWalletFundsTransferred:
 #     signer: indexed(address)
@@ -246,12 +280,6 @@ event WethUnwrapped:
     signer: indexed(address)
     isSignerAgent: bool
 
-# event UserWalletWethConvertedToEth:
-#     signer: indexed(address)
-#     amount: uint256
-#     weth: indexed(address)
-#     isSignerAgent: bool
-
 event UserWalletSubscriptionPaid:
     recipient: indexed(address)
     asset: indexed(address)
@@ -269,15 +297,15 @@ event UserWalletTransactionFeePaid:
     fee: uint256
     action: ActionType
 
-# event UserWalletTrialFundsRecovered:
-#     asset: indexed(address)
-#     amountRecovered: uint256
-#     remainingAmount: uint256
+event UserWalletTrialFundsRecovered:
+    asset: indexed(address)
+    amountRecovered: uint256
+    remainingAmount: uint256
 
-# event UserWalletNftRecovered:
-#     collection: indexed(address)
-#     nftTokenId: uint256
-#     owner: indexed(address)
+event UserWalletNftRecovered:
+    collection: indexed(address)
+    nftTokenId: uint256
+    owner: indexed(address)
 
 # core 
 walletConfig: public(address)
@@ -368,9 +396,9 @@ def depositForYield(
     _vaultAddr: address = empty(address),
     _amount: uint256 = max_value(uint256),
 ) -> (uint256, address, uint256):
-    cd: CoreData = self._getCoreData(_legoId, _asset, _amount, True)
+    cd: CoreData = self._getCoreData(_legoId)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.EARN, [_asset], [_legoId], cd)
-    return self._depositForYield(_legoId, _asset, _vaultAddr, cd.amount, msg.sender, True, cd)
+    return self._depositForYield(_legoId, _asset, _vaultAddr, _amount, msg.sender, True, cd)
 
 
 @internal
@@ -383,11 +411,13 @@ def _depositForYield(
     _shouldPerformHousekeeping: bool,
     _cd: CoreData,
 ) -> (uint256, address, uint256):
+    amount: uint256 = self._getAmountAndApprove(_asset, _amount, _cd.legoAddr) # doing approval here
+
+    # deposit for yield
     assetAmount: uint256 = 0
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
-    assert extcall IERC20(_asset).approve(_cd.legoAddr, _amount, default_return_value=True) # dev: approval failed
-    assetAmount, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(_cd.legoAddr).depositForYield(_asset, _amount, _vaultAddr, self)
+    assetAmount, vaultToken, vaultTokenAmountReceived = extcall LegoPartner(_cd.legoAddr).depositForYield(_asset, amount, _vaultAddr, self)
     assert extcall IERC20(_asset).approve(_cd.legoAddr, 0, default_return_value=True) # dev: approval failed
 
     if _shouldPerformHousekeeping:
@@ -417,9 +447,9 @@ def withdrawFromYield(
     _vaultToken: address,
     _amount: uint256 = max_value(uint256),
 ) -> (uint256, address, uint256):
-    cd: CoreData = self._getCoreData(_legoId, _vaultToken, _amount, True)
+    cd: CoreData = self._getCoreData(_legoId)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.EARN, [_vaultToken], [_legoId], cd)
-    return self._withdrawFromYield(_legoId, _vaultToken, cd.amount, msg.sender, True, cd)
+    return self._withdrawFromYield(_legoId, _vaultToken, _amount, msg.sender, True, cd)
 
 
 @internal
@@ -431,13 +461,16 @@ def _withdrawFromYield(
     _shouldPerformHousekeeping: bool,
     _cd: CoreData,
 ) -> (uint256, address, uint256):
-    vaultTokenAmountBurned: uint256 = 0
-    underlyingAsset: address = empty(address)
-    underlyingAmount: uint256 = 0
+    amount: uint256 = self._getAmountAndApprove(_vaultToken, _amount, empty(address)) # not approving here
 
     # some vault tokens require max value approval (comp v3)
     assert extcall IERC20(_vaultToken).approve(_cd.legoAddr, max_value(uint256), default_return_value=True) # dev: approval failed
-    vaultTokenAmountBurned, underlyingAsset, underlyingAmount = extcall LegoPartner(_cd.legoAddr).withdrawFromYield(_vaultToken, _amount, self)
+
+    # withdraw from yield
+    vaultTokenAmountBurned: uint256 = 0
+    underlyingAsset: address = empty(address)
+    underlyingAmount: uint256 = 0
+    vaultTokenAmountBurned, underlyingAsset, underlyingAmount = extcall LegoPartner(_cd.legoAddr).withdrawFromYield(_vaultToken, amount, self)
     assert extcall IERC20(_vaultToken).approve(_cd.legoAddr, 0, default_return_value=True) # dev: approval failed
 
     if _shouldPerformHousekeeping:
@@ -469,19 +502,20 @@ def rebalanceYieldPosition(
     _toVaultAddr: address = empty(address),
     _fromVaultAmount: uint256 = max_value(uint256),
 ) -> (uint256, address, uint256):
-    cd: CoreData = self._getCoreData(_fromLegoId, _fromVaultToken, _fromVaultAmount, True)
+    cd: CoreData = self._getCoreData(_fromLegoId)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.EARN, [_fromVaultToken], [_fromLegoId, _toLegoId], cd)
 
     # withdraw
     vaultTokenAmountBurned: uint256 = 0
     underlyingAsset: address = empty(address)
     underlyingAmount: uint256 = 0
-    vaultTokenAmountBurned, underlyingAsset, underlyingAmount = self._withdrawFromYield(_fromLegoId, _fromVaultToken, cd.amount, msg.sender, False, cd)
+    vaultTokenAmountBurned, underlyingAsset, underlyingAmount = self._withdrawFromYield(_fromLegoId, _fromVaultToken, _fromVaultAmount, msg.sender, False, cd)
 
     # deposit
     vaultToken: address = empty(address)
     vaultTokenAmountReceived: uint256 = 0
-    underlyingAmount, vaultToken, vaultTokenAmountReceived = self._depositForYield(_toLegoId, underlyingAsset, _toVaultAddr, min(underlyingAmount, staticcall IERC20(underlyingAsset).balanceOf(self)), msg.sender, False, cd)
+    cd.legoAddr = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_toLegoId)
+    underlyingAmount, vaultToken, vaultTokenAmountReceived = self._depositForYield(_toLegoId, underlyingAsset, _toVaultAddr, underlyingAmount, msg.sender, False, cd)
 
     # TODO: perform housekeeping
     # inputs: underlyingAsset, underlyingAmount, vaultToken, vaultTokenAmountReceived
@@ -498,13 +532,13 @@ def rebalanceYieldPosition(
 @external
 def swapTokens(_instructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]) -> (address, uint256, address, uint256):
     tokenIn: address = empty(address)
+    origAmountIn: uint256 = 0
     cd: CoreData = empty(CoreData)
-    tokenIn, cd = self._validateAndGetSwapInfo(_instructions, msg.sender)
+    tokenIn, origAmountIn, cd = self._validateAndGetSwapInfo(_instructions, msg.sender)
 
-    amountIn: uint256 = cd.amount
+    amountIn: uint256 = origAmountIn
     lastTokenOut: address = empty(address)
     lastTokenOutAmount: uint256 = 0
-
     for i: SwapInstruction in _instructions:
         if lastTokenOut != empty(address):
             newTokenIn: address = i.tokenPath[0]
@@ -519,7 +553,7 @@ def swapTokens(_instructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS]) 
     # TODO: perform housekeeping
     # inputs: tokenIn, amountIn, tokenOut, lastTokenOutAmount
 
-    return tokenIn, cd.amount, lastTokenOut, lastTokenOutAmount
+    return tokenIn, origAmountIn, lastTokenOut, lastTokenOutAmount
 
 
 @internal
@@ -542,7 +576,7 @@ def _performSwapInstruction(
     tokenInAmount, tokenOutAmount = extcall LegoPartner(legoAddr).swapTokens(_amountIn, _i.minAmountOut, _i.tokenPath, _i.poolPath, self)
     assert extcall IERC20(tokenIn).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
 
-    log SwapInstructionPerformed(
+    log SwapPerformed(
         tokenIn = tokenIn,
         tokenInAmount = tokenInAmount,
         tokenOut = tokenOut,
@@ -557,7 +591,7 @@ def _performSwapInstruction(
 
 
 @internal
-def _validateAndGetSwapInfo(_instructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS], _signer: address) -> (address, CoreData):
+def _validateAndGetSwapInfo(_instructions: DynArray[SwapInstruction, MAX_SWAP_INSTRUCTIONS], _signer: address) -> (address, uint256, CoreData):
     numSwapInstructions: uint256 = len(_instructions)
     assert numSwapInstructions != 0 # dev: no swaps
 
@@ -580,11 +614,11 @@ def _validateAndGetSwapInfo(_instructions: DynArray[SwapInstruction, MAX_SWAP_IN
         tokenOut = lastRoutePath[len(lastRoutePath) - 1]
 
     assert empty(address) not in [tokenIn, tokenOut] # dev: invalid token path
-    cd: CoreData = self._getCoreData(legoIds[0], tokenIn, _instructions[0].amountIn, True)
-
-    # check permissions / subscription data
+    cd: CoreData = self._getCoreData(0)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(_signer, ActionType.SWAP, [tokenIn, tokenOut], legoIds, cd)
-    return tokenIn, cd
+
+    amountIn: uint256 = self._getAmountAndApprove(tokenIn, _instructions[0].amountIn, empty(address)) # not approving here
+    return tokenIn, amountIn, cd
 
 
 ########
@@ -606,27 +640,30 @@ def addCollateral(
     _asset: address,
     _amount: uint256 = max_value(uint256),
     _extraAddr: address = empty(address),
+    _extraVal: uint256 = 0,
 ) -> uint256:
-    cd: CoreData = self._getCoreData(_legoId, _asset, _amount, True)
+    cd: CoreData = self._getCoreData(_legoId)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.DEBT, [_asset], [_legoId], cd)
 
-    assert extcall IERC20(_asset).approve(cd.legoAddr, cd.amount, default_return_value=True) # dev: approval failed
-    assetDeposited: uint256 = extcall LegoPartner(cd.legoAddr).addCollateral(_asset, cd.amount, _extraAddr, self)
+    # add collateral
+    amount: uint256 = self._getAmountAndApprove(_asset, _amount, cd.legoAddr) # doing approval here
+    amountDeposited: uint256 = extcall LegoPartner(cd.legoAddr).addCollateral(_asset, amount, _extraAddr, _extraVal, self)
     assert extcall IERC20(_asset).approve(cd.legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # TODO: perform housekeeping
-    # inputs: _asset, assetDeposited
+    # inputs: _asset, amountDeposited
 
-    log AddCollateral(
+    log CollateralAdded(
         asset = _asset,
-        assetDeposited = assetDeposited,
+        amountDeposited = amountDeposited,
         extraAddr = _extraAddr,
+        extraVal = _extraVal,
         legoId = _legoId,
         legoAddr = cd.legoAddr,
         signer = msg.sender,
         isSignerAgent = cd.isSignerAgent,
     )
-    return assetDeposited
+    return amountDeposited
 
 
 # remove collateral
@@ -639,24 +676,28 @@ def removeCollateral(
     _asset: address,
     _amount: uint256 = max_value(uint256),
     _extraAddr: address = empty(address),
+    _extraVal: uint256 = 0,
 ) -> uint256:
-    cd: CoreData = self._getCoreData(_legoId, _asset, _amount, False)
+    cd: CoreData = self._getCoreData(_legoId)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.DEBT, [_asset], [_legoId], cd)
-    assetRemoved: uint256 = extcall LegoPartner(cd.legoAddr).removeCollateral(_asset, cd.amount, _extraAddr, self)
+
+    # remove collateral
+    amountRemoved: uint256 = extcall LegoPartner(cd.legoAddr).removeCollateral(_asset, _amount, _extraAddr, _extraVal, self)
 
     # TODO: perform housekeeping
     # inputs: _asset, assetRemoved
 
-    log RemoveCollateral(
+    log CollateralRemoved(
         asset = _asset,
-        assetRemoved = assetRemoved,
+        amountRemoved = amountRemoved,
         extraAddr = _extraAddr,
+        extraVal = _extraVal,
         legoId = _legoId,
         legoAddr = cd.legoAddr,
         signer = msg.sender,
         isSignerAgent = cd.isSignerAgent,
     )
-    return assetRemoved
+    return amountRemoved
 
 
 # borrow
@@ -669,24 +710,28 @@ def borrow(
     _borrowAsset: address,
     _amount: uint256 = max_value(uint256),
     _extraAddr: address = empty(address),
+    _extraVal: uint256 = 0,
 ) -> (address, uint256):
-    cd: CoreData = self._getCoreData(_legoId, _borrowAsset, _amount, False)
+    cd: CoreData = self._getCoreData(_legoId)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.DEBT, [_borrowAsset], [_legoId], cd)
 
+    # borrow
     borrowAsset: address = empty(address)
     borrowAmount: uint256 = 0
-    borrowAsset, borrowAmount = extcall LegoPartner(cd.legoAddr).borrow(_borrowAsset, cd.amount, _extraAddr, self)
+    borrowAsset, borrowAmount = extcall LegoPartner(cd.legoAddr).borrow(_borrowAsset, _amount, _extraAddr, _extraVal, self)
 
     # TODO: perform housekeeping
     # inputs: borrowAsset, borrowAmount
 
-    log Borrow(
-        borrowAsset=borrowAsset,
-        borrowAmount=borrowAmount,
-        legoId=_legoId,
-        legoAddr=cd.legoAddr,
-        signer=msg.sender,
-        isSignerAgent=cd.isSignerAgent,
+    log NewBorrow(
+        borrowAsset = borrowAsset,
+        borrowAmount = borrowAmount,
+        extraAddr = _extraAddr,
+        extraVal = _extraVal,
+        legoId = _legoId,
+        legoAddr = cd.legoAddr,
+        signer = msg.sender,
+        isSignerAgent = cd.isSignerAgent,
     )
     return borrowAsset, borrowAmount
 
@@ -701,26 +746,247 @@ def repayDebt(
     _paymentAsset: address,
     _paymentAmount: uint256 = max_value(uint256),
     _extraAddr: address = empty(address),
+    _extraVal: uint256 = 0,
 ) -> uint256:
-    cd: CoreData = self._getCoreData(_legoId, _paymentAsset, _paymentAmount, True)
+    cd: CoreData = self._getCoreData(_legoId)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.DEBT, [_paymentAsset], [_legoId], cd)
 
-    assert extcall IERC20(_paymentAsset).approve(cd.legoAddr, cd.amount, default_return_value=True) # dev: approval failed
-    repaidAmount: uint256 = extcall LegoPartner(cd.legoAddr).repayDebt(_paymentAsset, cd.amount, _extraAddr, self)
+    amount: uint256 = self._getAmountAndApprove(_paymentAsset, _paymentAmount, cd.legoAddr) # doing approval here
+    repaidAmount: uint256 = extcall LegoPartner(cd.legoAddr).repayDebt(_paymentAsset, amount, _extraAddr, _extraVal, self)
     assert extcall IERC20(_paymentAsset).approve(cd.legoAddr, 0, default_return_value=True) # dev: approval failed
 
     # TODO: perform housekeeping
     # inputs: _paymentAsset, repaidAmount
 
-    log RepayDebt(
-        paymentAsset=_paymentAsset,
-        repaidAmount=repaidAmount,
-        legoId=_legoId,
-        legoAddr=cd.legoAddr,
-        signer=msg.sender,
-        isSignerAgent=cd.isSignerAgent,
+    log DebtRepayment(
+        paymentAsset = _paymentAsset,
+        repaidAmount = repaidAmount,
+        extraAddr = _extraAddr,
+        extraVal = _extraVal,
+        legoId = _legoId,
+        legoAddr = cd.legoAddr,
+        signer = msg.sender,
+        isSignerAgent = cd.isSignerAgent,
     )
     return repaidAmount
+
+
+#################
+# Add Liquidity #
+#################
+
+
+@nonreentrant
+@external
+def addLiquidity(
+    _legoId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256 = max_value(uint256),
+    _amountB: uint256 = max_value(uint256),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+    _minLpAmount: uint256 = 0,
+) -> (uint256, uint256, uint256):
+    cd: CoreData = self._getCoreData(_legoId)
+    cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.LIQUIDITY, [_tokenA, _tokenB], [_legoId], cd)
+
+    # token approvals
+    amountA: uint256 = self._getAmountAndApprove(_tokenA, _amountA, cd.legoAddr)
+    amountB: uint256 = self._getAmountAndApprove(_tokenB, _amountB, cd.legoAddr)
+
+    # add liquidity via lego partner
+    lpToken: address = empty(address)
+    lpAmountReceived: uint256 = 0
+    addedTokenA: uint256 = 0
+    addedTokenB: uint256 = 0
+    lpToken, lpAmountReceived, addedTokenA, addedTokenB = extcall LegoPartner(cd.legoAddr).addLiquidity(_pool, _tokenA, _tokenB, amountA, amountB, _minAmountA, _minAmountB, _minLpAmount, self)
+
+    # remove approvals
+    if amountA != 0:
+        assert extcall IERC20(_tokenA).approve(cd.legoAddr, 0, default_return_value=True) # dev: approval failed
+    if amountB != 0:
+        assert extcall IERC20(_tokenB).approve(cd.legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    # TODO: perform housekeeping
+    # inputs: _tokenA, _tokenB, addedTokenA, addedTokenB
+
+    log LiquidityAdded(
+        pool = _pool,
+        tokenA = _tokenA,
+        amountA = addedTokenA,
+        tokenB = _tokenB,
+        amountB = addedTokenB,
+        lpToken = lpToken,
+        lpAmountReceived = lpAmountReceived,
+        legoId = _legoId,
+        legoAddr = cd.legoAddr,
+        signer = msg.sender,
+        isSignerAgent = cd.isSignerAgent,
+    )
+    return lpAmountReceived, addedTokenA, addedTokenB
+
+
+@nonreentrant
+@external
+def addLiquidityConcentrated(
+    _legoId: uint256,
+    _nftAddr: address,
+    _nftTokenId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _amountA: uint256 = max_value(uint256),
+    _amountB: uint256 = max_value(uint256),
+    _tickLower: int24 = min_value(int24),
+    _tickUpper: int24 = max_value(int24),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+) -> (uint256, uint256, uint256, uint256):
+    cd: CoreData = self._getCoreData(_legoId)
+    cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.LIQUIDITY, [_tokenA, _tokenB], [_legoId], cd)
+
+    # token approvals
+    amountA: uint256 = self._getAmountAndApprove(_tokenA, _amountA, cd.legoAddr)
+    amountB: uint256 = self._getAmountAndApprove(_tokenB, _amountB, cd.legoAddr)
+
+    # transfer nft to lego (if applicable)
+    hasNftLiqPosition: bool = _nftAddr != empty(address) and _nftTokenId != 0
+    if hasNftLiqPosition:
+        extcall IERC721(_nftAddr).safeTransferFrom(self, cd.legoAddr, _nftTokenId, ERC721_RECEIVE_DATA)
+
+    # add liquidity via lego partner
+    liqAdded: uint256 = 0
+    addedTokenA: uint256 = 0
+    addedTokenB: uint256 = 0
+    nftTokenId: uint256 = 0
+    liqAdded, addedTokenA, addedTokenB, nftTokenId = extcall LegoPartner(cd.legoAddr).addLiquidityConcentrated(_nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, amountA, amountB, _minAmountA, _minAmountB, self)
+
+    # make sure nft is back
+    assert staticcall IERC721(_nftAddr).ownerOf(nftTokenId) == self # dev: nft not returned
+
+    # remove approvals
+    if amountA != 0:
+        assert extcall IERC20(_tokenA).approve(cd.legoAddr, 0, default_return_value=True) # dev: approval failed
+    if amountB != 0:
+        assert extcall IERC20(_tokenB).approve(cd.legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    # TODO: perform housekeeping
+    # inputs: _tokenA, _tokenB, addedTokenA, addedTokenB
+
+    log ConcentratedLiquidityAdded(
+        nftTokenId = nftTokenId,
+        pool = _pool,
+        tokenA = _tokenA,
+        amountA = addedTokenA,
+        tokenB = _tokenB,
+        amountB = addedTokenB,
+        liqAdded = liqAdded,
+        legoId = _legoId,
+        legoAddr = cd.legoAddr,
+        signer = msg.sender,
+        isSignerAgent = cd.isSignerAgent,
+    )
+    return liqAdded, addedTokenA, addedTokenB, nftTokenId
+
+
+####################
+# Remove Liquidity #
+####################
+
+
+@nonreentrant
+@external
+def removeLiquidity(
+    _legoId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _lpToken: address,
+    _lpAmount: uint256 = max_value(uint256),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+) -> (uint256, uint256, uint256):
+    cd: CoreData = self._getCoreData(_legoId)
+    cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.LIQUIDITY, [_tokenA, _tokenB], [_legoId], cd)
+
+    # remove liquidity via lego partner
+    amountAReceived: uint256 = 0
+    amountBReceived: uint256 = 0
+    lpAmountBurned: uint256 = 0
+    lpAmount: uint256 = self._getAmountAndApprove(_lpToken, _lpAmount, cd.legoAddr)
+    amountAReceived, amountBReceived, lpAmountBurned = extcall LegoPartner(cd.legoAddr).removeLiquidity(_pool, _tokenA, _tokenB, _lpToken, lpAmount, _minAmountA, _minAmountB, self)
+    assert extcall IERC20(_lpToken).approve(cd.legoAddr, 0, default_return_value=True) # dev: approval failed
+
+    # TODO: perform housekeeping
+    # inputs: _tokenA, _tokenB, amountAReceived, amountBReceived
+
+    log LiquidityRemoved(
+        pool = _pool,
+        tokenA = _tokenA,
+        amountAReceived = amountAReceived,
+        tokenB = _tokenB,
+        amountBReceived = amountBReceived,
+        lpToken = _lpToken,
+        lpAmountBurned = lpAmountBurned,
+        legoId = _legoId,
+        legoAddr = cd.legoAddr,
+        signer = msg.sender,
+        isSignerAgent = cd.isSignerAgent,
+    )
+    return amountAReceived, amountBReceived, lpAmountBurned
+
+
+@nonreentrant
+@external
+def removeLiquidityConcentrated(
+    _legoId: uint256,
+    _nftAddr: address,
+    _nftTokenId: uint256,
+    _pool: address,
+    _tokenA: address,
+    _tokenB: address,
+    _liqToRemove: uint256 = max_value(uint256),
+    _minAmountA: uint256 = 0,
+    _minAmountB: uint256 = 0,
+) -> (uint256, uint256, uint256, bool):
+    cd: CoreData = self._getCoreData(_legoId)
+    cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.LIQUIDITY, [_tokenA, _tokenB], [_legoId], cd)
+
+    # must have nft liq position
+    assert _nftAddr != empty(address) # dev: invalid nft addr
+    assert _nftTokenId != 0 # dev: invalid nft token id
+    extcall IERC721(_nftAddr).safeTransferFrom(self, cd.legoAddr, _nftTokenId, ERC721_RECEIVE_DATA)
+
+    # remove liquidity via lego partner
+    amountAReceived: uint256 = 0
+    amountBReceived: uint256 = 0
+    liqRemoved: uint256 = 0
+    isDepleted: bool = False
+    amountAReceived, amountBReceived, liqRemoved, isDepleted = extcall LegoPartner(cd.legoAddr).removeLiquidityConcentrated(_nftTokenId, _pool, _tokenA, _tokenB, _liqToRemove, _minAmountA, _minAmountB, self)
+
+    # validate the nft came back (if not depleted)
+    if not isDepleted:
+        assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
+
+    # TODO: perform housekeeping
+    # inputs: _tokenA, _tokenB, amountAReceived, amountBReceived
+
+    log ConcentratedLiquidityRemoved(
+        nftTokenId = _nftTokenId,
+        pool = _pool,
+        tokenA = _tokenA,
+        amountAReceived = amountAReceived,
+        tokenB = _tokenB,
+        amountBReceived = amountBReceived,
+        liqRemoved = liqRemoved,
+        legoId = _legoId,
+        legoAddr = cd.legoAddr,
+        signer = msg.sender,
+        isSignerAgent = cd.isSignerAgent,
+    )
+    return amountAReceived, amountBReceived, liqRemoved, isDepleted
 
 
 # #################
@@ -769,149 +1035,6 @@ def repayDebt(
 #     if rewardAmount != 0:
 #         usdValue = staticcall OracleRegistry(cd.oracleRegistry).getUsdValue(_rewardToken, rewardAmount)
 #     log UserWalletRewardsClaimed(signer=msg.sender, market=_market, rewardToken=_rewardToken, rewardAmount=rewardAmount, usdValue=usdValue, proof=_proof, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
-
-
-# #################
-# # Add Liquidity #
-# #################
-
-
-# @nonreentrant
-# @external
-# def addLiquidity(
-#     _legoId: uint256,
-#     _nftAddr: address,
-#     _nftTokenId: uint256,
-#     _pool: address,
-#     _tokenA: address,
-#     _tokenB: address,
-#     _amountA: uint256 = max_value(uint256),
-#     _amountB: uint256 = max_value(uint256),
-#     _tickLower: int24 = min_value(int24),
-#     _tickUpper: int24 = max_value(int24),
-#     _minAmountA: uint256 = 0,
-#     _minAmountB: uint256 = 0,
-#     _minLpAmount: uint256 = 0,
-# ) -> (uint256, uint256, uint256, uint256, uint256):
-#     cd: CoreData = self._getCoreData()
-#     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.ADD_LIQ, [_tokenA, _tokenB], [_legoId], cd)
-
-#     # get lego addr
-#     legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
-#     assert legoAddr != empty(address) # dev: invalid lego
-
-#     # token a
-#     amountA: uint256 = 0
-#     isTrialFundsVaultTokenA: bool = False
-#     if _amountA != 0:
-#         amountA = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenA, _amountA, True, cd)
-#         assert extcall IERC20(_tokenA).approve(legoAddr, amountA, default_return_value=True) # dev: approval failed
-#         isTrialFundsVaultTokenA = self._isTrialFundsVaultToken(_tokenA, cd.trialFundsAsset, cd.legoRegistry)
-
-#     # token b
-#     amountB: uint256 = 0
-#     isTrialFundsVaultTokenB: bool = False
-#     if _amountB != 0:
-#         amountB = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(_tokenB, _amountB, True, cd)
-#         assert extcall IERC20(_tokenB).approve(legoAddr, amountB, default_return_value=True) # dev: approval failed
-#         isTrialFundsVaultTokenB = self._isTrialFundsVaultToken(_tokenB, cd.trialFundsAsset, cd.legoRegistry)
-
-#     # transfer nft to lego (if applicable)
-#     hasNftLiqPosition: bool = _nftAddr != empty(address) and _nftTokenId != 0
-#     if hasNftLiqPosition:
-#         extcall IERC721(_nftAddr).safeTransferFrom(self, legoAddr, _nftTokenId, ERC721_RECEIVE_DATA)
-
-#     # add liquidity via lego partner
-#     liquidityAdded: uint256 = 0
-#     liqAmountA: uint256 = 0
-#     liqAmountB: uint256 = 0
-#     usdValue: uint256 = 0
-#     refundAssetAmountA: uint256 = 0
-#     refundAssetAmountB: uint256 = 0
-#     nftTokenId: uint256 = 0
-#     liquidityAdded, liqAmountA, liqAmountB, usdValue, refundAssetAmountA, refundAssetAmountB, nftTokenId = extcall LegoDex(legoAddr).addLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, _tickLower, _tickUpper, amountA, amountB, _minAmountA, _minAmountB, _minLpAmount, self, cd.oracleRegistry)
-
-#     # validate the nft came back
-#     if hasNftLiqPosition:
-#         assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
-
-#     # token a
-#     self._checkTrialFundsPostTx(isTrialFundsVaultTokenA, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
-#     if amountA != 0:
-#         assert extcall IERC20(_tokenA).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
-#         extcall WalletConfig(cd.walletConfig).updateYieldTrackingOnExit(_tokenA, cd.legoRegistry)
-
-#     # token b
-#     self._checkTrialFundsPostTx(isTrialFundsVaultTokenB, cd.trialFundsAsset, cd.trialFundsInitialAmount, cd.legoRegistry)
-#     if amountB != 0:
-#         assert extcall IERC20(_tokenB).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
-#         extcall WalletConfig(cd.walletConfig).updateYieldTrackingOnExit(_tokenB, cd.legoRegistry)
-
-#     log UserWalletLiquidityAdded(signer=msg.sender, tokenA=_tokenA, tokenB=_tokenB, liqAmountA=liqAmountA, liqAmountB=liqAmountB, liquidityAdded=liquidityAdded, pool=_pool, usdValue=usdValue, refundAssetAmountA=refundAssetAmountA, refundAssetAmountB=refundAssetAmountB, nftTokenId=nftTokenId, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
-#     return liquidityAdded, liqAmountA, liqAmountB, usdValue, nftTokenId
-
-
-# ####################
-# # Remove Liquidity #
-# ####################
-
-
-# @nonreentrant
-# @external
-# def removeLiquidity(
-#     _legoId: uint256,
-#     _nftAddr: address,
-#     _nftTokenId: uint256,
-#     _pool: address,
-#     _tokenA: address,
-#     _tokenB: address,
-#     _liqToRemove: uint256 = max_value(uint256),
-#     _minAmountA: uint256 = 0,
-#     _minAmountB: uint256 = 0,
-# ) -> (uint256, uint256, uint256, bool):
-#     cd: CoreData = self._getCoreData()
-#     isSignerAgent: bool = self._checkPermsAndHandleSubs(msg.sender, ActionType.REMOVE_LIQ, [_tokenA, _tokenB], [_legoId], cd)
-
-#     # get lego addr
-#     legoAddr: address = staticcall LegoRegistry(cd.legoRegistry).getLegoAddr(_legoId)
-#     assert legoAddr != empty(address) # dev: invalid lego
-
-#     lpToken: address = empty(address)
-#     liqToRemove: uint256 = _liqToRemove
-
-#     # transfer nft to lego (if applicable)
-#     hasNftLiqPosition: bool = _nftAddr != empty(address) and _nftTokenId != 0
-#     if hasNftLiqPosition:
-#         extcall IERC721(_nftAddr).safeTransferFrom(self, legoAddr, _nftTokenId, ERC721_RECEIVE_DATA)
-
-#     # handle lp token
-#     else:
-#         lpToken = staticcall LegoDex(legoAddr).getLpToken(_pool)
-#         liqToRemove = staticcall WalletConfig(cd.walletConfig).getAvailableTxAmount(lpToken, liqToRemove, False, cd)
-#         assert extcall IERC20(lpToken).approve(legoAddr, liqToRemove, default_return_value=True) # dev: approval failed
-
-#     # remove liquidity via lego partner
-#     amountA: uint256 = 0
-#     amountB: uint256 = 0
-#     usdValue: uint256 = 0
-#     liquidityRemoved: uint256 = 0
-#     refundedLpAmount: uint256 = 0
-#     isDepleted: bool = False
-#     amountA, amountB, usdValue, liquidityRemoved, refundedLpAmount, isDepleted = extcall LegoDex(legoAddr).removeLiquidity(_nftTokenId, _pool, _tokenA, _tokenB, lpToken, liqToRemove, _minAmountA, _minAmountB, self, cd.oracleRegistry)
-
-#     # validate the nft came back, reset lp token approvals
-#     if hasNftLiqPosition:
-#         if not isDepleted:
-#             assert staticcall IERC721(_nftAddr).ownerOf(_nftTokenId) == self # dev: nft not returned
-#     else:
-#         assert extcall IERC20(lpToken).approve(legoAddr, 0, default_return_value=True) # dev: approval failed
-
-#     # yield tracking -- if vault tokens are what is removed from liquidity
-#     extcall WalletConfig(cd.walletConfig).updateYieldTrackingOnEntry(_tokenA, amountA, cd.legoRegistry)
-#     extcall WalletConfig(cd.walletConfig).updateYieldTrackingOnEntry(_tokenB, amountB, cd.legoRegistry)
-
-#     log UserWalletLiquidityRemoved(signer=msg.sender, tokenA=_tokenA, tokenB=_tokenB, removedAmountA=amountA, removedAmountB=amountB, usdValue=usdValue, isDepleted=isDepleted, liquidityRemoved=liquidityRemoved, lpToken=lpToken, refundedLpAmount=refundedLpAmount, legoId=_legoId, legoAddr=legoAddr, isSignerAgent=isSignerAgent)
-#     return amountA, amountB, usdValue, isDepleted
 
 
 # ##################
@@ -987,9 +1110,10 @@ def repayDebt(
 @external
 def convertEthToWeth(_amount: uint256 = max_value(uint256)) -> uint256:
     weth: address = WETH
-    cd: CoreData = self._getCoreData(0, empty(address), 0, False)
+    cd: CoreData = self._getCoreData(0)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.WETH_WRAP, [weth], [], cd)
 
+    # convert eth to weth
     amount: uint256 = min(_amount, self.balance)
     assert amount != 0 # dev: nothing to convert
     extcall WethContract(weth).deposit(value=amount)
@@ -1007,14 +1131,17 @@ def convertEthToWeth(_amount: uint256 = max_value(uint256)) -> uint256:
 @external
 def convertWethToEth(_amount: uint256 = max_value(uint256)) -> uint256:
     weth: address = WETH
-    cd: CoreData = self._getCoreData(0, weth, _amount, True)
+    cd: CoreData = self._getCoreData(0)
     cd.isSignerAgent = self._checkPermsAndHandleSubs(msg.sender, ActionType.WETH_WRAP, [weth], [], cd)
-    extcall WethContract(weth).withdraw(cd.amount)
+
+    # convert weth to eth
+    amount: uint256 = self._getAmountAndApprove(weth, _amount, empty(address)) # nothing to approve
+    extcall WethContract(weth).withdraw(amount)
 
     # TODO: perform housekeeping
 
-    log WethUnwrapped(amount=cd.amount, weth=weth, signer=msg.sender, isSignerAgent=cd.isSignerAgent)
-    return cd.amount
+    log WethUnwrapped(amount=amount, weth=weth, signer=msg.sender, isSignerAgent=cd.isSignerAgent)
+    return amount
 
 
 #############
@@ -1022,28 +1149,32 @@ def convertWethToEth(_amount: uint256 = max_value(uint256)) -> uint256:
 #############
 
 
+@internal
+def _getAmountAndApprove(_token: address, _amount: uint256, _legoAddr: address) -> uint256:
+    if _amount == 0:
+        return 0
+    amount: uint256 = min(_amount, staticcall IERC20(_token).balanceOf(self))
+    assert amount != 0 # dev: no balance for _token
+    if _legoAddr != empty(address):
+        assert extcall IERC20(_token).approve(_legoAddr, amount, default_return_value=True) # dev: approval failed
+    return amount
+
+
 @view
 @internal
-def _getCoreData(_legoId: uint256, _asset: address, _amount: uint256, _isOutgoing: bool) -> CoreData:
+def _getCoreData(_legoId: uint256) -> CoreData:
     undyHq: address = UNDY_HQ
+    legoRegistry: address = staticcall AddyRegistry(undyHq).getAddy(LEGO_REGISTRY_ID)
 
     # lego details
-    legoRegistry: address = staticcall AddyRegistry(undyHq).getAddy(LEGO_REGISTRY_ID)
     legoAddr: address = empty(address)
     if _legoId != 0:
         legoAddr = staticcall LegoRegistry(legoRegistry).getLegoAddr(_legoId)
         assert legoAddr != empty(address) # dev: invalid lego
 
-    # finalize amount
-    amount: uint256 = _amount
-    if _isOutgoing:
-        amount = min(_amount, staticcall IERC20(_asset).balanceOf(self))
-        assert amount != 0 # dev: no amount
-
     walletConfig: address = self.walletConfig
     return CoreData(
         legoAddr = legoAddr,
-        amount = amount,
         owner = staticcall WalletConfig(walletConfig).owner(),
         isSignerAgent = False,
         wallet = self,
@@ -1239,142 +1370,142 @@ def _checkLegoAccessForAction(_legoAddr: address):
     assert success # dev: failed to set operator
 
 
-# # trial funds
+# trial funds
 
 
-# @view
-# @internal
-# def _isTrialFundsVaultToken(_asset: address, _trialFundsAsset: address, _legoRegistry: address) -> bool:
-#     if _trialFundsAsset == empty(address) or _asset == _trialFundsAsset:
-#         return False
-#     return _trialFundsAsset == staticcall LegoRegistry(_legoRegistry).getUnderlyingAsset(_asset)
+@view
+@internal
+def _isTrialFundsVaultToken(_asset: address, _trialFundsAsset: address, _legoRegistry: address) -> bool:
+    if _trialFundsAsset == empty(address) or _asset == _trialFundsAsset:
+        return False
+    return _trialFundsAsset == staticcall LegoRegistry(_legoRegistry).getUnderlyingAsset(_asset)
 
 
-# @view
-# @internal
-# def _checkTrialFundsPostTx(_isTrialFundsVaultToken: bool, _trialFundsAsset: address, _trialFundsInitialAmount: uint256, _legoRegistry: address):
-#     if not _isTrialFundsVaultToken:
-#         return
-#     postUnderlying: uint256 = staticcall LegoRegistry(_legoRegistry).getUnderlyingForUser(self, _trialFundsAsset)
-#     assert postUnderlying >= _trialFundsInitialAmount # dev: cannot transfer trial funds vault token
+@view
+@internal
+def _checkTrialFundsPostTx(_isTrialFundsVaultToken: bool, _trialFundsAsset: address, _trialFundsInitialAmount: uint256, _legoRegistry: address):
+    if not _isTrialFundsVaultToken:
+        return
+    postUnderlying: uint256 = staticcall LegoRegistry(_legoRegistry).getUnderlyingForUser(self, _trialFundsAsset)
+    assert postUnderlying >= _trialFundsInitialAmount # dev: cannot transfer trial funds vault token
 
 
-# @external
-# def clawBackTrialFunds() -> bool:
-#     cd: CoreData = self._getCoreData()
-#     assert msg.sender in [cd.agentFactory, cd.owner, cd.walletConfig] # dev: no perms
+@external
+def clawBackTrialFunds() -> bool:
+    cd: CoreData = self._getCoreData(0)
+    assert msg.sender in [cd.agentFactory, cd.owner, cd.walletConfig] # dev: no perms
 
-#     # make sure something to recover
-#     if cd.trialFundsAsset == empty(address) or cd.trialFundsInitialAmount == 0:
-#         return False
+    # make sure something to recover
+    if cd.trialFundsAsset == empty(address) or cd.trialFundsInitialAmount == 0:
+        return False
 
-#     # account for extra dust / yield
-#     targetRecoveryAmount: uint256 = cd.trialFundsInitialAmount * 101_00 // HUNDRED_PERCENT # 1% buffer
-#     amountRecovered: uint256 = 0
+    # account for extra dust / yield
+    targetRecoveryAmount: uint256 = cd.trialFundsInitialAmount * 101_00 // HUNDRED_PERCENT # 1% buffer
+    amountRecovered: uint256 = 0
 
-#     # transfer any available balance
-#     balanceAvail: uint256 = staticcall IERC20(cd.trialFundsAsset).balanceOf(self)
-#     if balanceAvail != 0:
-#         availableAmount: uint256 = min(balanceAvail, targetRecoveryAmount)
-#         assert extcall IERC20(cd.trialFundsAsset).transfer(cd.agentFactory, availableAmount, default_return_value=True) # dev: trial funds transfer failed
-#         amountRecovered += availableAmount
-#         targetRecoveryAmount -= availableAmount
+    # transfer any available balance
+    balanceAvail: uint256 = staticcall IERC20(cd.trialFundsAsset).balanceOf(self)
+    if balanceAvail != 0:
+        availableAmount: uint256 = min(balanceAvail, targetRecoveryAmount)
+        assert extcall IERC20(cd.trialFundsAsset).transfer(cd.agentFactory, availableAmount, default_return_value=True) # dev: trial funds transfer failed
+        amountRecovered += availableAmount
+        targetRecoveryAmount -= availableAmount
 
-#     if targetRecoveryAmount == 0:
-#         return True
+    if targetRecoveryAmount == 0:
+        return True
 
-#     # iterate through vault tokens (related to trial funds)
-#     trialFundsVaultTokens: DynArray[VaultTokenInfo, MAX_VAULTS_FOR_USER] = staticcall LegoRegistry(cd.legoRegistry).getVaultTokensForUser(self, cd.trialFundsAsset)
-#     for v: VaultTokenInfo in trialFundsVaultTokens:
-#         assetAmountReceived: uint256 = 0
-#         na1: uint256 = 0
-#         na2: uint256 = 0
-#         assetAmountReceived, na1, na2 = self._withdrawTokens(cd.agentFactory, v.legoId, cd.trialFundsAsset, v.vaultAddr, max_value(uint256), True, False, False, cd)
+    # iterate through vault tokens (related to trial funds)
+    trialFundsVaultTokens: DynArray[VaultTokenInfo, MAX_VAULTS_FOR_USER] = staticcall LegoRegistry(cd.legoRegistry).getVaultTokensForUser(self, cd.trialFundsAsset)
+    for v: VaultTokenInfo in trialFundsVaultTokens:
+        na: uint256 = 0
+        na2: address = empty(address)
+        underlyingAmount: uint256 = 0
+        na, na2, underlyingAmount = self._withdrawFromYield(v.legoId, v.vaultAddr, max_value(uint256), msg.sender, True, cd)
 
-#         # recover funds
-#         transferAmount: uint256 = min(assetAmountReceived, targetRecoveryAmount)
-#         assert extcall IERC20(cd.trialFundsAsset).transfer(cd.agentFactory, transferAmount, default_return_value=True) # dev: trial funds transfer failed
-#         amountRecovered += transferAmount
-#         targetRecoveryAmount -= transferAmount
+        # recover funds
+        transferAmount: uint256 = min(underlyingAmount, targetRecoveryAmount)
+        assert extcall IERC20(cd.trialFundsAsset).transfer(cd.agentFactory, transferAmount, default_return_value=True) # dev: trial funds transfer failed
+        amountRecovered += transferAmount
+        targetRecoveryAmount -= transferAmount
 
-#         # reached target recovery amount, deposit any extra balance back lego
-#         if targetRecoveryAmount == 0:
-#             depositAmount: uint256 = min(assetAmountReceived - transferAmount, staticcall IERC20(cd.trialFundsAsset).balanceOf(self))
-#             if depositAmount != 0:
-#                 self._depositTokens(msg.sender, v.legoId, cd.trialFundsAsset, v.vaultAddr, depositAmount, False, cd)
-#             break
+        # reached target recovery amount, deposit any extra balance back lego
+        if targetRecoveryAmount == 0:
+            depositAmount: uint256 = min(underlyingAmount - transferAmount, staticcall IERC20(cd.trialFundsAsset).balanceOf(self))
+            if depositAmount != 0:
+                self._depositForYield(v.legoId, cd.trialFundsAsset, v.vaultAddr, depositAmount, msg.sender, True, cd)
+            break
 
-#     if amountRecovered == 0:
-#         return False
+    if amountRecovered == 0:
+        return False
 
-#     # update trial funds data
-#     newTrialFundsInitialAmount: uint256 = cd.trialFundsInitialAmount - min(cd.trialFundsInitialAmount, amountRecovered)
-#     self.trialFundsInitialAmount = newTrialFundsInitialAmount
-#     if newTrialFundsInitialAmount == 0:
-#         self.trialFundsAsset = empty(address)
+    # update trial funds data
+    newTrialFundsInitialAmount: uint256 = cd.trialFundsInitialAmount - min(cd.trialFundsInitialAmount, amountRecovered)
+    self.trialFundsInitialAmount = newTrialFundsInitialAmount
+    if newTrialFundsInitialAmount == 0:
+        self.trialFundsAsset = empty(address)
 
-#     log UserWalletTrialFundsRecovered(asset=cd.trialFundsAsset, amountRecovered=amountRecovered, remainingAmount=newTrialFundsInitialAmount)
-#     return True
-
-
-# # recover nft
+    log UserWalletTrialFundsRecovered(asset=cd.trialFundsAsset, amountRecovered=amountRecovered, remainingAmount=newTrialFundsInitialAmount)
+    return True
 
 
-# @external
-# def recoverNft(_collection: address, _nftTokenId: uint256) -> bool:
-#     owner: address = staticcall WalletConfig(self.walletConfig).owner()
-#     assert msg.sender == owner # dev: no perms
-
-#     if staticcall IERC721(_collection).ownerOf(_nftTokenId) != self:
-#         return False
-
-#     extcall IERC721(_collection).safeTransferFrom(self, owner, _nftTokenId)
-#     log UserWalletNftRecovered(collection=_collection, nftTokenId=_nftTokenId, owner=owner)
-#     return True
+# recover nft
 
 
-# # wallet migration
+@external
+def recoverNft(_collection: address, _nftTokenId: uint256) -> bool:
+    owner: address = staticcall WalletConfig(self.walletConfig).owner()
+    assert msg.sender == owner # dev: no perms
+
+    if staticcall IERC721(_collection).ownerOf(_nftTokenId) != self:
+        return False
+
+    extcall IERC721(_collection).safeTransferFrom(self, owner, _nftTokenId)
+    log UserWalletNftRecovered(collection=_collection, nftTokenId=_nftTokenId, owner=owner)
+    return True
 
 
-# @external
-# def migrateWalletOut(
-#     _newWallet: address,
-#     _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS],
-#     _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST],
-# ) -> bool:
-#     cd: CoreData = self._getCoreData()
-#     assert msg.sender == cd.walletConfig # dev: only wallet config can call this
-#     assert staticcall AgentFactory(cd.agentFactory).isUserWallet(_newWallet) # dev: must be Underscore wallet
+# wallet migration
 
-#     # eth
-#     if self.balance != 0:
-#         send(_newWallet, self.balance)
 
-#     assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS] = []
-#     vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS] = []
+@external
+def migrateWalletOut(
+    _newWallet: address,
+    _assetsToMigrate: DynArray[address, MAX_MIGRATION_ASSETS],
+    _whitelistToMigrate: DynArray[address, MAX_MIGRATION_WHITELIST],
+) -> bool:
+    cd: CoreData = self._getCoreData(0)
+    assert msg.sender == cd.walletConfig # dev: only wallet config can call this
+    assert staticcall AgentFactory(cd.agentFactory).isUserWallet(_newWallet) # dev: must be Underscore wallet
 
-#     # erc20 tokens
-#     for asset: address in _assetsToMigrate:
-#         if asset == empty(address):
-#             continue
+    # eth
+    if self.balance != 0:
+        send(_newWallet, self.balance)
 
-#         assetBal: uint256 = staticcall IERC20(asset).balanceOf(self)
-#         if assetBal == 0:
-#             continue
+    assetsMigrated: DynArray[address, MAX_MIGRATION_ASSETS] = []
+    vaultTokensMigrated: DynArray[address, MAX_MIGRATION_ASSETS] = []
 
-#         assert extcall IERC20(asset).transfer(_newWallet, assetBal, default_return_value=True) # dev: asset transfer failed
-#         if staticcall WalletConfig(cd.walletConfig).isVaultToken(asset):
-#             vaultTokensMigrated.append(asset)
-#         else:
-#             assetsMigrated.append(asset)
+    # erc20 tokens
+    for asset: address in _assetsToMigrate:
+        if asset == empty(address):
+            continue
 
-#     # finish migration of new wallet
-#     newWalletConfig: address = staticcall UserWallet(_newWallet).walletConfig()
-#     assert extcall WalletConfig(newWalletConfig).finishMigrationIn(_whitelistToMigrate, assetsMigrated, vaultTokensMigrated) # dev: migration failed
+        assetBal: uint256 = staticcall IERC20(asset).balanceOf(self)
+        if assetBal == 0:
+            continue
+
+        assert extcall IERC20(asset).transfer(_newWallet, assetBal, default_return_value=True) # dev: asset transfer failed
+        if staticcall WalletConfig(cd.walletConfig).isVaultToken(asset):
+            vaultTokensMigrated.append(asset)
+        else:
+            assetsMigrated.append(asset)
+
+    # finish migration of new wallet
+    newWalletConfig: address = staticcall UserWallet(_newWallet).walletConfig()
+    assert extcall WalletConfig(newWalletConfig).finishMigrationIn(_whitelistToMigrate, assetsMigrated, vaultTokensMigrated) # dev: migration failed
     
-#     # update yield tracking for this wallet
-#     if len(vaultTokensMigrated) != 0:
-#         for vaultToken: address in vaultTokensMigrated:
-#             extcall WalletConfig(cd.walletConfig).updateYieldTrackingOnExit(vaultToken, cd.legoRegistry)
+    # update yield tracking for this wallet
+    if len(vaultTokensMigrated) != 0:
+        for vaultToken: address in vaultTokensMigrated:
+            extcall WalletConfig(cd.walletConfig).updateYieldTrackingOnExit(vaultToken, cd.legoRegistry)
 
-#     return True
+    return True
