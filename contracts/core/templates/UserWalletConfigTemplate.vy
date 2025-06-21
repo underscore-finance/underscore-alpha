@@ -342,6 +342,22 @@ def apiVersion() -> String[28]:
 
 @view
 @external
+def canAccessWallet(
+    _signer: address,
+    _action: ActionType,
+    _assets: DynArray[address, MAX_ASSETS],
+    _legoIds: DynArray[uint256, MAX_LEGOS],
+) -> bool:
+
+    # TODO: check blacklist
+
+    if _signer == own.owner:
+        return True
+    return self._canAgentAccess(self.agentSettings[_signer], _action, _assets, _legoIds)
+
+
+@view
+@external
 def isAgentActive(_agent: address) -> bool:
     return self.agentSettings[_agent].isActive
 
