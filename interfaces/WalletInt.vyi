@@ -116,6 +116,18 @@ def mintOrRedeemAsset(
     ...
 
 
+@external
+def confirmMintOrRedeemAsset(
+    _legoId: uint256,
+    _tokenIn: address,
+    _tokenOut: address,
+    _extraAddr: address = empty(address),
+    _extraVal: uint256 = 0,
+    _extraData: bytes32 = empty(bytes32),
+) -> (uint256, uint256):
+    ...
+
+
 ########
 # Debt #
 ########

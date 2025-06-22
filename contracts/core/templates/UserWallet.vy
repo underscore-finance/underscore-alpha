@@ -5,6 +5,7 @@ implements: wi
 from interfaces import WalletInt as wi
 from interfaces import LegoPartner as Lego
 
+from ethereum.ercs import IERC20Detailed
 from ethereum.ercs import IERC20
 from ethereum.ercs import IERC721
 
@@ -35,6 +36,18 @@ struct ActionData:
     isSignerAgent: bool
     legoId: uint256
     legoAddr: address
+
+struct AssetData:
+    assetBalance: uint256
+    usdValue: uint256
+    lastPrice: uint256
+    lastPriceUpdate: uint256
+    decimals: uint256
+
+struct WalletTotals:
+    usdValue: uint256
+    depositPoints: uint256
+    lastUpdate: uint256
 
 event YieldDeposit:
     asset: indexed(address)
@@ -85,6 +98,19 @@ event SpecificSwapInstructionPerformed:
     isSignerAgent: bool
 
 event AssetMintedOrRedeemed:
+    tokenIn: indexed(address)
+    tokenInAmount: uint256
+    tokenOut: indexed(address)
+    tokenOutAmount: uint256
+    extraAddr: address
+    extraVal: uint256
+    extraData: bytes32
+    legoId: uint256
+    legoAddr: address
+    signer: indexed(address)
+    isSignerAgent: bool
+
+event AssetMintedOrRedeemedConfirmed:
     tokenIn: indexed(address)
     tokenInAmount: uint256
     tokenOut: indexed(address)
@@ -241,8 +267,15 @@ event NftRecovered:
     nftTokenId: uint256
     owner: indexed(address)
 
-# core 
+# data 
 walletConfig: public(address)
+totals: public(WalletTotals)
+
+# asset data
+assetData: public(HashMap[address, AssetData]) # asset -> data
+assets: public(HashMap[uint256, address]) # index -> asset
+indexOfAsset: public(HashMap[address, uint256]) # asset -> index
+numAssets: public(uint256) # num assets
 
 # trial funds info
 trialFundsAsset: public(address)
@@ -578,7 +611,7 @@ def mintOrRedeemAsset(
     _extraVal: uint256 = 0,
     _extraData: bytes32 = empty(bytes32),
 ) -> (uint256, uint256):
-    cd: ActionData = self._performPreActionTasks(msg.sender, Lego.ActionType.EARN, False, [_tokenIn, _tokenOut], [_legoId])
+    cd: ActionData = self._performPreActionTasks(msg.sender, Lego.ActionType.EXCHANGE, False, [_tokenIn, _tokenOut], [_legoId])
 
     # mint
     tokenInAmount: uint256 = self._getAmountAndApprove(_tokenIn, _amountIn, cd.legoAddr) # doing approval here
@@ -588,6 +621,40 @@ def mintOrRedeemAsset(
 
     self._performPostActionTasks([_tokenIn, _tokenOut])
     log AssetMintedOrRedeemed(
+        tokenIn = _tokenIn,
+        tokenInAmount = tokenInAmount,
+        tokenOut = _tokenOut,
+        tokenOutAmount = tokenOutAmount,
+        extraAddr = _extraAddr,
+        extraVal = _extraVal,
+        extraData = _extraData,
+        legoId = cd.legoId,
+        legoAddr = cd.legoAddr,
+        signer = cd.signer,
+        isSignerAgent = cd.isSignerAgent,
+    )
+    return tokenInAmount, tokenOutAmount
+
+
+@nonreentrant
+@external
+def confirmMintOrRedeemAsset(
+    _legoId: uint256,
+    _tokenIn: address,
+    _tokenOut: address,
+    _extraAddr: address = empty(address),
+    _extraVal: uint256 = 0,
+    _extraData: bytes32 = empty(bytes32),
+) -> (uint256, uint256):
+    cd: ActionData = self._performPreActionTasks(msg.sender, Lego.ActionType.EXCHANGE, False, [_tokenIn, _tokenOut], [_legoId])
+
+    # confirm (if there is a delay on action)
+    tokenInAmount: uint256 = 0
+    tokenOutAmount: uint256 = 0
+    tokenInAmount, tokenOutAmount = extcall Lego(cd.legoAddr).confirmMintOrRedeemAsset(_tokenIn, _tokenOut, _extraAddr, _extraVal, _extraData, self)
+
+    self._performPostActionTasks([_tokenIn, _tokenOut])
+    log AssetMintedOrRedeemedConfirmed(
         tokenIn = _tokenIn,
         tokenInAmount = tokenInAmount,
         tokenOut = _tokenOut,
@@ -1246,12 +1313,147 @@ def _checkLegoAccessForAction(_legoAddr: address, _action: Lego.ActionType):
 
 @internal
 def _performPostActionTasks(_assets: DynArray[address, MAX_ASSETS]):
-    pass
+    totalData: WalletTotals = self.totals
+    prevTotalUsdValue: uint256 = totalData.usdValue
+
+    # update each asset that was touched
+    for a: address in _assets:
+        totalData.usdValue = self._updateAssetData(a, totalData.usdValue)
+
+    totalData.lastUpdate = block.number
+    self.totals = totalData
+
+    # update global points
+    self._updateGlobalDepositPoints(prevTotalUsdValue, totalData.usdValue)
+
+
+##############
+# Asset Data #
+##############
+
+
+@external
+def updateAsset(_asset: address):
+
+    # TODO: access control around this
+
+    totalData: WalletTotals = self.totals
+    prevTotalUsdValue: uint256 = totalData.usdValue
+
+    # TODO: update deposit points here
+    # TODO: check for yield increase / realization
+
+    totalData.usdValue = self._updateAssetData(_asset, totalData.usdValue)
+    totalData.lastUpdate = block.number
+    self.totals = totalData
+
+    # update global points
+    self._updateGlobalDepositPoints(prevTotalUsdValue, totalData.usdValue)
+
+
+# update asset data
+
+
+@internal
+def _updateAssetData(_asset: address, _totalUsdValue: uint256) -> uint256:
+    if _asset == empty(address):
+        return _totalUsdValue
+
+    data: AssetData = self.assetData[_asset]
+    prevUsdValue: uint256 = data.usdValue
+
+    # update balance
+    currentBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
+    if currentBalance != 0:
+        data.assetBalance = currentBalance
+
+        # price
+        if data.lastPriceUpdate != block.number:
+            data.lastPrice = self._getPrice(_asset)
+            data.lastPriceUpdate = block.number
+
+        # decimals
+        if data.decimals == 0:
+            data.decimals = convert(staticcall IERC20Detailed(_asset).decimals(), uint256)
+
+        # usd value
+        data.usdValue = 0
+        if data.lastPrice != 0 and data.decimals != 0:
+            data.usdValue = data.lastPrice * currentBalance // (10 ** data.decimals)
+
+        # register asset (if necessary)
+        if self.indexOfAsset[_asset] == 0:
+            self._registerAsset(_asset)
+
+    # no balance, deregister asset
+    else:
+        prevDecimals: uint256 = data.decimals
+        data = empty(AssetData)
+        data.decimals = prevDecimals # keep decimals in case user brings this asset back
+        self._deregisterAsset(_asset)
+
+    # save data
+    self.assetData[_asset] = data
+    return _totalUsdValue - prevUsdValue + data.usdValue
+
+
+# register/deregister asset
+
+
+@internal
+def _registerAsset(_asset: address):
+    aid: uint256 = self.numAssets
+    if aid == 0:
+        aid = 1 # not using 0 index
+    self.assets[aid] = _asset
+    self.indexOfAsset[_asset] = aid
+    self.numAssets = aid + 1
+
+
+@internal
+def _deregisterAsset(_asset: address) -> bool:
+    numAssets: uint256 = self.numAssets
+    if numAssets == 0:
+        return False
+
+    targetIndex: uint256 = self.indexOfAsset[_asset]
+    if targetIndex == 0:
+        return False
+
+    # update data
+    lastIndex: uint256 = numAssets - 1
+    self.numAssets = lastIndex
+    self.indexOfAsset[_asset] = 0
+
+    # get last item, replace the removed item
+    if targetIndex != lastIndex:
+        lastItem: address = self.assets[lastIndex]
+        self.assets[targetIndex] = lastItem
+        self.indexOfAsset[lastItem] = targetIndex
+
+    return True
 
 
 #############
 # Utilities #
 #############
+
+
+@view
+@internal
+def _getPrice(_asset: address) -> uint256:
+    # TODO: integrate with Ripe's PriceDesk
+    return 0
+
+
+@internal
+def _updateGlobalDepositPoints(_prevUsdValue: uint256, _newUsdValue: uint256):
+    # TODO: notify "AgentFactory (????)" of new totalUsdValue (to update `totalUsdValue` for global points)
+    # only call if prevUsdValue != _newUsdValue
+    pass
+
+
+# approve
 
 
 @internal

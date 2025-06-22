@@ -44,6 +44,10 @@ def withdrawFromYield(_vaultToken: address, _amount: uint256, _extraAddr: addres
     ...
 
 @external
+def confirmMintOrRedeemAsset(_tokenIn: address, _tokenOut: address, _extraAddr: address, _extraVal: uint256, _extraData: bytes32, _recipient: address) -> (uint256, uint256):
+    ...
+
+@external
 def borrow(_borrowAsset: address, _amount: uint256, _extraAddr: address, _extraVal: uint256, _extraData: bytes32, _recipient: address) -> (address, uint256):
     ...
 
