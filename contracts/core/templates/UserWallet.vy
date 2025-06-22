@@ -27,6 +27,7 @@ interface AddyRegistry:
 struct ActionData:
     undyHq: address
     legoRegistry: address
+    feeRecipient: address
     wallet: address
     walletConfig: address
     walletOwner: address
@@ -42,6 +43,14 @@ struct AssetData:
     usdValue: uint256
     lastPrice: uint256
     lastPriceUpdate: uint256
+    config: AssetConfig
+
+struct AssetConfig:
+    hasConfig: bool
+    isYieldAsset: bool
+    isRebasing: bool
+    maxIncrease: uint256
+    performanceFee: uint256
     decimals: uint256
 
 struct WalletTotals:
@@ -281,6 +290,7 @@ numAssets: public(uint256) # num assets
 trialFundsAsset: public(address)
 trialFundsInitialAmount: public(uint256)
 
+HUNDRED_PERCENT: constant(uint256) = 100_00 # 100.00%
 MAX_SWAP_INSTRUCTIONS: constant(uint256) = 5
 MAX_TOKEN_PATH: constant(uint256) = 5
 MAX_ASSETS: constant(uint256) = 10
@@ -1218,9 +1228,35 @@ def _performPreActionTasks(
     if _shouldCheckAccess and cd.legoAddr != empty(address):
         self._checkLegoAccessForAction(cd.legoAddr, _action)
 
-    # TODO: look at snapshot, see if there is yield to realize
+    # update deposit points
+    self._updateDepositPointsPreAction()
+
+    # check for yield to realize
+    checkedAssets: DynArray[address, MAX_ASSETS] = []
+    for a: address in _assets:
+        if a == empty(address) or a in checkedAssets:
+            continue
+        self._checkForYieldProfits(a, cd.feeRecipient)
+        checkedAssets.append(a)
 
     return cd
+
+
+# update deposit points
+
+
+@internal
+def _updateDepositPointsPreAction():
+    totalData: WalletTotals = self.totals
+
+    # nothing to do here -- `lastUpdate` will be saved in `_performPostActionTasks`
+    if totalData.usdValue == 0 or totalData.lastUpdate == 0 or block.number <= totalData.lastUpdate:
+        return
+
+    newDepositPoints: uint256 = totalData.usdValue * (block.number - totalData.lastUpdate)
+    totalData.depositPoints += newDepositPoints
+    totalData.lastUpdate = block.number
+    self.totals = totalData
 
 
 # core data
@@ -1234,6 +1270,7 @@ def _getActionDataBundle() -> ActionData:
     return ActionData(
         undyHq = undyHq,
         legoRegistry = staticcall AddyRegistry(undyHq).getAddy(LEGO_REGISTRY_ID),
+        feeRecipient = self._getFeeRecipient(undyHq),
         wallet = self,
         walletConfig = walletConfig,
         walletOwner = staticcall WalletConfig(walletConfig).owner(),
@@ -1323,6 +1360,9 @@ def _performPostActionTasks(_assets: DynArray[address, MAX_ASSETS]):
     totalData.lastUpdate = block.number
     self.totals = totalData
 
+    # make sure user still has trial funds
+    assert self._stillHasTrialFunds() # dev: user no longer has trial funds
+
     # update global points
     self._updateGlobalDepositPoints(prevTotalUsdValue, totalData.usdValue)
 
@@ -1333,16 +1373,24 @@ def _performPostActionTasks(_assets: DynArray[address, MAX_ASSETS]):
 
 
 @external
-def updateAsset(_asset: address):
+def updateAsset(_asset: address, _shouldCheckYield: bool):
 
     # TODO: access control around this
 
+    assert _asset != empty(address) # dev: invalid asset
     totalData: WalletTotals = self.totals
     prevTotalUsdValue: uint256 = totalData.usdValue
 
-    # TODO: update deposit points here
-    # TODO: check for yield increase / realization
+    # update deposit points
+    if totalData.usdValue != 0 and totalData.lastUpdate != 0 and block.number > totalData.lastUpdate:
+        newDepositPoints: uint256 = totalData.usdValue * (block.number - totalData.lastUpdate)
+        totalData.depositPoints += newDepositPoints
 
+    # check for yield
+    if _shouldCheckYield:
+        self._checkForYieldProfits(_asset, self._getFeeRecipient(UNDY_HQ))
+
+    # update asset data
     totalData.usdValue = self._updateAssetData(_asset, totalData.usdValue)
     totalData.lastUpdate = block.number
     self.totals = totalData
@@ -1372,14 +1420,14 @@ def _updateAssetData(_asset: address, _totalUsdValue: uint256) -> uint256:
             data.lastPrice = self._getPrice(_asset)
             data.lastPriceUpdate = block.number
 
-        # decimals
-        if data.decimals == 0:
-            data.decimals = convert(staticcall IERC20Detailed(_asset).decimals(), uint256)
+        # config (decimals needed)
+        if not data.config.hasConfig:
+            data.config = self._getAssetConfig(_asset)
 
         # usd value
         data.usdValue = 0
-        if data.lastPrice != 0 and data.decimals != 0:
-            data.usdValue = data.lastPrice * currentBalance // (10 ** data.decimals)
+        if data.lastPrice != 0 and data.config.decimals != 0:
+            data.usdValue = data.lastPrice * currentBalance // (10 ** data.config.decimals)
 
         # register asset (if necessary)
         if self.indexOfAsset[_asset] == 0:
@@ -1387,9 +1435,7 @@ def _updateAssetData(_asset: address, _totalUsdValue: uint256) -> uint256:
 
     # no balance, deregister asset
     else:
-        prevDecimals: uint256 = data.decimals
         data = empty(AssetData)
-        data.decimals = prevDecimals # keep decimals in case user brings this asset back
         self._deregisterAsset(_asset)
 
     # save data
@@ -1434,6 +1480,88 @@ def _deregisterAsset(_asset: address) -> bool:
     return True
 
 
+##################
+# Yield Handling #
+##################
+
+
+@internal
+def _checkForYieldProfits(_asset: address, _feeRecipient: address):
+    # not saved previously, nothing to do here
+    data: AssetData = self.assetData[_asset]
+    if data.assetBalance == 0:
+        return
+
+    # no config for yield, nothing to do here
+    if not data.config.hasConfig or not data.config.isYieldAsset or data.config.performanceFee == 0:
+        return
+
+    # no balance, nothing to do here
+    currentBalance: uint256 = staticcall IERC20(_asset).balanceOf(self)
+    if currentBalance == 0:
+        return
+
+    # rebase asset
+    if data.config.isRebasing:
+        self._realizeRebaseYield(_asset, data, currentBalance, _feeRecipient)
+
+    # price increase
+    else:
+        self._realizeNormalYield(_asset, data, currentBalance, _feeRecipient)
+
+
+@internal
+def _realizeRebaseYield(_asset: address, _data: AssetData, _currentBal: uint256, _feeRecipient: address):
+    currentBalance: uint256 = _currentBal
+    if _data.config.maxIncrease != 0:
+        currentBalance = min(_currentBal, _data.assetBalance + (_data.assetBalance * _data.config.maxIncrease // HUNDRED_PERCENT))
+
+    # no profits
+    if currentBalance <= _data.assetBalance:
+        return
+
+    # calc fee (if any)
+    profitAmount: uint256 = currentBalance - _data.assetBalance
+    feeAmount: uint256 = profitAmount * _data.config.performanceFee // HUNDRED_PERCENT
+    if feeAmount != 0 and _feeRecipient != empty(address):
+        assert extcall IERC20(_asset).transfer(_feeRecipient, feeAmount) # dev: transfer failed
+
+
+@internal
+def _realizeNormalYield(_asset: address, _data: AssetData, _currentBal: uint256, _feeRecipient: address):
+    data: AssetData = _data
+    prevUsdValue: uint256 = data.usdValue
+
+    # only updating price in asset data
+    if data.lastPriceUpdate != block.number:
+        data.lastPrice = self._getPrice(_asset)
+        data.lastPriceUpdate = block.number
+
+    # nothing to do here
+    if data.lastPrice == 0:
+        return
+
+    # new values (with ceiling)
+    assetBalance: uint256 = min(_currentBal, data.assetBalance)
+    newUsdValue: uint256 = data.lastPrice * assetBalance // (10 ** data.config.decimals)
+    if data.config.maxIncrease != 0:
+        newUsdValue = min(newUsdValue, prevUsdValue + (prevUsdValue * data.config.maxIncrease // HUNDRED_PERCENT))
+
+    # no profits
+    if newUsdValue <= prevUsdValue:
+        return
+
+    # calc fee (if any)
+    profitUsdValue: uint256 = newUsdValue - prevUsdValue
+    feeUsdValue: uint256 = profitUsdValue * data.config.performanceFee // HUNDRED_PERCENT
+    if feeUsdValue != 0 and _feeRecipient != empty(address):
+        feeAmount: uint256 = feeUsdValue * (10 ** data.config.decimals) // data.lastPrice
+        assert extcall IERC20(_asset).transfer(_feeRecipient, feeAmount) # dev: transfer failed
+
+    # `lastPrice` is only thing saved here
+    self.assetData[_asset] = data
+
+
 #############
 # Utilities #
 #############
@@ -1451,6 +1579,29 @@ def _updateGlobalDepositPoints(_prevUsdValue: uint256, _newUsdValue: uint256):
     # TODO: notify "AgentFactory (????)" of new totalUsdValue (to update `totalUsdValue` for global points)
     # only call if prevUsdValue != _newUsdValue
     pass
+
+
+@view
+@internal
+def _getAssetConfig(_asset: address) -> AssetConfig:
+    
+    # TODO: get asset config (MissionControl???)
+
+    return empty(AssetConfig)
+
+
+@view
+@internal
+def _getFeeRecipient(_undyHq: address) -> address:
+    # TODO: get proper fee recipient
+    return _undyHq
+
+
+@view
+@internal
+def _stillHasTrialFunds() -> bool:
+    # TODO: check if wallet still has trial funds
+    return True
 
 
 # approve
