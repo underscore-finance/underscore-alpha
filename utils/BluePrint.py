@@ -49,11 +49,42 @@ ADDYS = {
         "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
         "BTC": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
     },
+    "base-sepolia": {
+        "WETH": "0x4200000000000000000000000000000000000006",
+        "ETH": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+        "BTC": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
+    },
 }
 
 
 PARAMS = {
     "base": {
+        # addy book gov (blocks)
+        "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,  # 1 day on Base
+        "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,  # 7 days on Base
+        # addy book - addy changes (blocks)
+        "ADDY_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
+        "ADDY_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
+        # lego registry (blocks)
+        "LEGO_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
+        "LEGO_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
+        # oracle registry (blocks)
+        "ORACLE_REGISTRY_MIN_CHANGE_DELAY": 21_600,  # 12 hours on Base
+        "ORACLE_REGISTRY_MAX_CHANGE_DELAY": 302_400,  # 7 days on Base
+        # user wallet config (blocks)
+        "USER_MIN_OWNER_CHANGE_DELAY": 21_600,  # 12 hours on Base
+        "USER_MAX_OWNER_CHANGE_DELAY": 302_400,  # 7 days on Base
+        # price sheets (blocks)
+        "PRICES_MIN_TRIAL_PERIOD": 43_200,  # 1 day on Base
+        "PRICES_MAX_TRIAL_PERIOD": 1_296_000,  # 1 month on Base
+        "PRICES_MIN_PAY_PERIOD": 302_400,  # 7 days on Base
+        "PRICES_MAX_PAY_PERIOD": 3_900_000,  # 3 months on Base
+        "PRICES_MIN_PRICE_CHANGE_BUFFER": 43_200,  # 1 day on Base
+        # oracle registry (timestamps, not blocks!)
+        "ORACLE_REGISTRY_MIN_STALE_TIME": 60 * 5,  # 5 mins
+        "ORACLE_REGISTRY_MAX_STALE_TIME": 60 * 60 * 24 * 3,  # 3 days
+    },
+    "base-sepolia": {
         # addy book gov (blocks)
         "ADDY_REGISTRY_MIN_GOV_CHANGE_DELAY": 43_200,  # 1 day on Base
         "ADDY_REGISTRY_MAX_GOV_CHANGE_DELAY": 302_400,  # 7 days on Base
@@ -177,6 +208,12 @@ YIELD_TOKENS = {
         "MORPHO_IONIC_WETH": "0x5A32099837D89E3a794a44fb131CBbAD41f87a8C",  # ionic
         "MORPHO_IONIC_USDC": "0x23479229e52Ab6aaD312D0B03DF9F33B46753B5e",  # ionic
     },
+    "base-sepolia": {
+        "USDC_VAULT": "0x1d9d43eFD5B1ECd6582Cae061c560F03cAd958c7",
+        "CBBTC_VAULT": "0x192C3079D59727B84Fc9E4A8701583Ac0c63E243",
+        "WETH_VAULT": "0x7931B77d17baf8f3354A3B4035EF392B098D7ae2"
+    }
+
 }
 
 
@@ -207,5 +244,10 @@ CORE_TOKENS = {
         "AERO": "0x940181a94a35a4569e4529a3cdfb74e38fd98631",
         "WELL": "0xA88594D404727625A9437C3f886C7643872296AE",
         "VIRTUAL": "0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b",
+    },
+    "base-sepolia": {
+        "USDC": "0x611ce0729f6C052f49536c84a8fD717E619D5dc6",
+        "WETH": "0x4200000000000000000000000000000000000006",
+        "CBBTC": "0x003d1beA6B9C5193cDA8d747A5362eD2932a35d0"
     },
 }

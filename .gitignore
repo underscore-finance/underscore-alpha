@@ -11,4 +11,4 @@ __pycache__
 
 out/
 
-migration_history/dev
+migration_history/*/dev
